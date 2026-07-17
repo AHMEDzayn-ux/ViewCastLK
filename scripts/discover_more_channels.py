@@ -22,21 +22,21 @@ HANDLES_PATH = "channel_handles.txt"
 LOG_PATH = "output/discovery_log.csv"
 
 CATEGORY_QUERIES = {
-    "Film & Animation": ["Sri Lanka short film", "Sri Lanka animation"],
-    "Autos & Vehicles": ["Sri Lanka car review", "Sri Lanka bike vlog"],
-    "Music": ["Sri Lanka music cover", "Sri Lanka original song"],
-    "Pets & Animals": ["Sri Lanka pets", "Sri Lanka dog training"],
-    "Sports": ["Sri Lanka cricket highlights", "Sri Lanka football"],
-    "Travel & Events": ["Sri Lanka travel vlog", "Sri Lanka tour guide"],
-    "Gaming": ["Sri Lanka gaming", "Sri Lanka gameplay sinhala"],
-    "People & Blogs": ["Sri Lanka vlog", "Sri Lanka daily vlog"],
-    "Comedy": ["Sri Lanka comedy sinhala", "Sri Lanka funny"],
-    "Entertainment": ["Sri Lanka entertainment", "Sri Lanka teledrama"],
-    "News & Politics": ["Sri Lanka news", "Sri Lanka political analysis"],
-    "Howto & Style": ["Sri Lanka makeup tutorial", "Sri Lanka fashion sinhala"],
-    "Education": ["Sri Lanka education sinhala", "Sri Lanka tuition class"],
-    "Science & Technology": ["Sri Lanka tech review", "Sri Lanka technology sinhala"],
-    "Nonprofits & Activism": ["Sri Lanka charity", "Sri Lanka nonprofit"],
+    "Film & Animation": ["Sri Lanka film maker", "Sri Lanka 3d animation"],
+    "Autos & Vehicles": ["Sri Lanka modified car", "Sri Lanka tuk tuk"],
+    "Music": ["Sri Lanka rap", "Sri Lanka baila music"],
+    "Pets & Animals": ["Sri Lanka cat", "Sri Lanka wildlife"],
+    "Sports": ["Sri Lanka rugby", "Sri Lanka volleyball"],
+    "Travel & Events": ["Sri Lanka hidden places", "Sri Lanka wedding"],
+    "Gaming": ["Sri Lanka pubg mobile", "Sri Lanka esports"],
+    "People & Blogs": ["Sri Lanka couple vlog", "Sri Lanka student vlog"],
+    "Comedy": ["Sri Lanka prank", "Sri Lanka roast"],
+    "Entertainment": ["Sri Lanka reality show", "Sri Lanka talk show"],
+    "News & Politics": ["Sri Lanka breaking news", "Sri Lanka economy news"],
+    "Howto & Style": ["Sri Lanka hair style", "Sri Lanka skincare"],
+    "Education": ["Sri Lanka al exam", "Sri Lanka university"],
+    "Science & Technology": ["Sri Lanka programming", "Sri Lanka mobile review"],
+    "Nonprofits & Activism": ["Sri Lanka environment", "Sri Lanka social work"],
 }
 
 

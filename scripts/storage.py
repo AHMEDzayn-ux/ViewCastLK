@@ -49,3 +49,14 @@ def load_active_video_ids(path: str, since_date: str) -> set[str]:
         return set()
     with open(path, encoding="utf-8-sig") as f:
         return {row["video_id"] for row in csv.DictReader(f) if row["published_at"] >= since_date}
+
+
+def load_known_ids(path: str, id_column: str) -> set[str]:
+    """Reads back every id already recorded in an identity table, regardless of
+    date — used to make sure identity rows (title, description, etc.) are only
+    ever written once per entity, never re-appended on a later run just because
+    that entity was refreshed again. Returns an empty set on the very first run."""
+    if not os.path.isfile(path):
+        return set()
+    with open(path, encoding="utf-8-sig") as f:
+        return {row[id_column] for row in csv.DictReader(f)}

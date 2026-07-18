@@ -22,7 +22,7 @@ from googleapiclient.errors import HttpError
 
 from youtube_client import (
     get_channel_by_roster_entry,
-    get_channel_videos_since,
+    get_channel_videos_since_by_playlist,
     get_video_categories,
     get_video_details,
     flatten_channel_identity,
@@ -88,10 +88,15 @@ def resolve_channels(handles: list[str], captured_at: str, known_channel_ids: se
 
 
 def discover_new_videos(channels: list[dict], discovery_since: str) -> set[str]:
+    """Uses each channel's already-resolved uploads playlist id (from
+    resolve_channels(), moments earlier this same run) instead of re-fetching
+    it via channels.list — that lookup is redundant when we already have it,
+    and was costing 1 wasted unit per channel per run before this fix."""
     new_video_ids = set()
     for c in channels:
+        playlist_id = c["contentDetails"]["relatedPlaylists"]["uploads"]
         try:
-            new_video_ids.update(get_channel_videos_since(c["id"], discovery_since))
+            new_video_ids.update(get_channel_videos_since_by_playlist(playlist_id, discovery_since))
         except HttpError as e:
             if is_quota_exceeded(e):
                 raise QuotaExceeded()

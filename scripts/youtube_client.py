@@ -2,6 +2,7 @@ import os
 import sys
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
 sys.stdout.reconfigure(encoding="utf-8")
 load_dotenv()
@@ -76,6 +77,16 @@ def is_sri_lankan_channel(channel_id: str) -> bool:
 
 
 def get_channel_videos_since(channel_id: str, since_date: str) -> list[dict]:
+    """Convenience wrapper that resolves the uploads playlist id first (1 extra
+    channels.list unit). Prefer get_channel_videos_since_by_playlist() whenever
+    you already have the channel's resolved data (e.g. from a prior
+    channels.list call this same run) — that extra lookup is pure waste when
+    the playlist id is already sitting in memory."""
+    playlist_id = get_uploads_playlist_id(channel_id)
+    return get_channel_videos_since_by_playlist(playlist_id, since_date)
+
+
+def get_channel_videos_since_by_playlist(playlist_id: str, since_date: str) -> list[dict]:
     """Cheap discovery: walks a channel's uploads playlist and keeps only videos
     published on/after since_date (ISO format, e.g. '2026-06-01').
     Uses contentDetails.videoPublishedAt, which playlistItems.list returns for free —
@@ -83,17 +94,23 @@ def get_channel_videos_since(channel_id: str, since_date: str) -> list[dict]:
     Uploads playlists are returned newest-first (confirmed empirically), so we stop
     as soon as we hit a video older than the cutoff instead of paging full history —
     this is what makes daily polling cheap: a same-day check only costs 1 page for
-    most channels, not a full re-walk of the channel's upload history each time."""
-    playlist_id = get_uploads_playlist_id(channel_id)
+    most channels, not a full re-walk of the channel's upload history each time.
+    Some channels' uploads playlists 404 (playlistNotFound) — e.g. channels with
+    zero uploads — which is a legitimate "no videos" outcome, not a failure."""
     matches = []
     page_token = None
     while True:
-        response = youtube.playlistItems().list(
-            part="contentDetails",
-            playlistId=playlist_id,
-            maxResults=50,
-            pageToken=page_token,
-        ).execute()
+        try:
+            response = youtube.playlistItems().list(
+                part="contentDetails",
+                playlistId=playlist_id,
+                maxResults=50,
+                pageToken=page_token,
+            ).execute()
+        except HttpError as e:
+            if e.resp.status == 404:
+                return matches
+            raise
         hit_older_video = False
         for item in response["items"]:
             published_at = item["contentDetails"]["videoPublishedAt"]

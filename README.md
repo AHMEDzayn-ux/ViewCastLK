@@ -1,14 +1,13 @@
 @'
 # ViewCastLK — YouTube API Data Collection Prototype
-
-**Contributor:** Asfi Ahamed  
+ 
 **Branch:** `feature/asfi-youtube-api-sample`
 
 ## Branch Purpose
 
 This branch preserves my individual YouTube Data API collection prototype created during the early stage of the ViewCastLK project.
 
-The main data-collection responsibility was later reassigned to Sabith. Therefore, this branch is retained only as:
+The main data-collection responsibility was later reassigned to **Sabith**. Therefore, this branch is retained only as:
 
 - Evidence of my individual contribution
 - A record of the initial API investigation and testing

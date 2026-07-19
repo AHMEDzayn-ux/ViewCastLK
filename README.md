@@ -5,7 +5,7 @@
 
 ## Branch Purpose
 
-This branch preserves my individual YouTube Data API collection prototype created during the early stage of the ViewCastLK project.
+This branch preserves my(Asfi) individual YouTube Data API collection prototype created during the early stage of the ViewCastLK project.
 
 The main data-collection responsibility was later reassigned to **Sabith**. Therefore, this branch is retained only as:
 

@@ -20,7 +20,8 @@ def get_channel_info(channel_id: str) -> dict:
         part=CHANNEL_PARTS,
         id=channel_id,
     ).execute()
-    return response["items"][0] if response["items"] else None
+    items = response.get("items", [])
+    return items[0] if items else None
 
 
 def get_channel_by_handle(handle: str) -> dict:
@@ -31,7 +32,8 @@ def get_channel_by_handle(handle: str) -> dict:
         part=CHANNEL_PARTS,
         forHandle=handle,
     ).execute()
-    return response["items"][0] if response["items"] else None
+    items = response.get("items", [])
+    return items[0] if items else None
 
 
 def get_channel_by_roster_entry(value: str) -> dict:
@@ -42,7 +44,8 @@ def get_channel_by_roster_entry(value: str) -> dict:
         response = youtube.channels().list(part=CHANNEL_PARTS, id=value).execute()
     else:
         response = youtube.channels().list(part=CHANNEL_PARTS, forHandle=value).execute()
-    return response["items"][0] if response["items"] else None
+    items = response.get("items", [])
+    return items[0] if items else None
 
 
 def get_uploads_playlist_id(channel_id: str) -> str:
@@ -61,7 +64,7 @@ def get_videos_from_playlist(playlist_id: str, max_results: int = 50) -> list[di
             maxResults=50,
             pageToken=page_token,
         ).execute()
-        videos.extend(response["items"])
+        videos.extend(response.get("items", []))
         page_token = response.get("nextPageToken")
         if not page_token or len(videos) >= max_results:
             break
@@ -112,7 +115,7 @@ def get_channel_videos_since_by_playlist(playlist_id: str, since_date: str) -> l
                 return matches
             raise
         hit_older_video = False
-        for item in response["items"]:
+        for item in response.get("items", []):
             published_at = item["contentDetails"]["videoPublishedAt"]
             if published_at >= since_date:
                 matches.append(item["contentDetails"]["videoId"])
@@ -147,7 +150,7 @@ def get_channel_videos_since_search(channel_id: str, since_date: str, max_result
             maxResults=50,
             pageToken=page_token,
         ).execute()
-        video_ids.extend(item["id"]["videoId"] for item in response["items"])
+        video_ids.extend(item["id"]["videoId"] for item in response.get("items", []))
         page_token = response.get("nextPageToken")
         if not page_token or (max_results and len(video_ids) >= max_results):
             break
@@ -165,7 +168,7 @@ def discover_channel_candidates(keyword: str, max_results: int = 25) -> list[str
         regionCode="LK",
         maxResults=max_results,
     ).execute()
-    return [item["snippet"]["channelId"] for item in response["items"]]
+    return [item["snippet"]["channelId"] for item in response.get("items", [])]
 
 
 VIDEO_PARTS = "snippet,statistics,contentDetails,status,liveStreamingDetails"
@@ -181,7 +184,7 @@ def get_video_details(video_ids: list[str]) -> list[dict]:
             part=VIDEO_PARTS,
             id=",".join(chunk),
         ).execute()
-        details.extend(response["items"])
+        details.extend(response.get("items", []))
     return details
 
 
@@ -192,7 +195,7 @@ def get_video_categories(region_code: str = "LK") -> dict[str, str]:
         part="snippet",
         regionCode=region_code,
     ).execute()
-    return {item["id"]: item["snippet"]["title"] for item in response["items"]}
+    return {item["id"]: item["snippet"]["title"] for item in response.get("items", [])}
 
 
 def search_videos(query: str, published_after: str = None, region_code: str = "LK",
@@ -208,7 +211,7 @@ def search_videos(query: str, published_after: str = None, region_code: str = "L
         maxResults=max_results,
         order="date",
     ).execute()
-    return response["items"]
+    return response.get("items", [])
 
 
 # --- Flatten functions: raw API responses -> plain flat dicts, ready for storage.py.

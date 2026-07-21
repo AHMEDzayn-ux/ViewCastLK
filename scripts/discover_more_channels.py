@@ -45,11 +45,8 @@ class QuotaExceeded(Exception):
 
 
 def load_existing_channel_ids() -> set[str]:
-    ids = set()
-    if os.path.isfile("output/channels.csv"):
-        with open("output/channels.csv", encoding="utf-8-sig") as f:
-            ids.update(row["channel_id"] for row in csv.DictReader(f))
-    return ids
+    from storage import load_known_ids
+    return load_known_ids("channels", "channel_id")
 
 
 def load_existing_handles() -> set[str]:
@@ -62,6 +59,21 @@ def load_existing_handles() -> set[str]:
 def append_roster_entry(value: str) -> None:
     with open(HANDLES_PATH, "a", encoding="utf-8") as f:
         f.write(value + "\n")
+
+
+def append_log_rows(rows: list[dict]) -> None:
+    """Local diagnostic CSV, not part of the Supabase schema — a discovery
+    audit trail (what was found, promoted or not, and why), not collected
+    YouTube data. Kept as plain CSV rather than a table for that reason."""
+    if not rows:
+        return
+    os.makedirs(os.path.dirname(LOG_PATH) or ".", exist_ok=True)
+    file_exists = os.path.isfile(LOG_PATH)
+    with open(LOG_PATH, "a", newline="", encoding="utf-8-sig") as f:
+        writer = csv.DictWriter(f, fieldnames=rows[0].keys())
+        if not file_exists:
+            writer.writeheader()
+        writer.writerows(rows)
 
 
 def run_query(query: str, category: str, known_ids: set, known_roster: set, log_rows: list) -> int:
@@ -116,8 +128,6 @@ def run_query(query: str, category: str, known_ids: set, known_roster: set, log_
 
 
 def main():
-    from storage import append_rows
-
     known_ids = load_existing_channel_ids()
     known_roster = load_existing_handles()
     print(f"Starting with {len(known_ids)} known channel IDs, {len(known_roster)} known roster entries.\n")
@@ -132,8 +142,7 @@ def main():
                 try:
                     total_added += run_query(query, category, known_ids, known_roster, log_rows)
                 finally:
-                    if log_rows:
-                        append_rows(log_rows, LOG_PATH)
+                    append_log_rows(log_rows)
     except QuotaExceeded:
         stopped_early = True
         print("\nQUOTA EXCEEDED — stopped cleanly. Everything found so far is already saved to disk.")

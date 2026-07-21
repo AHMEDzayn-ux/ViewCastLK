@@ -8,72 +8,87 @@ Data API v3, and builds a day-by-day view/like/comment time series per video
 
 1. Create a Google Cloud project, enable **YouTube Data API v3**, create an API
    key restricted to that API (Console → APIs & Services → Credentials).
-2. Copy `.env.example` to `.env` and paste the key in as `YOUTUBE_API_KEY=...`
-   (no quotes needed).
-3. `pip install -r requirements.txt`
+2. Create a Supabase project (Mumbai/`ap-south-1` region — closest to Sri
+   Lanka for the team's own direct access and the eventual dashboard; the
+   scheduled poll itself runs from GitHub Actions' US-based runners either
+   way, so region doesn't change that part's latency), and grab the
+   **Transaction-mode pooler** connection string (Project Settings → Database
+   → Connection string, port `6543` — not the direct connection on port
+   `5432`; GitHub Actions jobs are short-lived and the pooler avoids
+   connection-exhaustion issues).
+3. Copy `.env.example` to `.env` and fill in `YOUTUBE_API_KEY` and
+   `SUPABASE_DB_URL` (no quotes needed).
+4. `pip install -r requirements.txt`
+5. Schema is managed via the **Supabase CLI** (`npx supabase`, no global
+   install needed — requires Node.js and Docker Desktop locally):
+   - Migrations live in `supabase/migrations/*.sql`, applied in order.
+   - To push pending migrations: `npx supabase db push --db-url "<your SUPABASE_DB_URL, without the ?pgbouncer=true suffix>"`
+     (or `npx supabase link --project-ref <ref>` once, then plain
+     `npx supabase db push`, if you'd rather authenticate interactively).
+   - To make a schema change: `npx supabase migration new <description>`,
+     edit the generated file, then push again. Never edit an already-pushed
+     migration file — add a new one instead.
+6. If migrating existing CSV-collected data: `python scripts/migrate_csv_to_supabase.py`
+   (safe to re-run, upserts on each table's primary key).
+7. Add `YOUTUBE_API_KEY` and `SUPABASE_DB_URL` as **GitHub Actions repo
+   secrets** (Settings → Secrets and variables → Actions) so the scheduled
+   workflow can use them — never commit real values to `.env`.
 
 ## File structure
 
 ```
-youtube_client.py         # All YouTube API calls + flatten functions (raw API
-                           # response -> plain flat dict). No file I/O.
-storage.py                 # ALL persistence goes through here. The one file to
-                           # rewrite for the Supabase migration (see below).
-channel_handles.txt        # The tracked roster — one @handle or channel ID per
-                           # line. Edit this to add/remove channels; no code
-                           # changes needed.
-channel_roster.py          # Loads channel_handles.txt.
-fetch_categories.py        # One-time script: YouTube category id -> name.
-discover_more_channels.py  # Occasional script: broad search.list sweep across
-                           # category+keyword queries to grow the roster.
-run_daily_poll.py          # THE recurring job. Wrap this in a scheduled
-                           # GitHub Actions workflow.
+youtube_client.py          # All YouTube API calls + flatten functions (raw API
+                            # response -> plain flat dict). No DB access here.
+storage.py                  # ALL persistence goes through here — Supabase
+                            # (Postgres) backend via psycopg2.
+supabase/migrations/*.sql   # Schema migrations, managed via the Supabase CLI
+                            # (npx supabase db push / migration new).
+channel_handles.txt         # The tracked roster — one @handle or channel ID per
+                            # line, plain text (not in the database). Edit this
+                            # to add/remove channels; no code changes needed.
+channel_roster.py           # Loads channel_handles.txt.
+fetch_categories.py         # One-time script: YouTube category id -> name.
+discover_more_channels.py   # Occasional script: broad search.list sweep across
+                            # category+keyword queries to grow the roster.
+run_daily_poll.py           # THE recurring job, run on a schedule by
+                            # .github/workflows/collect.yml.
+migrate_csv_to_supabase.py  # One-time: load pre-Supabase CSV data into the DB.
+.github/workflows/collect.yml  # Scheduled GitHub Actions workflow (6-hourly).
 ```
 
 ## Data model: identity vs. snapshot tables
 
 Every entity (channel, video) is split into two tables:
 
-- **Identity** (`channels.csv`, `videos.csv`) — fields that don't change day
-  to day: title, description, category, duration. Written once per
-  channel/video when first seen.
-- **Snapshot** (`channel_snapshots.csv`, `video_snapshots.csv`) — fields that
-  change every poll: subscriber count, view/like/comment count. One new row
-  per entity **every run**, tagged with a `captured_at` timestamp. This is
-  the actual time-series data the model needs — `days_since_publish` for any
-  row is just `captured_at - published_at`, always derived from the video's
-  own publish date, never from when tracking started.
+- **Identity** (`channels`, `videos`) — fields that don't change day to day:
+  title, description, category, duration. Written once per channel/video
+  when first seen (upserted on `channel_id`/`video_id`, so a rerun never
+  duplicates identity data).
+- **Snapshot** (`channel_snapshots`, `video_snapshots`) — fields that change
+  every poll: subscriber count, view/like/comment count. One new row per
+  entity **every run**, tagged with a `captured_at` timestamp (composite
+  primary key `(id, captured_at)`). This is the actual time-series data the
+  model needs — `days_since_publish` for any row is just
+  `captured_at - published_at`, always derived from the video's own publish
+  date, never from when tracking started.
 
-Identity tables intentionally accumulate some duplicate rows over time (see
-"Known quirks" below) — that's fine for CSV, since it's meant to be
-**upserted** (dedupe on `video_id`/`channel_id`) once in a real database.
-Snapshot tables should be **inserted** — every row is a legitimate distinct
-observation.
+## GitHub Actions
 
-## Supabase / GitHub Actions migration (for whoever picks this up)
-
-Only **`storage.py`** needs to change. Its three functions are already the
-exact shape a Supabase migration needs:
-
-| Current (CSV) | Supabase equivalent |
-|---|---|
-| `append_rows(rows, path)` on an identity table | `supabase.table(name).upsert(rows).execute()` |
-| `append_rows(rows, path)` on a snapshot table | `supabase.table(name).insert(rows).execute()` |
-| `write_rows(rows, path)` (categories, one-time) | `supabase.table(name).upsert(rows).execute()` |
-| `load_active_video_ids(path, since_date)` | `supabase.table("videos").select("video_id").gte("published_at", since_date).execute()` |
-
-Nothing in `youtube_client.py`, `run_daily_poll.py`, `channel_roster.py`, or
-`fetch_categories.py` needs to know whether it's writing to CSV or Supabase —
-they only ever call `storage.py`'s functions with flat dicts.
-
-To wrap `run_daily_poll.py` in GitHub Actions: a scheduled workflow
-(`schedule: cron:`) that checks out the repo, installs `requirements.txt`,
-and runs `python run_daily_poll.py`, with `YOUTUBE_API_KEY` (and eventually
-Supabase credentials) as repo secrets, not committed to `.env`.
+`.github/workflows/collect.yml` runs `run_daily_poll.py` every 6 hours
+(`cron: "0 */6 * * *"`), plus a manual `workflow_dispatch` trigger for
+testing or catching up after an outage. Reads `YOUTUBE_API_KEY` and
+`SUPABASE_DB_URL` from repo secrets — set those under Settings → Secrets and
+variables → Actions before the schedule can run successfully.
 
 **Known operational gotcha**: GitHub disables scheduled workflows after 60
 days of no repository activity — make sure someone pushes periodically
 during the collection window, or add a step that self-pings.
+
+**Quota note**: at ~2,800-3,800 units per full run (channel refresh +
+discovery + snapshot across the full roster), 4 runs/day sits right at or
+over the 10,000/day YouTube API quota ceiling, and gets tighter as the
+roster or per-channel video volume grows. Watch actual usage in Google
+Cloud Console once this is running continuously.
 
 ## Known quirks (learned the hard way — don't rediscover these)
 

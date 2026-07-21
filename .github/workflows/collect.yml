@@ -2,9 +2,11 @@ name: Collect YouTube data
 
 on:
   schedule:
-    # Every 6 hours. GitHub's cron scheduler can be delayed under load, but
-    # the 26h discovery lookback in run_daily_poll.py absorbs normal drift.
-    - cron: "0 */6 * * *"
+    # GitHub Actions cron is always UTC. 30 0,6,12,18 UTC = 12am/6am/12pm/6pm
+    # Sri Lanka time (UTC+5:30). GitHub's scheduler can be delayed a few
+    # minutes under load, but the 26h discovery lookback in run_daily_poll.py
+    # absorbs that kind of normal drift.
+    - cron: "30 0,6,12,18 * * *"
   workflow_dispatch: {}  # manual "Run workflow" button, for testing/catch-up
 
 jobs:

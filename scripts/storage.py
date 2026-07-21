@@ -19,6 +19,7 @@ Previous CSV-backed version is in git history (see the "sabith" branch commits
 before this one) if ever needed for reference.
 """
 import os
+from urllib.parse import urlparse, urlunparse
 
 import psycopg2
 from psycopg2 import sql
@@ -57,8 +58,16 @@ COLUMN_CASTS = {
 }
 
 
-def _connect():
-    return psycopg2.connect(DB_URL)
+def connect():
+    """Shared connection helper — strips Supabase's ?pgbouncer=true query
+    hint first, since plain psycopg2/libpq doesn't recognize it as a valid
+    connection parameter (that hint is meant for ORMs like Prisma; it's a
+    no-op for a raw psycopg2 connection)."""
+    clean_url = urlunparse(urlparse(DB_URL)._replace(query=""))
+    return psycopg2.connect(clean_url)
+
+
+_connect = connect  # internal alias, kept for the calls below
 
 
 def _clean(value):

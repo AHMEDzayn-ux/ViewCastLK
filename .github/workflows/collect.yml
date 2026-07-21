@@ -10,9 +10,10 @@ on:
 jobs:
   poll:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: scripts
+    # Everything runs from the repo root, not scripts/ - channel_handles.txt
+    # and (for other scripts) output/ are root-relative, and every script
+    # assumes that CWD. Running from scripts/ instead breaks those relative
+    # paths (confirmed the hard way: FileNotFoundError on channel_handles.txt).
     steps:
       - uses: actions/checkout@v4
 
@@ -21,10 +22,10 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies
-        run: pip install -r ../requirements.txt
+        run: pip install -r requirements.txt
 
       - name: Run daily poll
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-        run: python run_daily_poll.py
+        run: python scripts/run_daily_poll.py

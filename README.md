@@ -53,7 +53,7 @@ discover_more_channels.py   # Occasional script: broad search.list sweep across
 run_daily_poll.py           # THE recurring job, run on a schedule by
                             # .github/workflows/collect.yml.
 migrate_csv_to_supabase.py  # One-time: load pre-Supabase CSV data into the DB.
-.github/workflows/collect.yml  # Scheduled GitHub Actions workflow (6-hourly).
+.github/workflows/collect.yml  # Scheduled workflow: 4 runs/day (full + discovery-only).
 ```
 
 ## Data model: identity vs. snapshot tables
@@ -64,31 +64,53 @@ Every entity (channel, video) is split into two tables:
   title, description, category, duration. Written once per channel/video
   when first seen (upserted on `channel_id`/`video_id`, so a rerun never
   duplicates identity data).
-- **Snapshot** (`channel_snapshots`, `video_snapshots`) — fields that change
-  every poll: subscriber count, view/like/comment count. One new row per
-  entity **every run**, tagged with a `captured_at` timestamp (composite
-  primary key `(id, captured_at)`). This is the actual time-series data the
-  model needs — `days_since_publish` for any row is just
-  `captured_at - published_at`, always derived from the video's own publish
-  date, never from when tracking started.
+- **Snapshot** (`channel_snapshots`, `video_snapshots`) — fields that change:
+  subscriber count, view/like/comment count. Tagged with a `captured_at`
+  timestamp (composite primary key `(id, captured_at)`). `video_snapshots`
+  gets a new row every run (that's the trajectory the model needs);
+  `channel_snapshots` only on full runs (see below). `days_since_publish` for
+  any video row is just `captured_at - published_at`, always derived from the
+  video's own publish date, never from when tracking started.
 
 ## GitHub Actions
 
-`.github/workflows/collect.yml` runs `run_daily_poll.py` every 6 hours
-(`cron: "0 */6 * * *"`), plus a manual `workflow_dispatch` trigger for
-testing or catching up after an outage. Reads `YOUTUBE_API_KEY` and
-`SUPABASE_DB_URL` from repo secrets — set those under Settings → Secrets and
-variables → Actions before the schedule can run successfully.
+`.github/workflows/collect.yml` runs `run_daily_poll.py` on a schedule (all
+times UTC; SLT = UTC+5:30), plus a manual `workflow_dispatch` trigger.
 
-**Known operational gotcha**: GitHub disables scheduled workflows after 60
-days of no repository activity — make sure someone pushes periodically
-during the collection window, or add a step that self-pings.
+Four runs a day, of two kinds — this split keeps daily quota usage (~8k of
+the 10k/day budget) under the ceiling:
 
-**Quota note**: at ~2,800-3,800 units per full run (channel refresh +
-discovery + snapshot across the full roster), 4 runs/day sits right at or
-over the 10,000/day YouTube API quota ceiling, and gets tighter as the
-roster or per-channel video volume grows. Watch actual usage in Google
-Cloud Console once this is running continuously.
+| Cron (UTC) | SLT | Kind | What it does |
+|---|---|---|---|
+| `30 0,12` | 6am / 6pm | **Full** (`REFRESH_CHANNELS=true`) | Refresh channel stats + discover + snapshot videos |
+| `30 6,18` | 12pm / 12am | **Discovery-only** (`REFRESH_CHANNELS=false`) | Discover + snapshot videos; skip channel refresh |
+
+Channel subscriber/view counts change slowly, so refreshing them twice a day
+(not four times) costs almost no signal but saves ~1,282 units per skipped
+run. Video snapshots — the actual per-video trajectory — happen on **every**
+run regardless. Which kind a run is comes from the `REFRESH_CHANNELS` env,
+set by the workflow from `github.event.schedule` (so it's decided by which
+cron slot fired, not by the possibly-delayed actual run time). A manual
+dispatch defaults to a full run; untick the input for discovery-only.
+
+Reads `YOUTUBE_API_KEY` and `SUPABASE_DB_URL` from repo secrets — set those
+under Settings → Secrets and variables → Actions before the schedule can run.
+
+**Known operational gotchas**:
+- GitHub disables scheduled workflows after 60 days of no repository activity
+  — push periodically during the collection window, or add a self-ping step.
+- Scheduled runs are best-effort and can be delayed (or rarely skipped)
+  under GitHub load; the 26h discovery lookback absorbs this, so exact run
+  times will wander off the cron times and that's fine.
+
+**Quota note**: rough daily budget with the full/discovery-only split —
+2 full runs (~1,282 channel-refresh + ~1,282 discovery + ~80 snapshot each)
+plus 2 discovery-only runs (~1,282 + ~80 each) ≈ **8k of the 10k/day**
+ceiling. Headroom shrinks as the roster or per-channel video volume grows,
+so watch actual usage in Google Cloud Console. Note the quota resets at
+**midnight US Pacific time** (~12:30–1:30pm SLT), not local midnight. If a
+run does exhaust quota it stops cleanly and the next one resumes — nothing
+is lost, thanks to the 26h discovery lookback.
 
 ## Known quirks (learned the hard way — don't rediscover these)
 

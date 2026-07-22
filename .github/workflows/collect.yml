@@ -2,20 +2,27 @@ name: Collect YouTube data
 
 on:
   schedule:
-    # GitHub Actions cron is always UTC. 30 0,6,12,18 UTC = 12am/6am/12pm/6pm
-    # Sri Lanka time (UTC+5:30). GitHub's scheduler can be delayed a few
-    # minutes under load, but the 26h discovery lookback in run_daily_poll.py
-    # absorbs that kind of normal drift.
-    - cron: "30 0,6,12,18 * * *"
-  workflow_dispatch: {}  # manual "Run workflow" button, for testing/catch-up
+    # GitHub Actions cron is always UTC, and scheduled runs are best-effort
+    # (can be delayed under load) — the 26h discovery lookback absorbs that.
+    #
+    # Full runs (refresh channel stats + discover + snapshot), twice a day:
+    #   00:30 & 12:30 UTC = 6am & 6pm Sri Lanka time (UTC+5:30)
+    - cron: "30 0,12 * * *"
+    # Discovery-only runs (discover + snapshot, no channel refresh), twice a day:
+    #   06:30 & 18:30 UTC = 12pm & 12am Sri Lanka time
+    - cron: "30 6,18 * * *"
+  workflow_dispatch:
+    inputs:
+      refresh_channels:
+        description: "Refresh channel stats this run (full run)"
+        type: boolean
+        default: true
 
 jobs:
   poll:
     runs-on: ubuntu-latest
     # Everything runs from the repo root, not scripts/ - channel_handles.txt
-    # and (for other scripts) output/ are root-relative, and every script
-    # assumes that CWD. Running from scripts/ instead breaks those relative
-    # paths (confirmed the hard way: FileNotFoundError on channel_handles.txt).
+    # is root-relative and every script assumes that CWD.
     steps:
       - uses: actions/checkout@v4
 
@@ -26,8 +33,11 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run daily poll
+      - name: Run poll
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          # Full run on the 00:30/12:30 UTC cron slot or a manual dispatch that
+          # opts in; discovery-only on the 06:30/18:30 slot.
+          REFRESH_CHANNELS: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_channels || github.event.schedule == '30 0,12 * * *' }}
         run: python scripts/run_daily_poll.py

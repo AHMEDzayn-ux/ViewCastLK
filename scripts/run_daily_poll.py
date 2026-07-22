@@ -1,20 +1,31 @@
 """The recurring collection job — runs on a schedule via GitHub Actions
-(.github/workflows/collect.yml). Each run:
-  1. Refreshes identity + stats for every tracked channel.
-  2. Discovers videos published since the last poll.
-  3. Re-snapshots every video still inside its 60-day tracking window, not just
-     newly-discovered ones — this is what actually builds the day-by-day
-     view/like/comment trajectory the forecasting model needs.
+(.github/workflows/collect.yml). There are two kinds of run, selected by the
+REFRESH_CHANNELS env var (the workflow sets it per cron slot):
 
-Persists to Supabase via storage.py — see that file for the connection
-details and table schema (sql/schema.sql).
+  Full run (REFRESH_CHANNELS=true, twice a day):
+    1. Refreshes identity + stats for every tracked channel (channels.list —
+       the single most expensive part, ~1 unit per channel).
+    2. Discovers videos published since the last poll.
+    3. Snapshots every video still inside its 60-day tracking window.
 
-Safety: channel resolution (by far the most calls — one per tracked channel)
-writes every 50 channels instead of all at once, so a mid-run quotaExceeded
-loses at most one batch, not the whole run. If quota runs out at any point,
-the script stops cleanly with a clear message instead of a crash/traceback —
-whatever was already written stays in the database.
+  Discovery-only run (REFRESH_CHANNELS=false, the other two of the four runs):
+    - Skips the channel refresh entirely. Channel subscriber/view counts barely
+      move within a few hours, so refreshing them 4x/day instead of 2x wastes
+      ~1,282 units per skipped run for almost no extra signal. Reads each
+      channel's uploads-playlist id from the DB instead, then does discovery +
+      video snapshots exactly as a full run does.
+
+Video snapshots (the actual day-by-day trajectory the model needs) happen on
+EVERY run, full or discovery-only — that's the data that must stay dense.
+
+Persists to Supabase via storage.py.
+
+Safety: channel resolution (full runs only) writes every 50 channels instead
+of all at once, so a mid-run quotaExceeded loses at most one batch. If quota
+runs out at any point, the script stops cleanly with a clear message instead
+of a crash/traceback — whatever was already written stays in the database.
 """
+import os
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -30,12 +41,21 @@ from youtube_client import (
     flatten_video_identity,
     flatten_video_snapshot,
 )
-from storage import append_rows, load_active_video_ids, load_known_ids
+from storage import (
+    append_rows,
+    load_active_video_ids,
+    load_known_ids,
+    load_channel_playlist_ids,
+)
 from channel_roster import load_handles
 
 TRACKING_WINDOW_DAYS = 60
 DISCOVERY_LOOKBACK_HOURS = 26  # >24h buffer so a daily cron never drops a video to timing drift
 CHANNEL_BATCH_SIZE = 50
+
+# Full run refreshes channel stats; discovery-only run skips that to save quota.
+# Defaults to a full run when unset (e.g. a local manual invocation).
+REFRESH_CHANNELS = os.environ.get("REFRESH_CHANNELS", "true").strip().lower() == "true"
 
 CHANNELS_TABLE = "channels"
 CHANNEL_SNAPSHOTS_TABLE = "channel_snapshots"
@@ -87,14 +107,13 @@ def resolve_channels(handles: list[str], captured_at: str, known_channel_ids: se
     return channels
 
 
-def discover_new_videos(channels: list[dict], discovery_since: str) -> set[str]:
-    """Uses each channel's already-resolved uploads playlist id (from
-    resolve_channels(), moments earlier this same run) instead of re-fetching
-    it via channels.list — that lookup is redundant when we already have it,
-    and was costing 1 wasted unit per channel per run before this fix."""
+def discover_new_videos(playlist_ids: list[str], discovery_since: str) -> set[str]:
+    """Walks each channel's uploads playlist for videos newer than the cutoff.
+    Takes playlist ids directly, so it works the same whether they came from a
+    just-completed channel refresh (full run) or straight from the DB
+    (discovery-only run)."""
     new_video_ids = set()
-    for c in channels:
-        playlist_id = c["contentDetails"]["relatedPlaylists"]["uploads"]
+    for playlist_id in playlist_ids:
         try:
             new_video_ids.update(get_channel_videos_since_by_playlist(playlist_id, discovery_since))
         except HttpError as e:
@@ -111,17 +130,24 @@ def main():
     discovery_since = (now - timedelta(hours=DISCOVERY_LOOKBACK_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
     tracking_since = (now - timedelta(days=TRACKING_WINDOW_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    handles = load_handles()
-    print(f"Refreshing {len(handles)} tracked channels...")
-
-    known_channel_ids = load_known_ids(CHANNELS_TABLE, "channel_id")
     known_video_ids = load_known_ids(VIDEOS_TABLE, "video_id")
 
     try:
-        channels = resolve_channels(handles, captured_at, known_channel_ids)
+        if REFRESH_CHANNELS:
+            handles = load_handles()
+            known_channel_ids = load_known_ids(CHANNELS_TABLE, "channel_id")
+            print(f"Full run: refreshing {len(handles)} tracked channels...")
+            channels = resolve_channels(handles, captured_at, known_channel_ids)
+            playlist_ids = [c["contentDetails"]["relatedPlaylists"]["uploads"] for c in channels]
+            channel_count = len(channels)
+        else:
+            playlist_ids = load_channel_playlist_ids(CHANNELS_TABLE)
+            channel_count = len(playlist_ids)
+            print(f"Discovery-only run: skipping channel refresh, "
+                  f"discovering from {channel_count} stored channels...")
 
         print(f"Discovering videos published since {discovery_since}...")
-        new_video_ids = discover_new_videos(channels, discovery_since)
+        new_video_ids = discover_new_videos(playlist_ids, discovery_since)
         print(f"  {len(new_video_ids)} new videos found")
 
         active_video_ids = load_active_video_ids(VIDEOS_TABLE, tracking_since)
@@ -137,7 +163,8 @@ def main():
         append_rows([flatten_video_snapshot(v, captured_at) for v in details], VIDEO_SNAPSHOTS_TABLE)
 
         elapsed = time.time() - start
-        print(f"Done in {elapsed:.1f}s. {len(channels)} channels, "
+        run_kind = "full" if REFRESH_CHANNELS else "discovery-only"
+        print(f"Done ({run_kind}) in {elapsed:.1f}s. {channel_count} channels, "
               f"{len(unseen_details)} new videos, {len(details)} total snapshotted.")
 
     except QuotaExceeded:

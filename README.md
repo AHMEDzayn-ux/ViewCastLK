@@ -112,6 +112,10 @@ so watch actual usage in Google Cloud Console. Note the quota resets at
 run does exhaust quota it stops cleanly and the next one resumes — nothing
 is lost, thanks to the 26h discovery lookback.
 
+The separate `.github/workflows/backup.yml` workflow creates a daily
+Supabase logical backup and uploads it to Google Drive. Setup and test steps
+are documented in [`docs/database_backup.md`](docs/database_backup.md).
+
 ## Known quirks (learned the hard way — don't rediscover these)
 
 - **`search.list` never returns more than ~500 results for a single query**,

@@ -155,3 +155,22 @@ def load_known_ids(table: str, id_column: str) -> set[str]:
             return {row[0] for row in cur.fetchall()}
     finally:
         conn.close()
+
+
+def load_channel_playlist_ids(table: str = "channels") -> list[str]:
+    """Uploads-playlist ids for every known channel — lets discovery-only runs
+    (which skip the channels.list refresh to save quota) still find new uploads
+    without re-resolving each channel. Rows with a null playlist id (e.g.
+    channels that had no uploads playlist) are skipped, since there's nothing
+    to discover from them anyway."""
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                sql.SQL("SELECT uploads_playlist_id FROM {} WHERE uploads_playlist_id IS NOT NULL").format(
+                    sql.Identifier(table)
+                )
+            )
+            return [row[0] for row in cur.fetchall()]
+    finally:
+        conn.close()

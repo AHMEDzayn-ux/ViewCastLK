@@ -1,5 +1,27 @@
 .env
+.env.*
+!.env.example
 __pycache__/
 *.pyc
 .venv/
 .mcp.json
+
+# Database credentials and local backup artifacts
+.pgpass
+backups/
+*.backup
+*.dump
+*.sql.gz
+*.tar.gz
+*.sha256
+
+# Google Drive/rclone credentials
+credentials/
+rclone.conf
+*.rclone.conf
+client_secret_*.json
+google-credentials*.json
+google_credentials*.json
+service-account*.json
+service_account*.json
+token.json

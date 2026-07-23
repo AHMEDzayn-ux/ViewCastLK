@@ -1,0 +1,175 @@
+name: Back up Supabase database
+
+on:
+  schedule:
+    # GitHub cron is UTC. 19:30 UTC is 01:00 in Sri Lanka, one hour after
+    # the collector's midnight run.
+    - cron: "30 19 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: viewcastlk-supabase-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      GOOGLE_DRIVE_BACKUP_PATH: ${{ vars.GOOGLE_DRIVE_BACKUP_PATH }}
+
+    steps:
+      - name: Validate required secrets
+        env:
+          SUPABASE_BACKUP_DB_URL: ${{ secrets.SUPABASE_BACKUP_DB_URL }}
+          RCLONE_CONFIG_CONTENT: ${{ secrets.RCLONE_CONFIG }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if [[ -z "${SUPABASE_BACKUP_DB_URL:-}" ]]; then
+            echo "::error::Missing GitHub Actions secret: SUPABASE_BACKUP_DB_URL"
+            exit 1
+          fi
+
+          if [[ -z "${RCLONE_CONFIG_CONTENT:-}" ]]; then
+            echo "::error::Missing GitHub Actions secret: RCLONE_CONFIG"
+            exit 1
+          fi
+
+      - name: Set up Supabase CLI
+        uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2.1.1
+        with:
+          version: 2.109.1
+          github-token: ${{ github.token }}
+
+      - name: Install rclone
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes rclone
+
+      - name: Prepare Google Drive authentication
+        env:
+          RCLONE_CONFIG_CONTENT: ${{ secrets.RCLONE_CONFIG }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+
+          rclone_config="$RUNNER_TEMP/viewcastlk-rclone.conf"
+          printf '%s' "$RCLONE_CONFIG_CONTENT" > "$rclone_config"
+          chmod 600 "$rclone_config"
+          printf 'RCLONE_CONFIG=%s\n' "$rclone_config" >> "$GITHUB_ENV"
+
+      - name: Create roles, schema, and data dumps
+        env:
+          SUPABASE_BACKUP_DB_URL: ${{ secrets.SUPABASE_BACKUP_DB_URL }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+
+          timestamp="$(date -u +'%Y-%m-%dT%H-%M-%SZ')"
+          backup_id="viewcastlk-${timestamp}"
+          backup_root="$RUNNER_TEMP/viewcastlk-backups"
+          bundle_dir="$backup_root/$backup_id"
+          upload_dir="$backup_root/upload"
+
+          mkdir -p "$bundle_dir" "$upload_dir"
+
+          supabase db dump \
+            --db-url "$SUPABASE_BACKUP_DB_URL" \
+            --file "$bundle_dir/roles.sql" \
+            --role-only
+
+          supabase db dump \
+            --db-url "$SUPABASE_BACKUP_DB_URL" \
+            --file "$bundle_dir/schema.sql"
+
+          supabase db dump \
+            --db-url "$SUPABASE_BACKUP_DB_URL" \
+            --file "$bundle_dir/data.sql" \
+            --use-copy \
+            --data-only \
+            --exclude "storage.buckets_vectors" \
+            --exclude "storage.vector_indexes"
+
+          for dump_file in roles.sql schema.sql data.sql; do
+            if [[ ! -s "$bundle_dir/$dump_file" ]]; then
+              echo "::error::Supabase produced an empty $dump_file"
+              exit 1
+            fi
+          done
+
+          {
+            printf 'project=ViewCastLK\n'
+            printf 'created_at_utc=%s\n' "$timestamp"
+            printf 'github_repository=%s\n' "$GITHUB_REPOSITORY"
+            printf 'github_run_id=%s\n' "$GITHUB_RUN_ID"
+            printf 'supabase_cli_version='
+            supabase --version
+          } > "$bundle_dir/manifest.txt"
+
+          (
+            cd "$bundle_dir"
+            sha256sum roles.sql schema.sql data.sql manifest.txt > files.sha256
+          )
+
+          archive="$upload_dir/$backup_id.tar.gz"
+          tar -C "$backup_root" -czf "$archive" "$backup_id"
+
+          (
+            cd "$upload_dir"
+            sha256sum "$backup_id.tar.gz" > "$backup_id.tar.gz.sha256"
+          )
+
+          drive_base="${GOOGLE_DRIVE_BACKUP_PATH:-ViewCastLK/backups}"
+          drive_base="${drive_base%/}"
+          remote_path="gdrive:${drive_base}/daily/$(date -u +'%Y/%m')"
+
+          printf 'BACKUP_UPLOAD_DIR=%s\n' "$upload_dir" >> "$GITHUB_ENV"
+          printf 'BACKUP_ARCHIVE_NAME=%s.tar.gz\n' "$backup_id" >> "$GITHUB_ENV"
+          printf 'BACKUP_REMOTE_PATH=%s\n' "$remote_path" >> "$GITHUB_ENV"
+
+      - name: Upload backup to Google Drive
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          rclone copy \
+            "$BACKUP_UPLOAD_DIR" \
+            "$BACKUP_REMOTE_PATH" \
+            --checksum \
+            --check-first \
+            --retries 3 \
+            --low-level-retries 10 \
+            --log-level INFO
+
+          rclone check \
+            "$BACKUP_UPLOAD_DIR" \
+            "$BACKUP_REMOTE_PATH" \
+            --one-way
+
+      - name: Write backup summary
+        shell: bash
+        run: |
+          {
+            echo "### Supabase backup uploaded"
+            echo "- Archive: \`$BACKUP_ARCHIVE_NAME\`"
+            echo "- Google Drive destination: \`$BACKUP_REMOTE_PATH\`"
+            echo "- Contents: roles, schema, data, manifest, and checksums"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove temporary credentials and dumps
+        if: always()
+        shell: bash
+        run: |
+          set -u
+
+          rm -f -- "$RUNNER_TEMP/viewcastlk-rclone.conf"
+          rm -rf -- "$RUNNER_TEMP/viewcastlk-backups"

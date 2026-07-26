@@ -116,7 +116,15 @@ def get_channel_videos_since_by_playlist(playlist_id: str, since_date: str) -> l
             raise
         hit_older_video = False
         for item in response.get("items", []):
-            published_at = item["contentDetails"]["videoPublishedAt"]
+            # videoPublishedAt is omitted for private/deleted/scheduled videos,
+            # which YouTube still lists in the uploads playlist. Skip them: they
+            # have no usable publish date, and we wouldn't track a private/
+            # unpublished video anyway. Don't treat a missing date as "older"
+            # and break, or one private video near the top would cut discovery
+            # short for that channel.
+            published_at = item["contentDetails"].get("videoPublishedAt")
+            if published_at is None:
+                continue
             if published_at >= since_date:
                 matches.append(item["contentDetails"]["videoId"])
             else:

@@ -74,15 +74,20 @@ leak the outcome, because a video that performed well grew its own channel.
 | `title_has_question` | bool | Title contains `?`. |
 | `title_has_exclaim` | bool | Title contains `!`. |
 | `title_upper_ratio` | float 0–1 | Share of uppercase characters — a rough shouting/clickbait proxy. |
-| `title_script` | str | `sinhala` / `tamil` / `latin` / `mixed`, detected from Unicode ranges. More trustworthy than `default_audio_language`, but see the caveat below. |
+| `title_script` | str | Which **alphabet** the title uses: `sinhala_script` / `tamil_script` / `latin_script` / `mixed_script`, detected from Unicode character ranges. More trustworthy than `default_audio_language`, but see below. |
 
-> **`title_script` detects script, not language.** `latin` means "contains no
-> Sinhala or Tamil characters" — which covers genuinely English titles
-> (*"Lanka Premier League 2026 | Opening Ceremony"*) **and** romanised Sinhala
-> or Tamil (*"Man Adarei"*, *"Hutch Free Data Code Sinhala"*). About 12.7 % of
-> collected videos fall here, largely English news, sports and gaming from Sri
-> Lankan channels. Treat `latin` as "not written in Sinhala/Tamil script", and
-> do not read it as "English-language content" without further checks.
+> **This is a script detector, not a language detector — the `_script` suffix
+> is deliberate.** "Latin" is itself a language, so a bare value of `latin`
+> would wrongly read as "this title is in Latin". What is meant is the **Latin
+> alphabet** (a–z), which English, romanised Sinhala, romanised Tamil and most
+> European languages all share.
+>
+> So `latin_script` means only *"contains no Sinhala or Tamil characters"*. It
+> covers genuinely English titles (*"Lanka Premier League 2026 | Opening
+> Ceremony"*) **and** Sinhala content written in the Latin alphabet
+> (*"Man Adarei"*, *"Hutch Free Data Code Sinhala"*). About 12.7 % of collected
+> videos land here — largely English news, sports and gaming from Sri Lankan
+> channels. Do not read it as "English-language content" without further checks.
 | `description_length` | int | Characters in the description. |
 | `tag_count` | int | Number of creator tags. |
 

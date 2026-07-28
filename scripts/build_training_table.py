@@ -67,15 +67,21 @@ def duration_seconds(iso):
 
 
 def title_script(text: str) -> str:
+    """Which ALPHABET the title is written in — not which language it is in.
+
+    Values are suffixed '_script' deliberately: 'latin' alone would read as the
+    Latin language, when what is meant is the a-z Latin alphabet. An English
+    title and a romanised Sinhala title ("Man Adarei") are both latin_script.
+    """
     t = text or ""
     si, ta = bool(SINHALA.search(t)), bool(TAMIL.search(t))
     if si and ta:
-        return "mixed"
+        return "mixed_script"
     if si:
-        return "sinhala"
+        return "sinhala_script"
     if ta:
-        return "tamil"
-    return "latin"
+        return "tamil_script"
+    return "latin_script"
 
 
 def cyc(series, period):

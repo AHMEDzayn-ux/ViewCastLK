@@ -77,8 +77,12 @@ def resolve_channels(handles: list[str], captured_at: str, known_channel_ids: se
     is ever seen — known_channel_ids is checked (and updated) as we go so identity
     data isn't re-appended every single run just because the channel was refreshed.
     Batched writes mean a quota cutoff partway through only loses the current
-    batch's channels, not everything resolved so far."""
-    channels = []
+    batch's channels, not everything resolved so far.
+
+    A single channel that still errors after youtube_client's retries is skipped
+    rather than aborting the run — one bad channel out of 1,282 should not cost
+    the whole cycle. Failures are counted and reported at the end."""
+    channels, failed = [], []
     for i in range(0, len(handles), CHANNEL_BATCH_SIZE):
         batch = handles[i:i + CHANNEL_BATCH_SIZE]
         batch_channels = []
@@ -90,7 +94,11 @@ def resolve_channels(handles: list[str], captured_at: str, known_channel_ids: se
                 if is_quota_exceeded(e):
                     stopped = True
                     break
-                raise
+                failed.append((h, f"HTTP {e.resp.status}"))
+                continue
+            except Exception as e:                      # transport/DNS/timeout
+                failed.append((h, type(e).__name__))
+                continue
             if c:
                 batch_channels.append(c)
 
@@ -104,6 +112,10 @@ def resolve_channels(handles: list[str], captured_at: str, known_channel_ids: se
 
         if stopped:
             raise QuotaExceeded()
+    if failed:
+        print(f"  WARNING: skipped {len(failed)} channel(s) after retries: "
+              + ", ".join(f"{h} ({why})" for h, why in failed[:8])
+              + (" ..." if len(failed) > 8 else ""))
     return channels
 
 
@@ -111,15 +123,22 @@ def discover_new_videos(playlist_ids: list[str], discovery_since: str) -> set[st
     """Walks each channel's uploads playlist for videos newer than the cutoff.
     Takes playlist ids directly, so it works the same whether they came from a
     just-completed channel refresh (full run) or straight from the DB
-    (discovery-only run)."""
+    (discovery-only run). As with channel resolution, one playlist that still
+    errors after retries is skipped rather than aborting discovery for the
+    other ~1,281 channels."""
     new_video_ids = set()
+    failed = 0
     for playlist_id in playlist_ids:
         try:
             new_video_ids.update(get_channel_videos_since_by_playlist(playlist_id, discovery_since))
         except HttpError as e:
             if is_quota_exceeded(e):
                 raise QuotaExceeded()
-            raise
+            failed += 1
+        except Exception:                               # transport/DNS/timeout
+            failed += 1
+    if failed:
+        print(f"  WARNING: discovery failed for {failed} playlist(s) after retries")
     return new_video_ids
 
 

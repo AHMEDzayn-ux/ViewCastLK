@@ -10,6 +10,13 @@ load_dotenv()
 API_KEY = os.environ["YOUTUBE_API_KEY"]
 youtube = build("youtube", "v3", developerKey=API_KEY)
 
+# Transient YouTube API failures (HTTP 500/502/503/504 and rate-limit 403s) are
+# routine and killed a scheduled run once at 999/1282 channels. googleapiclient
+# retries exactly those with exponential backoff + jitter when num_retries is
+# set; it deliberately does NOT retry quotaExceeded, which stays terminal and is
+# handled separately by the caller.
+API_RETRIES = 5
+
 
 CHANNEL_PARTS = "snippet,statistics,contentDetails,topicDetails"
 
@@ -19,7 +26,7 @@ def get_channel_info(channel_id: str) -> dict:
     response = youtube.channels().list(
         part=CHANNEL_PARTS,
         id=channel_id,
-    ).execute()
+    ).execute(num_retries=API_RETRIES)
     items = response.get("items", [])
     return items[0] if items else None
 
@@ -31,7 +38,7 @@ def get_channel_by_handle(handle: str) -> dict:
     response = youtube.channels().list(
         part=CHANNEL_PARTS,
         forHandle=handle,
-    ).execute()
+    ).execute(num_retries=API_RETRIES)
     items = response.get("items", [])
     return items[0] if items else None
 
@@ -41,9 +48,9 @@ def get_channel_by_roster_entry(value: str) -> dict:
     and resolves it the right way — lets the roster mix both, since not every
     discovered channel has a clean custom handle to key off of."""
     if value.startswith("UC") and len(value) == 24:
-        response = youtube.channels().list(part=CHANNEL_PARTS, id=value).execute()
+        response = youtube.channels().list(part=CHANNEL_PARTS, id=value).execute(num_retries=API_RETRIES)
     else:
-        response = youtube.channels().list(part=CHANNEL_PARTS, forHandle=value).execute()
+        response = youtube.channels().list(part=CHANNEL_PARTS, forHandle=value).execute(num_retries=API_RETRIES)
     items = response.get("items", [])
     return items[0] if items else None
 
@@ -63,7 +70,7 @@ def get_videos_from_playlist(playlist_id: str, max_results: int = 50) -> list[di
             playlistId=playlist_id,
             maxResults=50,
             pageToken=page_token,
-        ).execute()
+        ).execute(num_retries=API_RETRIES)
         videos.extend(response.get("items", []))
         page_token = response.get("nextPageToken")
         if not page_token or len(videos) >= max_results:
@@ -109,7 +116,7 @@ def get_channel_videos_since_by_playlist(playlist_id: str, since_date: str) -> l
                 playlistId=playlist_id,
                 maxResults=50,
                 pageToken=page_token,
-            ).execute()
+            ).execute(num_retries=API_RETRIES)
         except HttpError as e:
             if e.resp.status == 404:
                 return matches
@@ -157,7 +164,7 @@ def get_channel_videos_since_search(channel_id: str, since_date: str, max_result
             order="date",
             maxResults=50,
             pageToken=page_token,
-        ).execute()
+        ).execute(num_retries=API_RETRIES)
         video_ids.extend(item["id"]["videoId"] for item in response.get("items", []))
         page_token = response.get("nextPageToken")
         if not page_token or (max_results and len(video_ids) >= max_results):
@@ -175,7 +182,7 @@ def discover_channel_candidates(keyword: str, max_results: int = 25) -> list[str
         type="channel",
         regionCode="LK",
         maxResults=max_results,
-    ).execute()
+    ).execute(num_retries=API_RETRIES)
     return [item["snippet"]["channelId"] for item in response.get("items", [])]
 
 
@@ -191,7 +198,7 @@ def get_video_details(video_ids: list[str]) -> list[dict]:
         response = youtube.videos().list(
             part=VIDEO_PARTS,
             id=",".join(chunk),
-        ).execute()
+        ).execute(num_retries=API_RETRIES)
         details.extend(response.get("items", []))
     return details
 
@@ -202,7 +209,7 @@ def get_video_categories(region_code: str = "LK") -> dict[str, str]:
     response = youtube.videoCategories().list(
         part="snippet",
         regionCode=region_code,
-    ).execute()
+    ).execute(num_retries=API_RETRIES)
     return {item["id"]: item["snippet"]["title"] for item in response.get("items", [])}
 
 
@@ -218,7 +225,7 @@ def search_videos(query: str, published_after: str = None, region_code: str = "L
         videoCategoryId=video_category_id,
         maxResults=max_results,
         order="date",
-    ).execute()
+    ).execute(num_retries=API_RETRIES)
     return response.get("items", [])
 
 

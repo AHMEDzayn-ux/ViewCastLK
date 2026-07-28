@@ -25,3 +25,8 @@ google_credentials*.json
 service-account*.json
 service_account*.json
 token.json
+
+# Dashboard build artifacts and local environment
+dashboard/node_modules/
+dashboard/.env.local
+dashboard/.next/

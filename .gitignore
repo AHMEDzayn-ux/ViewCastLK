@@ -25,3 +25,5 @@ google_credentials*.json
 service-account*.json
 service_account*.json
 token.json
+
+training_data/

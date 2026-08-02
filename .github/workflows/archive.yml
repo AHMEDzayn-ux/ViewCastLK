@@ -1,0 +1,138 @@
+name: Archive snapshot partitions
+
+# video_snapshots is partitioned by day. Every completed day is exported to
+# Parquet on Google Drive each night, unconditionally, so data is safe long
+# before anything is removed from Postgres. Partitions are only DROPPED once the
+# database exceeds drop_above_mb -- there is no reason to give up queryable
+# history while there is room, and at 113 MB of a 500 MB tier there is plenty.
+#
+# A partition is only dropped after its file is verified present and matching on
+# the remote. If any step fails the partition stays put and the next night
+# retries it; already-uploaded partitions are skipped, so retries are cheap.
+
+on:
+  schedule:
+    # 20:30 UTC, an hour after the nightly database backup and two hours after
+    # the collector's 18:30 run. Running after the backup means that night's
+    # dump still contains everything this job is about to archive.
+    - cron: "30 20 * * *"
+  workflow_dispatch:
+    inputs:
+      retain_days:
+        description: "Never drop a partition newer than this many days"
+        required: false
+        default: "7"
+      drop_above_mb:
+        description: "Only start dropping once the database exceeds this size"
+        required: false
+        default: "380"
+      dry_run:
+        description: "Report what would be archived without writing or dropping"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: viewcastlk-snapshot-archive
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Validate required secrets
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          RCLONE_CONFIG_CONTENT: ${{ secrets.RCLONE_CONFIG }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if [[ -z "${SUPABASE_DB_URL:-}" ]]; then
+            echo "::error::Missing GitHub Actions secret: SUPABASE_DB_URL"
+            exit 1
+          fi
+
+          if [[ -z "${RCLONE_CONFIG_CONTENT:-}" ]]; then
+            echo "::error::Missing GitHub Actions secret: RCLONE_CONFIG"
+            exit 1
+          fi
+
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        shell: bash
+        run: pip install -r requirements.txt
+
+      - name: Install rclone
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes rclone
+
+      - name: Prepare Google Drive authentication
+        env:
+          RCLONE_CONFIG_CONTENT: ${{ secrets.RCLONE_CONFIG }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          umask 077
+
+          rclone_config="$RUNNER_TEMP/viewcastlk-rclone.conf"
+          printf '%s' "$RCLONE_CONFIG_CONTENT" > "$rclone_config"
+          chmod 600 "$rclone_config"
+          printf 'RCLONE_CONFIG=%s\n' "$rclone_config" >> "$GITHUB_ENV"
+
+      - name: Archive and drop old partitions
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          ARCHIVE_REMOTE: ${{ vars.ARCHIVE_REMOTE || 'gdrive:ViewCastLK/archives' }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          retain="${{ github.event.inputs.retain_days || '7' }}"
+          above="${{ github.event.inputs.drop_above_mb || '380' }}"
+          extra=""
+          if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then
+            extra="--dry-run"
+          fi
+
+          python scripts/archive_snapshots.py \
+            --retain-days "$retain" \
+            --drop-above-mb "$above" \
+            --workdir "$RUNNER_TEMP/viewcastlk-archive" \
+            $extra | tee "$RUNNER_TEMP/archive.log"
+
+      - name: Write archive summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "### Snapshot archive"
+            echo '```'
+            tail -n 40 "$RUNNER_TEMP/archive.log" 2>/dev/null || echo "no log produced"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove temporary credentials and exports
+        if: always()
+        shell: bash
+        run: |
+          set -u
+
+          rm -f -- "$RUNNER_TEMP/viewcastlk-rclone.conf"
+          rm -rf -- "$RUNNER_TEMP/viewcastlk-archive"

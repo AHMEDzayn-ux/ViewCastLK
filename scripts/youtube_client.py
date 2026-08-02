@@ -55,6 +55,37 @@ def get_channel_by_roster_entry(value: str) -> dict:
     return items[0] if items else None
 
 
+def get_channels_by_ids(channel_ids: list[str]) -> list[dict]:
+    """1 unit per 50 channels. The batched counterpart to
+    get_channel_by_roster_entry().
+
+    channels.list accepts up to fifty comma-separated ids for the same single
+    unit that one lookup costs, so refreshing a known roster this way is fifty
+    times cheaper. It is only usable once the channel_id is known: forHandle
+    takes exactly one handle per call, which is why first-time resolution of a
+    handle still goes one at a time.
+
+    Ids YouTube cannot return (deleted or suspended channels) are simply absent
+    from the response rather than raising, so the caller should compare what it
+    asked for against what came back rather than assuming a full result."""
+    out = []
+    for i in range(0, len(channel_ids), 50):
+        batch = channel_ids[i:i + 50]
+        response = youtube.channels().list(
+            part=CHANNEL_PARTS, id=",".join(batch), maxResults=50,
+        ).execute(num_retries=API_RETRIES)
+        out.extend(response.get("items", []))
+    return out
+
+
+def normalise_handle(value: str) -> str:
+    """Roster entries, stored custom_urls and API values all reach the same form.
+
+    YouTube reports a handle as '@Name' but the roster file carries it bare and
+    with inconsistent case, so comparing them raw silently fails to match."""
+    return (value or "").strip().lstrip("@").lower()
+
+
 def get_uploads_playlist_id(channel_id: str) -> str:
     channel = get_channel_info(channel_id)
     return channel["contentDetails"]["relatedPlaylists"]["uploads"]
@@ -241,6 +272,7 @@ def flatten_channel_identity(c: dict) -> dict:
         "description": c["snippet"].get("description", ""),
         "country": c["snippet"].get("country", ""),
         "channel_published_at": c["snippet"]["publishedAt"],
+        "custom_url": normalise_handle(c["snippet"].get("customUrl", "")) or None,
         "uploads_playlist_id": c["contentDetails"]["relatedPlaylists"]["uploads"],
         "topic_categories": "|".join(c.get("topicDetails", {}).get("topicCategories", [])),
     }

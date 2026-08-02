@@ -3,20 +3,26 @@
 REFRESH_CHANNELS env var (the workflow sets it per cron slot):
 
   Full run (REFRESH_CHANNELS=true, twice a day):
-    1. Refreshes identity + stats for every tracked channel (channels.list —
-       the single most expensive part, ~1 unit per channel).
+    1. Refreshes identity + stats for every ACTIVE tracked channel, looking
+       them up by id fifty at a time (~19 units for the whole roster; it was
+       ~1,282 when every handle was resolved singly).
     2. Discovers videos published since the last poll.
     3. Snapshots every video still inside its 60-day tracking window.
 
   Discovery-only run (REFRESH_CHANNELS=false, the other two of the four runs):
-    - Skips the channel refresh entirely. Channel subscriber/view counts barely
-      move within a few hours, so refreshing them 4x/day instead of 2x wastes
-      ~1,282 units per skipped run for almost no extra signal. Reads each
-      channel's uploads-playlist id from the DB instead, then does discovery +
-      video snapshots exactly as a full run does.
+    - Skips the channel refresh entirely. Subscriber and view counts barely move
+      within a few hours, so refreshing them 4x/day rather than 2x buys almost
+      no extra signal. Reads each channel's uploads-playlist id from the DB
+      instead, then does discovery + video snapshots exactly as a full run does.
 
-Video snapshots (the actual day-by-day trajectory the model needs) happen on
-EVERY run, full or discovery-only — that's the data that must stay dense.
+Channels flagged inactive are skipped by both kinds of run. An activity sweep
+found 679 of 1,282 rostered channels had not uploaded in over 60 days (median
+silence 414 days), and each was still costing a discovery call four times a
+day. Their rows and collected videos are retained; only the polling stops.
+
+Video snapshots — the day-by-day trajectory the model learns from — happen on
+EVERY run regardless. That is the data that must stay dense, and it is what
+puts each horizon within about three hours of its mark.
 
 Persists to Supabase via storage.py.
 
@@ -33,6 +39,8 @@ from googleapiclient.errors import HttpError
 
 from youtube_client import (
     get_channel_by_roster_entry,
+    get_channels_by_ids,
+    normalise_handle,
     get_channel_videos_since_by_playlist,
     get_video_categories,
     get_video_details,
@@ -43,6 +51,8 @@ from youtube_client import (
 )
 from storage import (
     append_rows,
+    ensure_snapshot_partitions,
+    load_roster_mapping,
     load_active_video_ids,
     load_known_ids,
     load_channel_playlist_ids,
@@ -50,7 +60,16 @@ from storage import (
 from channel_roster import load_handles
 
 TRACKING_WINDOW_DAYS = 60
-DISCOVERY_LOOKBACK_HOURS = 26  # >24h buffer so a daily cron never drops a video to timing drift
+
+# >24h buffer so a daily cron never drops a video to timing drift. Overridable
+# because a one-off backfill is the same operation over a longer reach: uploads
+# published before a channel entered the roster, or during a run that failed,
+# were never discovered and no amount of future polling will find them. Setting
+# this to e.g. 744 (31 days) walks each playlist back that far, inserts the
+# identities it finds and lets the ordinary snapshot pass pick them up. Labels
+# are only recoverable while the video is younger than the horizon, so the
+# reach that pays shrinks by a day every day.
+DISCOVERY_LOOKBACK_HOURS = int(os.environ.get("DISCOVERY_LOOKBACK_HOURS", "26"))
 CHANNEL_BATCH_SIZE = 50
 
 # Full run refreshes channel stats; discovery-only run skips that to save quota.
@@ -71,47 +90,91 @@ def is_quota_exceeded(e: HttpError) -> bool:
     return e.resp.status == 403 and "quotaExceeded" in str(e)
 
 
+def _persist_channels(batch_channels: list[dict], captured_at: str,
+                      known_channel_ids: set[str]) -> None:
+    """Writes one batch: identity rows only for channels never seen before,
+    snapshot rows for all of them. Writing per batch rather than at the end
+    means a quota cutoff partway through loses at most the current batch."""
+    if not batch_channels:
+        return
+    new_channels = [c for c in batch_channels if c["id"] not in known_channel_ids]
+    append_rows([flatten_channel_identity(c) for c in new_channels], CHANNELS_TABLE)
+    known_channel_ids.update(c["id"] for c in new_channels)
+    append_rows([flatten_channel_snapshot(c, captured_at) for c in batch_channels],
+                CHANNEL_SNAPSHOTS_TABLE)
+
+
 def resolve_channels(handles: list[str], captured_at: str, known_channel_ids: set[str]) -> list[dict]:
-    """Resolves channels in batches, writing snapshot rows every run (subscriber
-    count etc. genuinely changes) but identity rows only the first time a channel
-    is ever seen — known_channel_ids is checked (and updated) as we go so identity
-    data isn't re-appended every single run just because the channel was refreshed.
-    Batched writes mean a quota cutoff partway through only loses the current
-    batch's channels, not everything resolved so far.
+    """Refreshes channel identity and statistics for the roster.
 
-    A single channel that still errors after youtube_client's retries is skipped
-    rather than aborting the run — one bad channel out of 1,282 should not cost
-    the whole cycle. Failures are counted and reported at the end."""
+    Two paths, because the API prices them differently. A channel already in
+    the warehouse is looked up by id, and channels.list takes fifty ids per
+    call for one unit — so the whole known roster costs a handful of units
+    instead of one per channel. A handle we have never resolved has no id yet,
+    and forHandle accepts exactly one value per call, so those still go singly.
+    That is the only reason the slow path survives.
+
+    Channels flagged inactive are skipped outright: the activity sweep already
+    established they have stopped uploading, and paying to rediscover that
+    twice a day is the waste this split exists to remove.
+
+    A channel that still errors after youtube_client's retries is skipped
+    rather than aborting the run — one bad channel should not cost the cycle.
+    Failures are counted and reported at the end."""
+    mapping = load_roster_mapping(CHANNELS_TABLE)
+    known_ids, unknown, skipped = [], [], 0
+    for h in handles:
+        entry = mapping.get(normalise_handle(h))
+        if entry is None:
+            unknown.append(h)
+        elif not entry[1]:
+            skipped += 1
+        else:
+            known_ids.append(entry[0])
+
+    est = -(-len(known_ids) // CHANNEL_BATCH_SIZE) + len(unknown)
+    print(f"  {len(known_ids)} known (batched), {len(unknown)} new (single), "
+          f"{skipped} inactive skipped — about {est} units")
+
     channels, failed = [], []
-    for i in range(0, len(handles), CHANNEL_BATCH_SIZE):
-        batch = handles[i:i + CHANNEL_BATCH_SIZE]
-        batch_channels = []
-        stopped = False
-        for h in batch:
-            try:
-                c = get_channel_by_roster_entry(h)
-            except HttpError as e:
-                if is_quota_exceeded(e):
-                    stopped = True
-                    break
-                failed.append((h, f"HTTP {e.resp.status}"))
-                continue
-            except Exception as e:                      # transport/DNS/timeout
-                failed.append((h, type(e).__name__))
-                continue
-            if c:
-                batch_channels.append(c)
 
-        if batch_channels:
-            new_channels = [c for c in batch_channels if c["id"] not in known_channel_ids]
-            append_rows([flatten_channel_identity(c) for c in new_channels], CHANNELS_TABLE)
-            known_channel_ids.update(c["id"] for c in new_channels)
-            append_rows([flatten_channel_snapshot(c, captured_at) for c in batch_channels], CHANNEL_SNAPSHOTS_TABLE)
-            channels.extend(batch_channels)
-        print(f"  resolved {len(channels)}/{len(handles)} channels...")
+    for i in range(0, len(known_ids), CHANNEL_BATCH_SIZE):
+        batch = known_ids[i:i + CHANNEL_BATCH_SIZE]
+        try:
+            got = get_channels_by_ids(batch)
+        except HttpError as e:
+            if is_quota_exceeded(e):
+                raise QuotaExceeded()
+            failed.append((f"batch@{i}", f"HTTP {e.resp.status}"))
+            continue
+        except Exception as e:                          # transport/DNS/timeout
+            failed.append((f"batch@{i}", type(e).__name__))
+            continue
+        # ids YouTube cannot return are absent rather than an error
+        missing = len(batch) - len(got)
+        if missing:
+            failed.append((f"batch@{i}", f"{missing} id(s) not returned"))
+        _persist_channels(got, captured_at, known_channel_ids)
+        channels.extend(got)
+        print(f"  refreshed {len(channels)}/{len(known_ids)} known channels...")
 
-        if stopped:
-            raise QuotaExceeded()
+    for h in unknown:
+        try:
+            c = get_channel_by_roster_entry(h)
+        except HttpError as e:
+            if is_quota_exceeded(e):
+                raise QuotaExceeded()
+            failed.append((h, f"HTTP {e.resp.status}"))
+            continue
+        except Exception as e:                          # transport/DNS/timeout
+            failed.append((h, type(e).__name__))
+            continue
+        if c:
+            _persist_channels([c], captured_at, known_channel_ids)
+            channels.append(c)
+    if unknown:
+        print(f"  resolved {len(channels) - len(known_ids)} new channel(s) from handles")
+
     if failed:
         print(f"  WARNING: skipped {len(failed)} channel(s) after retries: "
               + ", ".join(f"{h} ({why})" for h, why in failed[:8])
@@ -149,6 +212,12 @@ def main():
     discovery_since = (now - timedelta(hours=DISCOVERY_LOOKBACK_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
     tracking_since = (now - timedelta(days=TRACKING_WINDOW_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
+    # video_snapshots is partitioned by day; make sure this run has somewhere
+    # to write before it starts spending quota gathering rows.
+    made = ensure_snapshot_partitions(14)
+    if made:
+        print(f"Created {made} snapshot partition(s).")
+
     known_video_ids = load_known_ids(VIDEOS_TABLE, "video_id")
 
     try:
@@ -157,7 +226,12 @@ def main():
             known_channel_ids = load_known_ids(CHANNELS_TABLE, "channel_id")
             print(f"Full run: refreshing {len(handles)} tracked channels...")
             channels = resolve_channels(handles, captured_at, known_channel_ids)
-            playlist_ids = [c["contentDetails"]["relatedPlaylists"]["uploads"] for c in channels]
+            # Discovery reads the stored playlist ids rather than the ones just
+            # resolved, so that channels flagged inactive are skipped here too.
+            # Resolution still walks the whole roster — it works from handles and
+            # cannot tell which are inactive until the call has been made — but
+            # that waste is confined to the two full runs instead of all four.
+            playlist_ids = load_channel_playlist_ids(CHANNELS_TABLE)
             channel_count = len(channels)
         else:
             playlist_ids = load_channel_playlist_ids(CHANNELS_TABLE)

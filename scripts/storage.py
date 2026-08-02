@@ -157,17 +157,80 @@ def load_known_ids(table: str, id_column: str) -> set[str]:
         conn.close()
 
 
-def load_channel_playlist_ids(table: str = "channels") -> list[str]:
-    """Uploads-playlist ids for every known channel — lets discovery-only runs
-    (which skip the channels.list refresh to save quota) still find new uploads
-    without re-resolving each channel. Rows with a null playlist id (e.g.
-    channels that had no uploads playlist) are skipped, since there's nothing
-    to discover from them anyway."""
+def ensure_snapshot_partitions(days_ahead: int = 14) -> int:
+    """Creates any missing daily partitions of video_snapshots, up to days_ahead.
+
+    video_snapshots is partitioned by day on captured_at so that old data can be
+    archived and dropped instantly instead of needing a VACUUM FULL. A write
+    whose day has no partition would land in the default partition, which then
+    blocks that day's partition from ever being created — so this runs at the
+    start of every collection run rather than relying on a schedule.
+
+    Returns the number created; normally zero, since the nightly archive keeps
+    the window topped up. Never fails a run: the collector must keep collecting
+    even if partition maintenance has a problem, because the default partition
+    will catch the writes either way."""
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT ensure_snapshot_partitions(%s)", (days_ahead,))
+            made = cur.fetchone()[0]
+        conn.commit()
+        return made
+    except psycopg2.Error as e:
+        print(f"  WARNING: could not ensure partitions ({type(e).__name__}); "
+              f"writes will fall back to the default partition")
+        return 0
+    finally:
+        conn.close()
+
+
+def load_roster_mapping(table: str = "channels") -> dict[str, tuple[str, bool]]:
+    """Maps every roster key we could be handed to (channel_id, active).
+
+    A channel_handles.txt entry is either an @handle or a raw 'UC...' id, so
+    both forms are keyed here. This is what lets a full run refresh known
+    channels by id in batches of fifty instead of resolving each handle
+    individually, and lets it skip inactive channels entirely rather than
+    paying to discover they are dead again.
+
+    Returns an empty mapping if the custom_url column has not been added yet,
+    so the caller falls back to one-at-a-time resolution rather than failing."""
     conn = _connect()
     try:
         with conn.cursor() as cur:
             cur.execute(
-                sql.SQL("SELECT uploads_playlist_id FROM {} WHERE uploads_playlist_id IS NOT NULL").format(
+                sql.SQL("SELECT channel_id, custom_url, active FROM {}").format(
+                    sql.Identifier(table)))
+            mapping = {}
+            for channel_id, custom_url, active in cur.fetchall():
+                mapping[channel_id.lower()] = (channel_id, active)
+                if custom_url:
+                    mapping[custom_url] = (channel_id, active)
+            return mapping
+    except psycopg2.errors.UndefinedColumn:
+        return {}
+    finally:
+        conn.close()
+
+
+def load_channel_playlist_ids(table: str = "channels") -> list[str]:
+    """Uploads-playlist ids for every channel still worth polling — lets runs
+    find new uploads without re-resolving each channel.
+
+    Two exclusions. Rows with a null playlist id (channels that never had an
+    uploads playlist) are skipped because there is nothing to discover from
+    them. Rows flagged active = false are skipped because they have stopped
+    uploading: an activity sweep found 679 of 1,282 rostered channels silent
+    for more than 60 days, and each one still cost a call on every discovery
+    run. They keep their rows and their collected videos; only the polling
+    stops, and clearing the flag reinstates them."""
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                sql.SQL("SELECT uploads_playlist_id FROM {} "
+                        "WHERE uploads_playlist_id IS NOT NULL AND active").format(
                     sql.Identifier(table)
                 )
             )

@@ -153,8 +153,22 @@ def extract_labels(conn):
     return n
 
 
+class _NoRclone:
+    """Stands in for a CompletedProcess when the binary is not installed, so
+    callers passing check=False see an ordinary failure rather than an
+    exception from the process launcher."""
+    returncode = 127
+    stdout = ""
+    stderr = "rclone is not installed or not on PATH"
+
+
 def rclone(*args, check=True):
-    r = subprocess.run(["rclone", *args], capture_output=True, text=True)
+    try:
+        r = subprocess.run(["rclone", *args], capture_output=True, text=True)
+    except (FileNotFoundError, OSError) as e:
+        if check:
+            raise RuntimeError(f"rclone could not be run: {e}") from e
+        return _NoRclone()
     if check and r.returncode != 0:
         raise RuntimeError(f"rclone {' '.join(args[:2])} failed: {r.stderr.strip()[:300]}")
     return r
@@ -169,6 +183,24 @@ def remote_size(dest, filename):
         return json.loads(r.stdout)[0]["Size"]
     except (ValueError, IndexError, KeyError):
         return None
+
+
+def check_remote():
+    """Prove the remote is reachable and authenticated, without writing.
+
+    Runs on dry runs too. Everything else a dry run exercises — the database,
+    the Parquet export — is local and reliable; the credential and OAuth path
+    to Drive is the part that actually breaks, so a rehearsal that skipped it
+    would give exactly the wrong kind of confidence.
+    """
+    remote = REMOTE.split(":", 1)[0]
+    r = rclone("lsd", f"{remote}:", check=False)
+    if r.returncode != 0:
+        print(f"REMOTE UNREACHABLE: rclone cannot list '{remote}:' — "
+              f"{r.stderr.strip()[:200]}")
+        return False
+    print(f"remote '{remote}:' reachable")
+    return True
 
 
 def export_partition(conn, name, day, rows, work, dry_run):
@@ -220,6 +252,11 @@ def main():
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--workdir", default=None)
     args = ap.parse_args()
+
+    if not check_remote():
+        print("aborting: nothing is exported and nothing is dropped when the "
+              "archive destination cannot be verified")
+        sys.exit(1)
 
     conn = connect()
     made = ensure_snapshot_partitions(14)

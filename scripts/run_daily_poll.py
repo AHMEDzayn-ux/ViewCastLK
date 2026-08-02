@@ -12,8 +12,14 @@ REFRESH_CHANNELS env var (the workflow sets it per cron slot):
   Discovery-only run (REFRESH_CHANNELS=false, the other two of the four runs):
     - Skips the channel refresh entirely. Subscriber and view counts barely move
       within a few hours, so refreshing them 4x/day rather than 2x buys almost
-      no extra signal. Reads each channel's uploads-playlist id from the DB
-      instead, then does discovery + video snapshots exactly as a full run does.
+      no extra signal. Reads the active channel list from the DB instead, then
+      does discovery + video snapshots exactly as a full run does.
+
+Discovery reads YouTube's free per-channel Atom feed first and spends quota only
+on channels whose feed failed or could not prove it reached back past the
+cutoff. Measured across 2,781 channels that is about 0.5% of them. The fallback
+is capped per run, so RSS degrading costs at most what discovery used to cost
+rather than the day's whole allowance. See rss_discovery.py.
 
 Channels flagged inactive are skipped by both kinds of run. An activity sweep
 found 679 of 1,282 rostered channels had not uploaded in over 60 days (median
@@ -37,6 +43,8 @@ from datetime import datetime, timedelta, timezone
 
 from googleapiclient.errors import HttpError
 
+import rss_discovery
+
 from youtube_client import (
     get_channel_by_roster_entry,
     get_channels_by_ids,
@@ -51,11 +59,11 @@ from youtube_client import (
 )
 from storage import (
     append_rows,
+    load_active_channels,
     ensure_snapshot_partitions,
     load_roster_mapping,
     load_active_video_ids,
     load_known_ids,
-    load_channel_playlist_ids,
 )
 from channel_roster import load_handles
 
@@ -70,6 +78,17 @@ TRACKING_WINDOW_DAYS = 60
 # are only recoverable while the video is younger than the horizon, so the
 # reach that pays shrinks by a day every day.
 DISCOVERY_LOOKBACK_HOURS = int(os.environ.get("DISCOVERY_LOOKBACK_HOURS", "26"))
+
+# The metered fallback reaches further back than RSS. A channel the cap pushed
+# out of one run must be findable by the next, or the gap is permanent.
+FALLBACK_LOOKBACK_HOURS = int(os.environ.get("FALLBACK_LOOKBACK_HOURS", "50"))
+
+# Ceiling on how many channels one run may re-check through the API. Bounds the
+# cost of RSS failing: at worst discovery costs what it did before RSS existed,
+# rather than exhausting the day's allowance in a single run. Channels beyond
+# the cap are found by the next run, whose longer look-back still covers them.
+FALLBACK_CALL_CAP = int(os.environ.get("FALLBACK_CALL_CAP", "500"))
+
 CHANNEL_BATCH_SIZE = 50
 
 # Full run refreshes channel stats; discovery-only run skips that to save quota.
@@ -182,26 +201,55 @@ def resolve_channels(handles: list[str], captured_at: str, known_channel_ids: se
     return channels
 
 
-def discover_new_videos(playlist_ids: list[str], discovery_since: str) -> set[str]:
-    """Walks each channel's uploads playlist for videos newer than the cutoff.
-    Takes playlist ids directly, so it works the same whether they came from a
-    just-completed channel refresh (full run) or straight from the DB
-    (discovery-only run). As with channel resolution, one playlist that still
-    errors after retries is skipped rather than aborting discovery for the
-    other ~1,281 channels."""
-    new_video_ids = set()
+def discover_new_videos(channels: list[tuple[str, str]], discovery_since: str,
+                        fallback_since: str) -> set[str]:
+    """Find uploads newer than the cutoff, free where possible.
+
+    Two passes. The first reads YouTube's per-channel Atom feed, which costs no
+    quota; measured across the whole roster it covers about 99.5% of channels.
+    The second spends quota only on channels whose feed failed or could not
+    prove it reached back past the cutoff, and is capped so that RSS degrading
+    -- or disappearing -- cannot exhaust the day's allowance in one run. At the
+    cap, discovery simply costs what it used to.
+
+    The fallback uses a longer look-back than RSS. A channel that was capped
+    out of one run needs the next one to reach further back, or the gap becomes
+    permanent.
+
+    A playlist that still errors after retries is skipped rather than aborting
+    discovery for every other channel."""
+    ids_by_channel = dict(channels)
+    rss = rss_discovery.discover([c for c, _ in channels], discovery_since)
+    print(f"  {rss.summary(len(channels))}")
+    if rss.rate_limited:
+        print("  WARNING: RSS rate-limited this run; the API fallback is capped, "
+              "so some channels may be picked up next run instead.")
+
+    new_video_ids = set(rss.video_ids)
+
+    to_check = rss.needs_api[:FALLBACK_CALL_CAP]
+    if len(rss.needs_api) > FALLBACK_CALL_CAP:
+        print(f"  fallback capped: {len(rss.needs_api)} channels need the API, "
+              f"checking {FALLBACK_CALL_CAP} this run; the rest are covered by "
+              f"the next run's look-back")
+
     failed = 0
-    for playlist_id in playlist_ids:
+    for channel_id in to_check:
+        playlist_id = ids_by_channel.get(channel_id)
+        if not playlist_id:
+            continue
         try:
-            new_video_ids.update(get_channel_videos_since_by_playlist(playlist_id, discovery_since))
+            new_video_ids.update(
+                get_channel_videos_since_by_playlist(playlist_id, fallback_since))
         except HttpError as e:
             if is_quota_exceeded(e):
                 raise QuotaExceeded()
             failed += 1
         except Exception:                               # transport/DNS/timeout
             failed += 1
-    if failed:
-        print(f"  WARNING: discovery failed for {failed} playlist(s) after retries")
+    if to_check:
+        print(f"  API fallback: {len(to_check)} channel(s) checked"
+              + (f", {failed} failed after retries" if failed else ""))
     return new_video_ids
 
 
@@ -210,6 +258,7 @@ def main():
     now = datetime.now(timezone.utc)
     captured_at = now.isoformat()
     discovery_since = (now - timedelta(hours=DISCOVERY_LOOKBACK_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    fallback_since = (now - timedelta(hours=FALLBACK_LOOKBACK_HOURS)).strftime("%Y-%m-%dT%H:%M:%SZ")
     tracking_since = (now - timedelta(days=TRACKING_WINDOW_DAYS)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     # video_snapshots is partitioned by day; make sure this run has somewhere
@@ -231,16 +280,17 @@ def main():
             # Resolution still walks the whole roster — it works from handles and
             # cannot tell which are inactive until the call has been made — but
             # that waste is confined to the two full runs instead of all four.
-            playlist_ids = load_channel_playlist_ids(CHANNELS_TABLE)
+            active_channels = load_active_channels(CHANNELS_TABLE)
             channel_count = len(channels)
         else:
-            playlist_ids = load_channel_playlist_ids(CHANNELS_TABLE)
-            channel_count = len(playlist_ids)
+            active_channels = load_active_channels(CHANNELS_TABLE)
+            channel_count = len(active_channels)
             print(f"Discovery-only run: skipping channel refresh, "
                   f"discovering from {channel_count} stored channels...")
 
         print(f"Discovering videos published since {discovery_since}...")
-        new_video_ids = discover_new_videos(playlist_ids, discovery_since)
+        new_video_ids = discover_new_videos(active_channels, discovery_since,
+                                            fallback_since)
         print(f"  {len(new_video_ids)} new videos found")
 
         active_video_ids = load_active_video_ids(VIDEOS_TABLE, tracking_since)

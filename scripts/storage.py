@@ -243,6 +243,25 @@ def load_roster_mapping(table: str = "channels") -> dict[str, tuple[str, bool]]:
         conn.close()
 
 
+def load_active_channels(table: str = "channels") -> list[tuple[str, str]]:
+    """(channel_id, uploads_playlist_id) for every channel still worth polling.
+
+    Discovery needs both: the channel id addresses the free RSS feed, the
+    playlist id addresses the metered API call used when RSS cannot vouch for
+    a channel. Same exclusions as load_channel_playlist_ids -- inactive
+    channels and rows with no uploads playlist."""
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                sql.SQL("SELECT channel_id, uploads_playlist_id FROM {} "
+                        "WHERE uploads_playlist_id IS NOT NULL AND active").format(
+                    sql.Identifier(table)))
+            return [(r[0], r[1]) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
 def load_channel_playlist_ids(table: str = "channels") -> list[str]:
     """Uploads-playlist ids for every channel still worth polling — lets runs
     find new uploads without re-resolving each channel.

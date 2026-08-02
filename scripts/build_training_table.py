@@ -142,8 +142,11 @@ WHERE horizon_days = {h}
 # first seen more than a day after publication. A title edited since then may
 # already be a reaction to the video's performance, which would put the target
 # on the feature side of a model whose whole claim is pre-publication
-# forecasting. Measured across 49,739 videos: titles changed on 0.4%,
-# descriptions or tags on 31.9%.
+# forecasting. Measured across 49,739 videos: titles changed on 185 (0.4%),
+# descriptions on 222 (0.4%). An earlier sweep reported 31.9% for descriptions;
+# that was a bug -- NULL columns arrive as NaN, NaN is truthy, so `x or ""`
+# compared against NaN and every video with a null description or null tags
+# looked edited.
 CHANGES_SQL = """
 SELECT video_id, title AS new_title, description_sha, tags_sha
 FROM video_metadata_changes
@@ -188,7 +191,9 @@ def main():
     ap.add_argument("--tolerance", type=float, default=TOLERANCE_HOURS)
     args = ap.parse_args()
 
-    conn = connect()
+    # Bulk reads: tens of thousands of rows in one pass, which is what the
+    # session pooler is for.
+    conn = connect(session_pooler=True)
     try:
         df = read(conn, VIDEOS_SQL)
         print(f"videos in warehouse: {len(df):,}")

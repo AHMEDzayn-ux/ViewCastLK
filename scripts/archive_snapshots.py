@@ -204,16 +204,20 @@ def check_remote():
 
 
 def export_partition(conn, name, day, rows, work, dry_run):
-    """Write one partition to Parquet and upload it. Returns its remote size on
-    success, or None if it was skipped. Already-uploaded partitions are left
-    alone, which makes re-runs cheap and the job safe to retry."""
+    """Write one partition to Parquet and upload it.
+
+    Returns (size, sha256) on success or None if skipped. The checksum is
+    returned rather than only logged because it is the only thing that can
+    later prove a downloaded archive is intact, and a run log is not a durable
+    record. Already-uploaded partitions are left alone, which makes re-runs
+    cheap and the job safe to retry."""
     dest = f"{REMOTE}/{day:%Y/%m}"
     fname = f"{name}.parquet"
 
     if not dry_run:
         already = remote_size(dest, fname)
         if already is not None:
-            return already
+            return already, None          # already recorded by an earlier run
 
     df = pd.read_sql_query(f'SELECT * FROM public."{name}"', conn)
     if len(df) != rows:
@@ -232,13 +236,14 @@ def export_partition(conn, name, day, rows, work, dry_run):
         print(f"  {name}: would upload {size/1e6:.2f} MB ({rows:,} rows) -> {dest}")
         return None
 
+    digest = sha256(local)
     rclone("copy", local, dest, "--checksum", "--retries", "3")
     confirmed = remote_size(dest, fname)
     if confirmed != size:
         print(f"  {name}: upload UNVERIFIED (local {size}, remote {confirmed})")
         return None
-    print(f"  {name}: exported {rows:,} rows, {size/1e6:.2f} MB, sha {sha256(local)[:12]}")
-    return confirmed
+    print(f"  {name}: exported {rows:,} rows, {size/1e6:.2f} MB, sha {digest[:12]}")
+    return confirmed, digest
 
 
 def main():
@@ -285,12 +290,27 @@ def main():
 
     print(f"\nexporting {len(with_rows)} completed partition(s) "
           f"({len(empty)} empty, nothing to export):")
-    exported = {}
+    exported, newly = {}, []
     for name, day, rows in with_rows:
         got = export_partition(conn, name, day, rows, work, args.dry_run)
         if got is not None:
-            exported[name] = (day, rows, got)
-    print(f"  {len(exported)} partition(s) safely on the remote")
+            size, digest = got
+            exported[name] = (day, rows, size)
+            if digest:
+                newly.append(dict(partition=name, day=day.isoformat(), rows=rows,
+                                  bytes=size, sha256=digest,
+                                  exported_at=datetime.now(timezone.utc).isoformat()))
+    print(f"  {len(exported)} partition(s) safely on the remote"
+          f"{f', {len(newly)} newly uploaded' if newly else ' (all already there)'}")
+
+    # One manifest per run that uploaded anything. This is the only durable
+    # record of each file's checksum -- the run log is not one -- and it is what
+    # verify_archives.py checks a downloaded copy against.
+    if newly and not args.dry_run:
+        mpath = os.path.join(work, f"exported_{today:%Y%m%d}.json")
+        pd.DataFrame(newly).to_json(mpath, orient="records", indent=1)
+        rclone("copy", mpath, f"{REMOTE}/manifests")
+        print(f"  manifest for {len(newly)} file(s) uploaded")
 
     # An empty partition holds nothing to preserve, so it is dropped on age
     # alone rather than waiting for space pressure. Left alone they accumulate

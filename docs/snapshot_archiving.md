@@ -14,7 +14,7 @@ Postgres is the working set, not the archive.
 
 | Piece | What it holds | Where |
 |---|---|---|
-| `video_snapshots` partitions | last ~7 days | Supabase |
+| `video_snapshots` partitions | everything since the last drop | Supabase |
 | `video_horizon_labels` | the day 7/14/21/30 observation per video, permanently | Supabase |
 | Parquet archives | every snapshot ever taken | `gdrive:ViewCastLK/archives/YYYY/MM` |
 | Nightly `pg_dump` | the live database as of last night | `gdrive:ViewCastLK/backups/daily/YYYY/MM` |
@@ -25,10 +25,14 @@ pipeline is unaffected by how aggressively partitions are dropped.
 ## Why daily partitions
 
 Partition granularity sets the smallest unit that can be dropped. With weekly
-partitions the database holds between 7 and 14 days depending on where the week
-boundary falls, and the peak exceeds the free tier. Daily partitions with a
-nightly archive sit at 7–8 days steadily and absorb four or five consecutive
-failed runs before space becomes a concern.
+partitions the database would hold between 7 and 14 days depending on where the
+week boundary falls, and the peak exceeds the free tier. Daily partitions settle
+at 7–8 days once dropping begins, and absorb four or five consecutive failed
+runs before space becomes a concern.
+
+Empty partitions — one for each day the collector produced nothing, as on
+19 July — hold nothing to preserve, so they are dropped on age alone without
+being exported.
 
 Dropping a partition is instant and returns space immediately. The alternative —
 `DELETE` then `VACUUM FULL` — rewrites the whole table and needs free space
@@ -50,8 +54,8 @@ oldest partitions, only ones verified present on the remote, only ones older
 than the `--retain-days` floor, and only until the database is back under
 `--drop-target-mb` (default 300).
 
-At 113 MB of a 500 MB tier, tonight's run exports sixteen partitions and drops
-none.
+On 2 August, at 113 MB of a 500 MB tier, the first live run exported fifteen
+partitions (335,771 rows, 3.7 MB) and dropped nothing.
 
 The order within a drop is not negotiable:
 
@@ -70,7 +74,13 @@ improve a label, never degrade one.
 hours after the collector's 18:30 run. Running after the backup means that
 night's dump still contains everything the archive is about to remove.
 
-Manual runs accept `retain_days` and `dry_run` from the Actions page.
+Manual runs accept `retain_days`, `drop_above_mb` and `dry_run` from the
+Actions page.
+
+The job runs through the session pooler on port 5432, not the transaction
+pooler the collector uses. It holds one connection for the length of the run
+doing bulk reads and DDL, which is what the session pooler is for; the
+transaction pooler exists for many short-lived connections.
 
 ## Restoring
 
@@ -92,9 +102,27 @@ Parquet rather than CSV — the schema travels with the file.
 partitions. You need both sources: the dump has the current window, the archives
 have everything already dropped.
 
-Each run uploads a manifest to `archives/manifests` recording every file's day,
-row count, byte size and SHA-256, so completeness can be checked without
-downloading anything.
+## Verifying
+
+Every run that uploads anything writes `manifests/exported_YYYYMMDD.json`
+recording each file's day, row count, byte size and SHA-256. That manifest is
+the only durable record of the checksums — the Actions log is not one — and it
+is what a downloaded copy is checked against.
+
+`Analysis/verify_archives.py` does that check. Point it at a folder of
+downloaded archives and it confirms three things: every file's SHA-256 matches
+what was recorded at upload, every file holds the row count the job counted, and
+a video's trajectory can be reconstructed across file boundaries. Where the
+partitions still exist in Postgres it also compares row for row.
+
+Verified on 2 August against all fifteen files: checksums and row counts matched
+on every file, 335,771 rows cross-checked against Postgres with zero
+disagreements, and a 49-observation trajectory reconstructed across nine files
+with a monotonically increasing view count.
+
+Worth re-running monthly, and necessarily before training on archived data —
+by then the partitions will be gone from Postgres and the manifest will be the
+only thing left to check against.
 
 ## The default partition should always be empty
 
@@ -114,6 +142,8 @@ Measured on 2 August 2026: 385,930 rows occupied 55 MB in Postgres and 3.0 MB as
 zstd Parquet — an 18× reduction. At the current roster the archive grows by
 roughly 2–3 MB a day, so Drive's free 15 GB is not a constraint.
 
-The nightly `pg_dump` backups are a different matter: they are full dumps and
-are never pruned, so they accumulate at roughly the size of the live database
-every night. That needs a retention policy independently of this workflow.
+The nightly `pg_dump` backups compress just as well: about 10 MB each, not the
+size of the live database. At that rate they accumulate roughly 3.6 GB a year,
+and even once the database reaches its 380 MB drop threshold a dump would be
+around 35 MB. Drive has room for years of them, so no retention policy is
+needed for the project's lifetime.

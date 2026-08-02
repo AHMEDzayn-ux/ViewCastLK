@@ -41,6 +41,7 @@ from datetime import timezone
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import metadata_changes  # noqa: E402
 from storage import connect  # noqa: E402
 
 HORIZONS = (7, 14, 21, 30)
@@ -91,7 +92,20 @@ def cyc(series, period):
 
 # ----------------------------------------------------------------- queries
 VIDEOS_SQL = """
-SELECT v.video_id, v.channel_id, v.published_at, v.title, v.description,
+-- description is summarised server-side rather than shipped. At ~786 bytes
+-- across 49,502 rows it is ~39 MB on the wire, and pulling it through the
+-- transaction pooler -- which exists for short transactions -- reliably
+-- dropped the connection mid-query. Only its length and its fingerprint are
+-- ever used, and both are cheaper to compute in the database.
+SELECT v.video_id, v.channel_id, v.published_at, v.title,
+       length(v.description) AS description_length,
+       -- convert_to(), not a ::bytea cast. Casting text to bytea runs the
+       -- bytea input parser, which reads a leading backslash-x as hex and
+       -- treats backslashes as escapes, so any description containing them
+       -- raises "invalid input syntax for type bytea". convert_to() encodes
+       -- the characters as they are.
+       encode(sha256(convert_to(coalesce(v.description, '') || chr(31), 'UTF8')),
+              'hex') AS description_sha,
        v.tags, v.category_id, v.category_name, v.duration, v.definition,
        v.caption, v.made_for_kids, v.default_audio_language, v.default_language,
        c.country AS channel_country, c.channel_published_at,
@@ -100,19 +114,42 @@ FROM videos v
 JOIN channels c USING (channel_id)
 """
 
-# nearest snapshot to each horizon, per video
+# Nearest observation to each horizon, per video.
+#
+# Read from video_horizon_labels, not from video_snapshots. The snapshot table
+# is partitioned by day and the nightly archive exports partitions to Parquet
+# and drops them once the database exceeds its size threshold, so raw snapshots
+# only reach back a week or so. Scanning them would still run, still exit zero,
+# and quietly return a label for only the most recent videos -- the failure
+# would show up as a small training set rather than as an error.
+#
+# video_horizon_labels is materialised nightly against whatever is in Postgres
+# at the time, keeping whichever observation is closest to each mark, and is
+# never dropped. It is the durable form of exactly this query.
 LABEL_SQL = """
-SELECT DISTINCT ON (s.video_id)
-       s.video_id,
-       s.view_count    AS d{h}_views,
-       s.like_count    AS d{h}_likes,
-       s.comment_count AS d{h}_comments,
-       EXTRACT(EPOCH FROM (s.captured_at - v.published_at))/3600.0 - {hours}
-                       AS d{h}_hours_off
-FROM video_snapshots s
-JOIN videos v USING (video_id)
-ORDER BY s.video_id,
-         ABS(EXTRACT(EPOCH FROM (s.captured_at - v.published_at))/3600.0 - {hours})
+SELECT video_id,
+       view_count    AS d{h}_views,
+       like_count    AS d{h}_likes,
+       comment_count AS d{h}_comments,
+       hours_off     AS d{h}_hours_off
+FROM video_horizon_labels
+WHERE horizon_days = {h}
+"""
+
+# Post-publication edits, so a contaminated row can be identified.
+#
+# videos holds what was seen at first discovery, and 73% of the corpus was
+# first seen more than a day after publication. A title edited since then may
+# already be a reaction to the video's performance, which would put the target
+# on the feature side of a model whose whole claim is pre-publication
+# forecasting. Measured across 49,739 videos: titles changed on 185 (0.4%),
+# descriptions on 222 (0.4%). An earlier sweep reported 31.9% for descriptions;
+# that was a bug -- NULL columns arrive as NaN, NaN is truthy, so `x or ""`
+# compared against NaN and every video with a null description or null tags
+# looked edited.
+CHANGES_SQL = """
+SELECT video_id, title AS new_title, description_sha, tags_sha
+FROM video_metadata_changes
 """
 
 # newest channel snapshot at or before the video was published
@@ -154,15 +191,18 @@ def main():
     ap.add_argument("--tolerance", type=float, default=TOLERANCE_HOURS)
     args = ap.parse_args()
 
-    conn = connect()
+    # Bulk reads: tens of thousands of rows in one pass, which is what the
+    # session pooler is for.
+    conn = connect(session_pooler=True)
     try:
         df = read(conn, VIDEOS_SQL)
         print(f"videos in warehouse: {len(df):,}")
         for h in HORIZONS:
-            lab = read(conn, LABEL_SQL.format(h=h, hours=h * 24))
+            lab = read(conn, LABEL_SQL.format(h=h))
             df = df.merge(lab, on="video_id", how="left")
         pit = read(conn, CHAN_PIT_SQL)
         first = read(conn, CHAN_FIRST_SQL)
+        changes = read(conn, CHANGES_SQL)
     finally:
         conn.close()
 
@@ -177,6 +217,24 @@ def main():
         df[a] = df[a].fillna(df[b])
     df = df.drop(columns=["ch_subs_first", "ch_views_first",
                           "ch_videos_first", "ch_first_as_of"])
+
+    # ---- post-publication edit flags --------------------------------------
+    # Compared by hash, not by length: an edit that happens to preserve length
+    # would otherwise pass as unchanged. The hash is imported from
+    # metadata_changes rather than reimplemented, so the two cannot drift.
+    #
+    # Vectorised deliberately. A row-wise apply over fifty thousand videos, each
+    # doing an index lookup, ran for minutes; this runs on every rebuild.
+    if len(changes):
+        latest = changes.drop_duplicates("video_id", keep="last").set_index("video_id")
+        seen_title = df.video_id.map(latest.new_title)
+        df["title_changed"] = seen_title.notna() & (seen_title != df.title)
+        seen_desc = df.video_id.map(latest.description_sha)
+        df["description_changed"] = (seen_desc.notna()
+                                     & (seen_desc != df.description_sha))
+    else:
+        df["title_changed"] = False
+        df["description_changed"] = False
 
     # ---- pre-publish features --------------------------------------------
     df["published_at"] = pd.to_datetime(df["published_at"], utc=True)
@@ -200,7 +258,7 @@ def main():
         lambda t: sum(c.isupper() for c in t) / len(t) if t else 0.0)
     df["title_script"] = title.apply(title_script)
 
-    df["description_length"] = df["description"].fillna("").str.len()
+    df["description_length"] = df["description_length"].fillna(0).astype(int)
     df["tag_count"] = df["tags"].fillna("").apply(lambda s: len(s.split("|")) if s else 0)
 
     ch_pub = pd.to_datetime(df["channel_published_at"], utc=True, errors="coerce")
@@ -230,7 +288,8 @@ def main():
     LABELS = [f"d{h}_{k}" for h in HORIZONS
               for k in ("views", "likes", "comments", "hours_off", "usable")]
     KEYS = ["video_id", "channel_id", "published_at", "title"]
-    META = ["eligible", "is_live_broadcast", "channel_stats_backfilled", "ch_stats_as_of"]
+    META = ["eligible", "is_live_broadcast", "channel_stats_backfilled", "ch_stats_as_of",
+            "title_changed", "description_changed"]
 
     # rule 3 guard: no engagement value may sit in the feature list
     leaked = [c for c in FEATURES
@@ -257,6 +316,8 @@ def main():
               f"{(f'{med:.1f} h' if len(u) else '-'):>16}")
     print(f"\nchannel stats backfilled (no snapshot before publish): "
           f"{int(el.channel_stats_backfilled.sum()):,} of {len(el):,}")
+    print(f"edited since first seen — title: {int(el.title_changed.sum()):,}   "
+          f"description: {int(el.description_changed.sum()):,}")
     print(f"shorts (<=60s): {int(el.is_short.sum()):,}   "
           f"long-form: {int((~el.is_short).sum()):,}")
     print("\ntitle script mix:")

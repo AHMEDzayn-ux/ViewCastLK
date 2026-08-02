@@ -31,12 +31,18 @@ load_dotenv()
 
 DB_URL = os.environ["SUPABASE_DB_URL"]
 
+# Session pooler (port 5432). Optional: bulk readers use it when present and
+# fall back to the transaction pooler otherwise. Same value as the
+# SUPABASE_BACKUP_DB_URL GitHub secret, so one name means one thing everywhere.
+SESSION_DB_URL = os.environ.get("SUPABASE_BACKUP_DB_URL") or DB_URL
+
 PRIMARY_KEYS = {
     "channels": ["channel_id"],
     "channel_snapshots": ["channel_id", "captured_at"],
     "videos": ["video_id"],
     "video_snapshots": ["video_id", "captured_at"],
     "video_categories": ["category_id"],
+    "video_metadata_changes": ["video_id", "observed_at"],
 }
 
 # Columns needing an explicit cast — flatten_* functions hand back plain
@@ -45,6 +51,7 @@ PRIMARY_KEYS = {
 COLUMN_CASTS = {
     "channel_published_at": "timestamptz",
     "captured_at": "timestamptz",
+    "observed_at": "timestamptz",
     "published_at": "timestamptz",
     "live_actual_start_time": "timestamptz",
     "live_actual_end_time": "timestamptz",
@@ -68,8 +75,18 @@ CONNECT_TIMEOUT = int(os.environ.get("PG_CONNECT_TIMEOUT", "15"))
 CONNECT_RETRIES = int(os.environ.get("PG_CONNECT_RETRIES", "4"))
 
 
-def connect():
+def connect(session_pooler: bool = False):
     """Shared connection helper.
+
+    session_pooler selects the long-lived connection (port 5432) instead of the
+    transaction pooler (6543). The transaction pooler is built for many short
+    connections, which is the collector's shape; a single connection streaming
+    tens of megabytes through it drops mid-query with "SSL connection has been
+    closed unexpectedly". Bulk readers -- the archive job, the training-table
+    build -- should ask for the session pooler.
+
+    Falls back to the transaction pooler when SUPABASE_BACKUP_DB_URL is not
+    configured, so nothing breaks where only the one URL exists.
 
     Strips Supabase's ?pgbouncer=true query hint first, since plain
     psycopg2/libpq doesn't recognize it as a valid connection parameter (that
@@ -80,7 +97,8 @@ def connect():
     pooler across the public internet and an occasional unreachable moment is
     normal; without a retry a single blip fails a whole collection or archive
     run, and for collection that leaves a permanent hole in the history."""
-    clean_url = urlunparse(urlparse(DB_URL)._replace(query=""))
+    url = SESSION_DB_URL if session_pooler else DB_URL
+    clean_url = urlunparse(urlparse(url)._replace(query=""))
     last = None
     for attempt in range(CONNECT_RETRIES):
         try:
@@ -239,6 +257,58 @@ def load_roster_mapping(table: str = "channels") -> dict[str, tuple[str, bool]]:
             return mapping
     except psycopg2.errors.UndefinedColumn:
         return {}
+    finally:
+        conn.close()
+
+
+def load_metadata_shas(video_ids: list[str]) -> dict[str, str | None]:
+    """video_id -> fingerprint of its last observed metadata, None if never set.
+
+    Only the hash is loaded, not the fields themselves: at fifty thousand
+    tracked videos the titles and descriptions would be tens of megabytes to
+    move every run, where the hashes are about two."""
+    if not video_ids:
+        return {}
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT video_id, metadata_sha FROM videos WHERE video_id = ANY(%s)",
+                (list(video_ids),))
+            return {r[0]: r[1] for r in cur.fetchall()}
+    finally:
+        conn.close()
+
+
+def save_metadata_shas(shas: dict[str, str]) -> None:
+    """Record the latest fingerprint per video."""
+    if not shas:
+        return
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            execute_batch(cur, "UPDATE videos SET metadata_sha = %s WHERE video_id = %s",
+                          [(v, k) for k, v in shas.items()], page_size=500)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def load_active_channels(table: str = "channels") -> list[tuple[str, str]]:
+    """(channel_id, uploads_playlist_id) for every channel still worth polling.
+
+    Discovery needs both: the channel id addresses the free RSS feed, the
+    playlist id addresses the metered API call used when RSS cannot vouch for
+    a channel. Same exclusions as load_channel_playlist_ids -- inactive
+    channels and rows with no uploads playlist."""
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                sql.SQL("SELECT channel_id, uploads_playlist_id FROM {} "
+                        "WHERE uploads_playlist_id IS NOT NULL AND active").format(
+                    sql.Identifier(table)))
+            return [(r[0], r[1]) for r in cur.fetchall()]
     finally:
         conn.close()
 

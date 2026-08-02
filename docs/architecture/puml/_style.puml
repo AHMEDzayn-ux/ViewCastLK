@@ -1,0 +1,115 @@
+' ViewCastLK — shared diagram style for the Software Architecture Document.
+'
+' Add ONE line to the top of every figure source, immediately after @startuml:
+'
+'     !include _style.puml
+'
+' and DELETE the `title Figure N — ...` line from each source. The figure number
+' belongs in the Word caption and nowhere else: it currently lives in both, the
+' sections were reordered after the titles were written, and five figures now
+' print a number that disagrees with their caption.
+'
+' Two things this file fixes.
+'
+' 1. LEGIBILITY. Figures are placed in the document at a fixed 450 pt (159 mm)
+'    wide whatever their native size. A 2046 px-wide figure is therefore scaled
+'    by 0.22, and PlantUML's default 14 px label text lands on the page at
+'    3.1 pt — about a quarter of the surrounding body text. The rule is:
+'
+'        required source font = 12 x native_width / 450
+'
+'    which is ~55 px for a 2046 px figure and ~27 px for a 1000 px one. The
+'    values below target the portrait-friendly case. For the five figures wider
+'    than 1900 px (currently 5, 6, 7, 11, 13) raising the font is not enough on
+'    its own — split them into two diagrams each, or place them on a landscape
+'    page, or both.
+'
+' 2. FILL. Section 1.4 of the document states the figures are "rendered in
+'    monochrome with unfilled shapes on a white background". They are monochrome
+'    but not unfilled: PlantUML's default #F1F1F1 grey is on every class box,
+'    use-case ellipse and table header. The overrides below make the claim true.
+
+skinparam backgroundColor        #FFFFFF
+skinparam defaultFontName        Arial
+skinparam defaultFontSize        28
+skinparam dpi                    200
+skinparam shadowing              false
+skinparam roundCorner            0
+skinparam ArrowColor             #000000
+skinparam ArrowFontSize          24
+skinparam TitleFontSize          32
+skinparam NoteBackgroundColor    #FFFFFF
+skinparam NoteBorderColor        #000000
+
+skinparam class {
+  BackgroundColor      #FFFFFF
+  BorderColor          #000000
+  ArrowColor           #000000
+  AttributeFontSize    24
+  StereotypeFontSize   22
+}
+
+skinparam usecase {
+  BackgroundColor      #FFFFFF
+  BorderColor          #000000
+  ArrowColor           #000000
+}
+
+skinparam actor {
+  BackgroundColor      #FFFFFF
+  BorderColor          #000000
+}
+
+skinparam component {
+  BackgroundColor      #FFFFFF
+  BorderColor          #000000
+  ArrowColor           #000000
+}
+
+skinparam package {
+  BackgroundColor      #FFFFFF
+  BorderColor          #000000
+}
+
+skinparam node {
+  BackgroundColor      #FFFFFF
+  BorderColor          #000000
+}
+
+skinparam database {
+  BackgroundColor      #FFFFFF
+  BorderColor          #000000
+}
+
+skinparam rectangle {
+  BackgroundColor      #FFFFFF
+  BorderColor          #000000
+}
+
+skinparam activity {
+  BackgroundColor      #FFFFFF
+  BorderColor          #000000
+  DiamondBackgroundColor #FFFFFF
+  DiamondBorderColor   #000000
+}
+
+skinparam sequence {
+  ParticipantBackgroundColor #FFFFFF
+  ParticipantBorderColor     #000000
+  ActorBackgroundColor       #FFFFFF
+  LifeLineBackgroundColor    #FFFFFF
+  LifeLineBorderColor        #000000
+  BoxBackgroundColor         #FFFFFF
+  GroupBackgroundColor       #FFFFFF
+  GroupHeaderFontSize        24
+}
+
+skinparam entity {
+  BackgroundColor      #FFFFFF
+  BorderColor          #000000
+}
+
+skinparam state {
+  BackgroundColor      #FFFFFF
+  BorderColor          #000000
+}

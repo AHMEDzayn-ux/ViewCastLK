@@ -30,3 +30,6 @@ token.json
 dashboard/node_modules/
 dashboard/.env.local
 dashboard/.next/
+
+# Generated training tables — rebuilt from the warehouse, not source
+training_data/

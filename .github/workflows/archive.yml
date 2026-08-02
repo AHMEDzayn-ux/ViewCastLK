@@ -48,13 +48,14 @@ jobs:
       - name: Validate required secrets
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          SUPABASE_BACKUP_DB_URL: ${{ secrets.SUPABASE_BACKUP_DB_URL }}
           RCLONE_CONFIG_CONTENT: ${{ secrets.RCLONE_CONFIG }}
         shell: bash
         run: |
           set -Eeuo pipefail
 
-          if [[ -z "${SUPABASE_DB_URL:-}" ]]; then
-            echo "::error::Missing GitHub Actions secret: SUPABASE_DB_URL"
+          if [[ -z "${SUPABASE_DB_URL:-}" && -z "${SUPABASE_BACKUP_DB_URL:-}" ]]; then
+            echo "::error::Need SUPABASE_BACKUP_DB_URL or SUPABASE_DB_URL"
             exit 1
           fi
 
@@ -98,7 +99,14 @@ jobs:
 
       - name: Archive and drop old partitions
         env:
-          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          # Prefer the session pooler (port 5432), falling back to the
+          # transaction pooler. This job's shape is the opposite of the
+          # collector's: one connection held for the length of the run, doing
+          # bulk reads of whole partitions and DDL. The transaction pooler
+          # exists for many short-lived connections, which is the collector's
+          # pattern, not this one — and the nightly backup already reads
+          # through the session pooler successfully every night.
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_BACKUP_DB_URL || secrets.SUPABASE_DB_URL }}
           ARCHIVE_REMOTE: ${{ vars.ARCHIVE_REMOTE || 'gdrive:ViewCastLK/archives' }}
         shell: bash
         run: |

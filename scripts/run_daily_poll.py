@@ -43,6 +43,7 @@ from datetime import datetime, timedelta, timezone
 
 from googleapiclient.errors import HttpError
 
+import metadata_changes
 import rss_discovery
 
 from youtube_client import (
@@ -59,6 +60,8 @@ from youtube_client import (
 )
 from storage import (
     append_rows,
+    load_metadata_shas,
+    save_metadata_shas,
     load_active_channels,
     ensure_snapshot_partitions,
     load_roster_mapping,
@@ -89,6 +92,12 @@ FALLBACK_LOOKBACK_HOURS = int(os.environ.get("FALLBACK_LOOKBACK_HOURS", "50"))
 # the cap are found by the next run, whose longer look-back still covers them.
 FALLBACK_CALL_CAP = int(os.environ.get("FALLBACK_CALL_CAP", "500"))
 
+# Escape hatch. The Atom feed is undocumented and unsupported, so there has to
+# be a single switch that stops relying on it without a code change. Setting
+# this false sends every channel down the metered path -- what discovery did
+# before RSS -- at roughly one unit per channel per run.
+USE_RSS = os.environ.get("USE_RSS", "true").strip().lower() == "true"
+
 CHANNEL_BATCH_SIZE = 50
 
 # Full run refreshes channel stats; discovery-only run skips that to save quota.
@@ -99,6 +108,7 @@ CHANNELS_TABLE = "channels"
 CHANNEL_SNAPSHOTS_TABLE = "channel_snapshots"
 VIDEOS_TABLE = "videos"
 VIDEO_SNAPSHOTS_TABLE = "video_snapshots"
+METADATA_CHANGES_TABLE = "video_metadata_changes"
 
 
 class QuotaExceeded(Exception):
@@ -219,17 +229,28 @@ def discover_new_videos(channels: list[tuple[str, str]], discovery_since: str,
     A playlist that still errors after retries is skipped rather than aborting
     discovery for every other channel."""
     ids_by_channel = dict(channels)
-    rss = rss_discovery.discover([c for c, _ in channels], discovery_since)
-    print(f"  {rss.summary(len(channels))}")
-    if rss.rate_limited:
-        print("  WARNING: RSS rate-limited this run; the API fallback is capped, "
-              "so some channels may be picked up next run instead.")
 
-    new_video_ids = set(rss.video_ids)
+    if USE_RSS:
+        rss = rss_discovery.discover([c for c, _ in channels], discovery_since)
+        print(f"  {rss.summary(len(channels))}")
+        if rss.rate_limited:
+            print("  WARNING: RSS rate-limited this run; the API fallback is "
+                  "capped, so some channels may be picked up next run instead.")
+        new_video_ids = set(rss.video_ids)
+        wants_api = rss.needs_api
+    else:
+        # The documented way to stop using the feed, for when it misbehaves or
+        # is withdrawn: every channel goes down the metered path, which is what
+        # discovery did before RSS existed. Costs roughly one unit per channel
+        # per run, so at any sizeable roster the cap below is what keeps a run
+        # from consuming the day's allowance.
+        print("  RSS disabled (USE_RSS=false) — every channel goes to the API")
+        new_video_ids = set()
+        wants_api = [c for c, _ in channels]
 
-    to_check = rss.needs_api[:FALLBACK_CALL_CAP]
-    if len(rss.needs_api) > FALLBACK_CALL_CAP:
-        print(f"  fallback capped: {len(rss.needs_api)} channels need the API, "
+    to_check = wants_api[:FALLBACK_CALL_CAP]
+    if len(wants_api) > FALLBACK_CALL_CAP:
+        print(f"  fallback capped: {len(wants_api)} channels need the API, "
               f"checking {FALLBACK_CALL_CAP} this run; the rest are covered by "
               f"the next run's look-back")
 
@@ -300,6 +321,17 @@ def main():
 
         category_names = get_video_categories()
         details = get_video_details(list(video_ids_to_snapshot))
+
+        # Title, description and tags arrived in the same response as the
+        # statistics, so comparing them costs nothing. videos keeps what was
+        # seen first; edits since then are recorded separately.
+        seen_before = [v["id"] for v in details if v["id"] in known_video_ids]
+        shas = load_metadata_shas(seen_before)
+        changes, updated = metadata_changes.detect(details, shas, captured_at)
+        if changes:
+            append_rows(changes, METADATA_CHANGES_TABLE)
+        save_metadata_shas(updated)
+        print(f"  metadata: {len(changes)} video(s) edited since last seen")
 
         unseen_details = [v for v in details if v["id"] not in known_video_ids]
         append_rows([flatten_video_identity(v, category_names) for v in unseen_details], VIDEOS_TABLE)

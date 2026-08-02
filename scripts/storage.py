@@ -37,6 +37,7 @@ PRIMARY_KEYS = {
     "videos": ["video_id"],
     "video_snapshots": ["video_id", "captured_at"],
     "video_categories": ["category_id"],
+    "video_metadata_changes": ["video_id", "observed_at"],
 }
 
 # Columns needing an explicit cast — flatten_* functions hand back plain
@@ -45,6 +46,7 @@ PRIMARY_KEYS = {
 COLUMN_CASTS = {
     "channel_published_at": "timestamptz",
     "captured_at": "timestamptz",
+    "observed_at": "timestamptz",
     "published_at": "timestamptz",
     "live_actual_start_time": "timestamptz",
     "live_actual_end_time": "timestamptz",
@@ -239,6 +241,39 @@ def load_roster_mapping(table: str = "channels") -> dict[str, tuple[str, bool]]:
             return mapping
     except psycopg2.errors.UndefinedColumn:
         return {}
+    finally:
+        conn.close()
+
+
+def load_metadata_shas(video_ids: list[str]) -> dict[str, str | None]:
+    """video_id -> fingerprint of its last observed metadata, None if never set.
+
+    Only the hash is loaded, not the fields themselves: at fifty thousand
+    tracked videos the titles and descriptions would be tens of megabytes to
+    move every run, where the hashes are about two."""
+    if not video_ids:
+        return {}
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT video_id, metadata_sha FROM videos WHERE video_id = ANY(%s)",
+                (list(video_ids),))
+            return {r[0]: r[1] for r in cur.fetchall()}
+    finally:
+        conn.close()
+
+
+def save_metadata_shas(shas: dict[str, str]) -> None:
+    """Record the latest fingerprint per video."""
+    if not shas:
+        return
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            execute_batch(cur, "UPDATE videos SET metadata_sha = %s WHERE video_id = %s",
+                          [(v, k) for k, v in shas.items()], page_size=500)
+        conn.commit()
     finally:
         conn.close()
 

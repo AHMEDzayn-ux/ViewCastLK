@@ -100,19 +100,26 @@ FROM videos v
 JOIN channels c USING (channel_id)
 """
 
-# nearest snapshot to each horizon, per video
+# Nearest observation to each horizon, per video.
+#
+# Read from video_horizon_labels, not from video_snapshots. The snapshot table
+# is partitioned by day and the nightly archive exports partitions to Parquet
+# and drops them once the database exceeds its size threshold, so raw snapshots
+# only reach back a week or so. Scanning them would still run, still exit zero,
+# and quietly return a label for only the most recent videos -- the failure
+# would show up as a small training set rather than as an error.
+#
+# video_horizon_labels is materialised nightly against whatever is in Postgres
+# at the time, keeping whichever observation is closest to each mark, and is
+# never dropped. It is the durable form of exactly this query.
 LABEL_SQL = """
-SELECT DISTINCT ON (s.video_id)
-       s.video_id,
-       s.view_count    AS d{h}_views,
-       s.like_count    AS d{h}_likes,
-       s.comment_count AS d{h}_comments,
-       EXTRACT(EPOCH FROM (s.captured_at - v.published_at))/3600.0 - {hours}
-                       AS d{h}_hours_off
-FROM video_snapshots s
-JOIN videos v USING (video_id)
-ORDER BY s.video_id,
-         ABS(EXTRACT(EPOCH FROM (s.captured_at - v.published_at))/3600.0 - {hours})
+SELECT video_id,
+       view_count    AS d{h}_views,
+       like_count    AS d{h}_likes,
+       comment_count AS d{h}_comments,
+       hours_off     AS d{h}_hours_off
+FROM video_horizon_labels
+WHERE horizon_days = {h}
 """
 
 # newest channel snapshot at or before the video was published
@@ -159,7 +166,7 @@ def main():
         df = read(conn, VIDEOS_SQL)
         print(f"videos in warehouse: {len(df):,}")
         for h in HORIZONS:
-            lab = read(conn, LABEL_SQL.format(h=h, hours=h * 24))
+            lab = read(conn, LABEL_SQL.format(h=h))
             df = df.merge(lab, on="video_id", how="left")
         pit = read(conn, CHAN_PIT_SQL)
         first = read(conn, CHAN_FIRST_SQL)

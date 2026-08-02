@@ -278,16 +278,33 @@ def main():
 
     # ------------------------------------------------------------- export
     today = date.today()
+    floor = today - timedelta(days=args.retain_days)
     complete = [(n, d, r) for n, d, r in partitions(conn) if d < today]
-    print(f"\nexporting {len(complete)} completed partition(s):")
+    empty = [(n, d) for n, d, r in complete if r == 0]
+    with_rows = [(n, d, r) for n, d, r in complete if r > 0]
+
+    print(f"\nexporting {len(with_rows)} completed partition(s) "
+          f"({len(empty)} empty, nothing to export):")
     exported = {}
-    for name, day, rows in complete:
-        if rows == 0:
-            continue
+    for name, day, rows in with_rows:
         got = export_partition(conn, name, day, rows, work, args.dry_run)
         if got is not None:
             exported[name] = (day, rows, got)
     print(f"  {len(exported)} partition(s) safely on the remote")
+
+    # An empty partition holds nothing to preserve, so it is dropped on age
+    # alone rather than waiting for space pressure. Left alone they accumulate
+    # one per day the collector produced no rows, and a growing partition count
+    # costs query planning time for no benefit.
+    stale_empty = [(n, d) for n, d in empty if d < floor]
+    for name, day in stale_empty:
+        if args.dry_run:
+            print(f"  {name}: empty and older than the floor, would drop")
+            continue
+        with conn.cursor() as cur:
+            cur.execute(f'DROP TABLE public."{name}"')
+        conn.commit()
+        print(f"  {name}: empty and older than the floor, dropped")
 
     # --------------------------------------------------------------- drop
     if size_before < args.drop_above_mb:
@@ -297,7 +314,6 @@ def main():
         conn.close()
         return
 
-    floor = today - timedelta(days=args.retain_days)
     candidates = [(n, d) for n, (d, _, _) in sorted(exported.items(), key=lambda kv: kv[1][0])
                   if d < floor]
     print(f"\nover threshold — dropping oldest exported partitions until under "

@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+/* ─── Design system base ──────────────────────────────────────────────────── */
+
+:root {
+  --font-inter: "Inter", system-ui, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-inter);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Scrollbar styling (Webkit) ──────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* ─── Focus ring ──────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+/* ─── Number input arrows hidden ─────────────────────────────────────────── */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* ─── Time input — force dark color-scheme so clock icon is visible ──────── */
+input[type="time"] {
+  color-scheme: dark;
+}
+
+/* ─── Select dropdown dark styling (Firefox) ─────────────────────────────── */
+select option {
+  background-color: #1e293b;
+  color: #e2e8f0;
+}
+
+/* ─── Fade-in animation for results ──────────────────────────────────────── */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.35s ease-out both;
+}

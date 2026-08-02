@@ -19,6 +19,7 @@ Previous CSV-backed version is in git history (see the "sabith" branch commits
 before this one) if ever needed for reference.
 """
 import os
+import time
 from urllib.parse import urlparse, urlunparse
 
 import psycopg2
@@ -58,13 +59,41 @@ COLUMN_CASTS = {
 }
 
 
+# The pooler resolves to several addresses. Without an explicit timeout libpq
+# waits out the operating system's TCP timeout on each one in turn, so a
+# transient network problem costs minutes of hanging before the job even
+# reports failure. A short timeout with a few backed-off retries turns that
+# into a brief pause that usually recovers on its own.
+CONNECT_TIMEOUT = int(os.environ.get("PG_CONNECT_TIMEOUT", "15"))
+CONNECT_RETRIES = int(os.environ.get("PG_CONNECT_RETRIES", "4"))
+
+
 def connect():
-    """Shared connection helper — strips Supabase's ?pgbouncer=true query
-    hint first, since plain psycopg2/libpq doesn't recognize it as a valid
-    connection parameter (that hint is meant for ORMs like Prisma; it's a
-    no-op for a raw psycopg2 connection)."""
+    """Shared connection helper.
+
+    Strips Supabase's ?pgbouncer=true query hint first, since plain
+    psycopg2/libpq doesn't recognize it as a valid connection parameter (that
+    hint is meant for ORMs like Prisma; it's a no-op for a raw psycopg2
+    connection).
+
+    Retries a connection that times out or is refused. Scheduled jobs reach the
+    pooler across the public internet and an occasional unreachable moment is
+    normal; without a retry a single blip fails a whole collection or archive
+    run, and for collection that leaves a permanent hole in the history."""
     clean_url = urlunparse(urlparse(DB_URL)._replace(query=""))
-    return psycopg2.connect(clean_url)
+    last = None
+    for attempt in range(CONNECT_RETRIES):
+        try:
+            return psycopg2.connect(clean_url, connect_timeout=CONNECT_TIMEOUT)
+        except psycopg2.OperationalError as e:
+            last = e
+            if attempt == CONNECT_RETRIES - 1:
+                break
+            wait = 5 * (2 ** attempt)
+            print(f"  database unreachable (attempt {attempt + 1}/{CONNECT_RETRIES}); "
+                  f"retrying in {wait}s")
+            time.sleep(wait)
+    raise last
 
 
 _connect = connect  # internal alias, kept for the calls below

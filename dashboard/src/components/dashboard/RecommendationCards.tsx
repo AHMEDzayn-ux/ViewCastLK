@@ -1,68 +1,113 @@
-import type { Recommendation } from "@/types/forecast";
+import type {
+  Recommendation,
+  RecommendationType,
+  UnavailableRecommendation,
+} from "@/types/forecast";
 
 interface RecommendationCardsProps {
   recommendations: Recommendation[];
+  unavailableRecommendations: UnavailableRecommendation[];
 }
 
-// Map each recommendation type to a neutral section-title prefix and visual style.
-// These titles make clear the cards are illustrative examples, not EDA findings.
-const TYPE_META: Record<
-  string,
-  { sectionTitle: string; icon: string; border: string; iconBg: string }
-> = {
-  timing:   { sectionTitle: "Timing recommendation example",            icon: "🕐", border: "border-cyan-800",  iconBg: "bg-cyan-900/40"  },
-  duration: { sectionTitle: "Duration recommendation example",          icon: "⏱",  border: "border-teal-800",  iconBg: "bg-teal-900/40"  },
-  category: { sectionTitle: "Category recommendation example",          icon: "🏷",  border: "border-sky-800",   iconBg: "bg-sky-900/40"   },
-  general:  { sectionTitle: "Publication-day recommendation example",   icon: "💡",  border: "border-slate-700", iconBg: "bg-slate-800"    },
+const TYPE_LABELS: Record<RecommendationType, string> = {
+  timing: "Publishing day and time",
+  duration: "Duration",
+  format: "Format",
+  title: "Title framing",
 };
+
+function formatHour(hour: number): string {
+  return `${String(hour).padStart(2, "0")}:00`;
+}
 
 export default function RecommendationCards({
   recommendations,
+  unavailableRecommendations,
 }: RecommendationCardsProps) {
-  if (recommendations.length === 0) return null;
+  if (
+    recommendations.length === 0 &&
+    unavailableRecommendations.length === 0
+  ) {
+    return null;
+  }
 
   return (
-    <div>
-      <div className="mb-3">
-        <h3 className="text-slate-100 font-semibold text-base">
-          Publishing recommendations
-        </h3>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Illustrative mock wording — will be replaced with approved
-          EDA-based recommendations after analysis is complete.
+    <section className="recommendations" aria-labelledby="recommendations-title">
+      <div className="section-heading">
+        <div>
+          <p className="section-kicker">Planning guidance</p>
+          <h3 id="recommendations-title">What to review before publishing</h3>
+        </div>
+        <p>
+          Only guidance supported by model evaluation is returned. Historical
+          associations do not prove what caused previous performance.
         </p>
       </div>
 
-      <div className="flex flex-col gap-3">
-        {recommendations.map((rec, idx) => {
-          const meta = TYPE_META[rec.type] ?? TYPE_META.general;
-          return (
-            <div
-              key={idx}
-              className={`rounded-xl border ${meta.border} bg-slate-800/50 p-4 flex gap-3`}
-            >
-              <div
-                className={`w-9 h-9 flex-shrink-0 rounded-lg ${meta.iconBg} flex items-center justify-center text-lg`}
-                aria-hidden="true"
-              >
-                {meta.icon}
+      {recommendations.length > 0 && (
+        <div className="recommendation-list">
+          {recommendations.map((recommendation, index) => (
+            <article className="recommendation-item" key={recommendation.id}>
+              <div className="recommendation-item__number" aria-hidden="true">
+                {String(index + 1).padStart(2, "0")}
               </div>
-              <div className="flex-1 min-w-0">
-                {/* Neutral section title makes it unambiguous this is illustrative */}
-                <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mb-1">
-                  {meta.sectionTitle}
+              <div>
+                <p className="recommendation-item__type">
+                  {TYPE_LABELS[recommendation.type]}
                 </p>
-                <p className="text-slate-100 font-semibold text-sm leading-tight mb-1">
-                  {rec.headline}
-                </p>
-                <p className="text-sm text-slate-400 leading-relaxed">
-                  {rec.body}
-                </p>
+                <h4>{recommendation.title}</h4>
+                {recommendation.type === "timing" && (
+                  <p className="recommendation-item__action">
+                    <span>Recommended window</span>
+                    <strong>
+                      {recommendation.recommendedPublishingWindow.day},{" "}
+                      {formatHour(
+                        recommendation.recommendedPublishingWindow.startHour,
+                      )}
+                      –
+                      {formatHour(
+                        recommendation.recommendedPublishingWindow.endHour,
+                      )}{" "}
+                      SLT
+                    </strong>
+                  </p>
+                )}
+                <p>{recommendation.guidance}</p>
+                <details>
+                  <summary>Supporting historical evidence</summary>
+                  <dl>
+                    {recommendation.evidence.map((evidence) => (
+                      <div key={`${evidence.label}-${evidence.detail}`}>
+                        <dt>{evidence.label}</dt>
+                        <dd dir="auto">{evidence.detail}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </details>
               </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+            </article>
+          ))}
+        </div>
+      )}
+
+      {unavailableRecommendations.length > 0 && (
+        <aside className="recommendation-unavailable" role="status">
+          <p className="section-kicker">Guidance availability</p>
+          <h4>
+            {recommendations.length === 0
+              ? "No evidence-backed recommendations are available"
+              : "Some guidance is not available for this forecast"}
+          </h4>
+          <ul>
+            {unavailableRecommendations.map((recommendation) => (
+              <li key={recommendation.type}>
+                <strong>{TYPE_LABELS[recommendation.type]}:</strong>{" "}
+                {recommendation.reason}
+              </li>
+            ))}
+          </ul>
+        </aside>
+      )}
+    </section>
   );
 }

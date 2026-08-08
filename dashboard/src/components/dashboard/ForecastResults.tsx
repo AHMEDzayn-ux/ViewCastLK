@@ -1,69 +1,92 @@
-"use client";
-
-import type { ForecastResult, ForecastInput } from "@/types/forecast";
+import type { ForecastRequest, ForecastResponse } from "@/types/forecast";
+import DegradedNotice from "./DegradedNotice";
 import ForecastChart from "./ForecastChart";
 import HorizonCards from "./HorizonCards";
 import RecommendationCards from "./RecommendationCards";
-import AccuracySummary from "./AccuracySummary";
 
 interface ForecastResultsProps {
-  result: ForecastResult;
-  input: ForecastInput;
+  response: ForecastResponse;
+  request: ForecastRequest;
+  onChangeInputs: () => void;
 }
 
-export default function ForecastResults({ result, input }: ForecastResultsProps) {
-  const generatedAt = new Date(result.generatedAt).toLocaleString("en-LK", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Colombo",
-  });
+export default function ForecastResults({
+  response,
+  request,
+  onChangeInputs,
+}: ForecastResultsProps) {
+  const generatedAt = new Date(response.model.generatedAt).toLocaleString(
+    "en-LK",
+    {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "Asia/Colombo",
+    },
+  );
 
   return (
-    <div
-      className="flex flex-col gap-6 animate-fade-in"
-      role="region"
-      aria-label="Forecast results"
-    >
-      {/* Result header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+    <div className="forecast-results" aria-labelledby="forecast-results-title">
+      <header className="forecast-results__header">
         <div>
-          <h2 className="text-slate-100 font-semibold text-lg leading-tight">
-            Forecast results
-          </h2>
-          <p className="text-slate-400 text-sm mt-0.5">
-            For &ldquo;{input.title}&rdquo;
-            {input.category ? ` · ${input.category}` : ""}
-            {input.channelHandle ? ` · ${input.channelHandle}` : ""}
+          <p className="section-kicker">Forecast ready</p>
+          <h2 id="forecast-results-title">Four planning checkpoints</h2>
+          <p className="forecast-results__subject" dir="auto">
+            {request.title}
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-400 border border-amber-700/40">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
-            Mock data
+        <div className="forecast-results__meta">
+          <span
+            className={
+              response.model.dataSource === "mock"
+                ? "status-tag status-tag--development"
+                : "status-tag"
+            }
+          >
+            {response.model.dataSource === "mock"
+              ? "Development forecast"
+              : "Prediction API"}
           </span>
-          <span className="text-xs text-slate-500">{generatedAt} SLT</span>
+          <span>{generatedAt} SLT</span>
         </div>
-      </div>
+      </header>
 
-      {/* Horizon summary cards */}
-      <HorizonCards horizons={result.horizons} />
+      <DegradedNotice completeness={response.completeness} />
+      <HorizonCards estimates={response.estimates} />
+      <ForecastChart estimates={response.estimates} />
+      <RecommendationCards
+        recommendations={response.recommendations}
+        unavailableRecommendations={response.unavailableRecommendations}
+      />
 
-      {/* Chart */}
-      <ForecastChart horizons={result.horizons} />
+      {response.titleGuidance && (
+        <section className="title-guidance" aria-labelledby="title-guidance-title">
+          <div>
+            <p className="section-kicker">Title review</p>
+            <h3 id="title-guidance-title">Clear, accurate wording</h3>
+            <p>{response.titleGuidance.summary}</p>
+          </div>
+          <ul>
+            {response.titleGuidance.suggestions.map((suggestion) => (
+              <li key={suggestion}>{suggestion}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
-      {/* Recommendations */}
-      <RecommendationCards recommendations={result.recommendations} />
-
-      {/* Accuracy placeholder */}
-      <AccuracySummary />
-
-      {/* Single consolidated transparency note */}
-      <p className="text-xs text-slate-500 border-t border-slate-800 pt-4">
-        All forecasts, recommendations, and accuracy figures shown above are
-        generated from mock demonstration data. They do not represent real model
-        outputs or approved research findings. Results will be updated after
-        model training, held-out evaluation, and EDA sign-off are complete.
-      </p>
+      <footer className="forecast-results__footer">
+        <p>
+          Forecast ID <code>{response.forecastId}</code> · Model {" "}
+          <code>{response.model.modelVersion}</code>. Forecasts are estimates,
+          not guaranteed outcomes.
+        </p>
+        <button
+          className="secondary-button"
+          type="button"
+          onClick={onChangeInputs}
+        >
+          Change inputs
+        </button>
+      </footer>
     </div>
   );
 }

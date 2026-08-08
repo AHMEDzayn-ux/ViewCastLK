@@ -1,46 +1,141 @@
 "use client";
 
-import { useState } from "react";
-import type { ForecastInput, YoutubeCategory, PublishDay, ValidationErrors } from "@/types/forecast";
-import { YOUTUBE_CATEGORIES, PUBLISH_DAYS } from "@/types/forecast";
+import { useEffect, useRef, useState } from "react";
+import type {
+  AudioLanguage,
+  ForecastFormValues,
+  ForecastRequest,
+  ForecastValidationErrors,
+  MadeForKidsSelection,
+  PublishDay,
+  YoutubeCategory,
+} from "@/types/forecast";
+import {
+  AUDIO_LANGUAGES,
+  PUBLISH_DAYS,
+  YOUTUBE_CATEGORIES,
+} from "@/types/forecast";
+import {
+  hasValidationErrors,
+  toForecastRequest,
+  validateForecastForm,
+} from "@/lib/validation";
 
 interface ForecastFormProps {
-  onSubmit: (input: ForecastInput) => void;
+  onSubmit: (request: ForecastRequest) => void;
+  onReset: () => void;
   isLoading: boolean;
 }
 
-
-const INITIAL_INPUT: ForecastInput = {
+const INITIAL_VALUES: ForecastFormValues = {
   title: "",
   category: "",
-  durationMinutes: 0,
-  durationSeconds: 0,
-  publishDay: "",
-  publishHour: 18,
-  publishMinute: 0,
-  channelHandle: "",
+  durationMinutes: "",
+  durationSeconds: "",
+  audioLanguage: "",
+  madeForKids: "",
+  channelIdentifier: "",
+  plannedPublishDay: "",
+  plannedPublishHour: "",
+};
+
+const DRAFT_STORAGE_KEY = "viewcastlk.forecast-draft.v1";
+const DRAFT_FIELDS = [
+  "title",
+  "category",
+  "durationMinutes",
+  "durationSeconds",
+  "audioLanguage",
+  "madeForKids",
+  "channelIdentifier",
+  "plannedPublishDay",
+  "plannedPublishHour",
+] as const satisfies readonly (keyof ForecastFormValues)[];
+
+function readForecastDraft(): ForecastFormValues | null {
+  try {
+    const serialized = window.sessionStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!serialized) return null;
+
+    const candidate = JSON.parse(serialized) as unknown;
+    if (!candidate || typeof candidate !== "object") return null;
+
+    const values = candidate as Record<string, unknown>;
+    if (!DRAFT_FIELDS.every((field) => typeof values[field] === "string")) {
+      return null;
+    }
+
+    return candidate as ForecastFormValues;
+  } catch {
+    return null;
+  }
+}
+
+function storeForecastDraft(values: ForecastFormValues) {
+  try {
+    window.sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(values));
+  } catch {
+    return;
+  }
+}
+
+function removeForecastDraft() {
+  try {
+    window.sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+  } catch {
+    return;
+  }
+}
+
+const ERROR_FOCUS_TARGETS: Record<
+  keyof ForecastValidationErrors,
+  string
+> = {
+  title: "title",
+  category: "category",
+  duration: "durationMinutes",
+  audioLanguage: "audioLanguage",
+  madeForKids: "madeForKids-yes",
+  channelIdentifier: "channelIdentifier",
+  plannedPublishDay: "plannedPublishDay",
+  plannedPublishHour: "plannedPublishHour",
 };
 
 interface FieldProps {
   id: string;
   label: string;
+  requirement: "required" | "optional";
   error?: string;
-  required?: boolean;
-  children: React.ReactNode;
   hint?: string;
+  children: React.ReactNode;
 }
 
-function Field({ id, label, error, required, children, hint }: FieldProps) {
+function Field({
+  id,
+  label,
+  requirement,
+  error,
+  hint,
+  children,
+}: FieldProps) {
   return (
-    <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-sm font-medium text-slate-300">
-        {label}
-        {required && <span className="text-red-400 ml-1" aria-hidden="true">*</span>}
-      </label>
-      {hint && <p className="text-xs text-slate-500">{hint}</p>}
+    <div className="field">
+      <div className="field__heading">
+        <label className="field__label" htmlFor={id}>
+          {label}
+        </label>
+        <span className={"field__requirement field__requirement--" + requirement}>
+          {requirement === "required" ? "Required" : "Optional"}
+        </span>
+      </div>
+      {hint && (
+        <p className="field__hint" id={id + "-hint"}>
+          {hint}
+        </p>
+      )}
       {children}
       {error && (
-        <p id={`${id}-error`} role="alert" className="text-xs text-red-400 mt-0.5">
+        <p className="field__error" id={id + "-error"} role="alert">
           {error}
         </p>
       )}
@@ -48,265 +143,456 @@ function Field({ id, label, error, required, children, hint }: FieldProps) {
   );
 }
 
-const inputClass =
-  "w-full rounded-lg bg-slate-800 border border-slate-700 text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder:text-slate-500 disabled:opacity-50";
+function describedBy(id: string, hasHint: boolean, error?: string) {
+  return [
+    hasHint ? id + "-hint" : null,
+    error ? id + "-error" : null,
+  ]
+    .filter(Boolean)
+    .join(" ") || undefined;
+}
 
-const errorInputClass =
-  "w-full rounded-lg bg-slate-800 border border-red-500 text-slate-100 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent placeholder:text-slate-500";
+export default function ForecastForm({
+  onSubmit,
+  onReset,
+  isLoading,
+}: ForecastFormProps) {
+  const [values, setValues] = useState<ForecastFormValues>(INITIAL_VALUES);
+  const [errors, setErrors] = useState<ForecastValidationErrors>({});
+  const draftRestored = useRef(false);
+  const draftChangedByUser = useRef(false);
 
-export default function ForecastForm({ onSubmit, isLoading }: ForecastFormProps) {
-  const [input, setInput] = useState<ForecastInput>(INITIAL_INPUT);
-  const [errors, setErrors] = useState<ValidationErrors>({});
+  useEffect(() => {
+    const savedDraft = readForecastDraft();
+    const frameId = window.requestAnimationFrame(() => {
+      draftRestored.current = true;
+      if (savedDraft && !draftChangedByUser.current) {
+        setValues(savedDraft);
+      }
+    });
 
-  function set<K extends keyof ForecastInput>(key: K, value: ForecastInput[K]) {
-    setInput((prev) => ({ ...prev, [key]: value }));
-    // Clear error for this field when the user edits it
-    setErrors((prev) => {
-      const next = { ...prev };
-      delete next[key as keyof ValidationErrors];
+    return () => window.cancelAnimationFrame(frameId);
+  }, []);
+
+  useEffect(() => {
+    if (draftRestored.current) {
+      storeForecastDraft(values);
+    }
+  }, [values]);
+
+  function setValue<K extends keyof ForecastFormValues>(
+    key: K,
+    value: ForecastFormValues[K],
+    errorKey: keyof ForecastValidationErrors,
+  ) {
+    draftChangedByUser.current = true;
+    setValues((current) => ({ ...current, [key]: value }));
+    setErrors((current) => {
+      const next = { ...current };
+      delete next[errorKey];
       return next;
     });
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isLoading) return;
 
-    // Import validation lazily to avoid a circular dep warning in some setups
-    const { validateForecastInput, hasErrors } = await import("@/lib/validation");
-    const errs = validateForecastInput(input);
+    const nextErrors = validateForecastForm(values);
+    if (hasValidationErrors(nextErrors)) {
+      setErrors(nextErrors);
+      const firstError = Object.keys(nextErrors)[0] as
+        | keyof ForecastValidationErrors
+        | undefined;
 
-    if (hasErrors(errs)) {
-      setErrors(errs);
-      // Focus first error field
-      const firstKey = Object.keys(errs)[0];
-      document.getElementById(firstKey)?.focus();
+      if (firstError) {
+        document.getElementById(ERROR_FOCUS_TARGETS[firstError])?.focus();
+      }
       return;
     }
 
     setErrors({});
-    onSubmit(input);
+    onSubmit(toForecastRequest(values));
   }
 
   function handleReset() {
-    setInput(INITIAL_INPUT);
+    draftChangedByUser.current = true;
+    removeForecastDraft();
+    setValues(INITIAL_VALUES);
     setErrors({});
+    onReset();
+    requestAnimationFrame(() => document.getElementById("title")?.focus());
   }
+
+  const inputClass = (error?: string) =>
+    "field-control" + (error ? " field-control--invalid" : "");
 
   return (
     <form
+      id="forecast-form"
+      className="forecast-form"
       onSubmit={handleSubmit}
       noValidate
-      aria-label="Video forecast form"
-      className="bg-slate-800/50 rounded-2xl border border-slate-700 p-5 sm:p-6 space-y-5"
+      aria-labelledby="forecast-form-title"
+      aria-busy={isLoading}
     >
-      <div className="flex items-center justify-between">
-        <h2 className="text-slate-100 font-semibold text-base">Video metadata</h2>
-        <span className="text-xs text-slate-500">
-          <span className="text-red-400">*</span> required
-        </span>
+      <div className="form-section__header">
+        <div>
+          <p className="section-kicker">Forecast request</p>
+          <h2 id="forecast-form-title">Tell us about the planned video</h2>
+        </div>
+        <p>Required details are marked clearly.</p>
       </div>
 
-      {/* Title */}
-      <Field id="title" label="Planned video title" error={errors.title} required>
-        <input
+      <div className="form-grid">
+        <Field
           id="title"
-          type="text"
-          value={input.title}
-          onChange={(e) => set("title", e.target.value)}
-          placeholder="My upcoming video"
-          maxLength={200}
-          disabled={isLoading}
-          className={errors.title ? errorInputClass : inputClass}
-          aria-describedby={errors.title ? "title-error" : undefined}
-          aria-invalid={!!errors.title}
-        />
-      </Field>
-
-      {/* Category */}
-      <Field id="category" label="YouTube category" error={errors.category} required>
-        <select
-          id="category"
-          value={input.category}
-          onChange={(e) => set("category", e.target.value as YoutubeCategory | "")}
-          disabled={isLoading}
-          className={errors.category ? errorInputClass : inputClass}
-          aria-describedby={errors.category ? "category-error" : undefined}
-          aria-invalid={!!errors.category}
+          label="Video title"
+          requirement="required"
+          error={errors.title}
+          hint="Sinhala, Tamil, English, and mixed-script titles are supported."
         >
-          <option value="">— Select a category —</option>
-          {YOUTUBE_CATEGORIES.map((cat) => (
-            <option key={cat} value={cat}>
-              {cat}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      {/* Duration */}
-      <Field
-        id="durationMinutes"
-        label="Planned duration"
-        error={errors.duration}
-        required
-        hint="Enter the total planned length of your video."
-      >
-        <div className="flex items-center gap-2">
-          <div className="flex-1 relative">
-            <input
-              id="durationMinutes"
-              type="number"
-              min={0}
-              max={999}
-              value={input.durationMinutes === 0 ? "" : input.durationMinutes}
-              onChange={(e) =>
-                set("durationMinutes", Math.max(0, parseInt(e.target.value) || 0))
-              }
-              placeholder="0"
-              disabled={isLoading}
-              className={errors.duration ? errorInputClass : inputClass}
-              aria-label="Duration minutes"
-              aria-describedby={errors.duration ? "durationMinutes-error" : undefined}
-              aria-invalid={!!errors.duration}
-            />
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs">
-              min
-            </span>
-          </div>
-          <span className="text-slate-500 font-bold">:</span>
-          <div className="w-24 relative">
-            <input
-              id="durationSeconds"
-              type="number"
-              min={0}
-              max={59}
-              value={input.durationSeconds === 0 ? "" : input.durationSeconds}
-              onChange={(e) =>
-                set(
-                  "durationSeconds",
-                  Math.min(59, Math.max(0, parseInt(e.target.value) || 0))
-                )
-              }
-              placeholder="0"
-              disabled={isLoading}
-              className={errors.duration ? errorInputClass : inputClass}
-              aria-label="Duration seconds"
-              aria-invalid={!!errors.duration}
-            />
-            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs">
-              sec
-            </span>
-          </div>
-        </div>
-      </Field>
-
-      {/* Publish day + time row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <Field id="publishDay" label="Planned publish day" error={errors.publishDay} required>
-          <select
-            id="publishDay"
-            value={input.publishDay}
-            onChange={(e) => set("publishDay", e.target.value as PublishDay | "")}
+          <textarea
+            id="title"
+            name="title"
+            rows={3}
+            dir="auto"
+            value={values.title}
+            maxLength={200}
             disabled={isLoading}
-            className={errors.publishDay ? errorInputClass : inputClass}
-            aria-describedby={errors.publishDay ? "publishDay-error" : undefined}
-            aria-invalid={!!errors.publishDay}
+            className={inputClass(errors.title)}
+            placeholder="Enter the title you plan to publish"
+            aria-invalid={Boolean(errors.title)}
+            aria-describedby={describedBy("title", true, errors.title)}
+            onChange={(event) =>
+              setValue("title", event.target.value, "title")
+            }
+          />
+        </Field>
+
+        <Field
+          id="category"
+          label="Video category"
+          requirement="required"
+          error={errors.category}
+          hint="Choose the category you plan to use when publishing on YouTube."
+        >
+          <select
+            id="category"
+            name="category"
+            value={values.category}
+            disabled={isLoading}
+            className={inputClass(errors.category)}
+            aria-invalid={Boolean(errors.category)}
+            aria-describedby={describedBy("category", true, errors.category)}
+            onChange={(event) =>
+              setValue(
+                "category",
+                event.target.value as YoutubeCategory | "",
+                "category",
+              )
+            }
           >
-            <option value="">— Select day —</option>
-            {PUBLISH_DAYS.map((d) => (
-              <option key={d} value={d}>
-                {d}
+            <option value="">Choose a category</option>
+            {YOUTUBE_CATEGORIES.map((category) => (
+              <option value={category} key={category}>
+                {category}
               </option>
             ))}
           </select>
         </Field>
 
-        <Field id="publishTime" label="Planned publish time — Sri Lanka time (SLT)">
-          <input
-            id="publishTime"
-            type="time"
-            defaultValue={`${String(INITIAL_INPUT.publishHour).padStart(2, "0")}:${String(INITIAL_INPUT.publishMinute).padStart(2, "0")}`}
-            onChange={(e) => {
-              const [hStr, mStr] = e.target.value.split(":");
-              set("publishHour", parseInt(hStr) || 0);
-              set("publishMinute", parseInt(mStr) || 0);
-            }}
+        <Field
+          id="durationMinutes"
+          label="Planned duration"
+          requirement="required"
+          error={errors.duration}
+          hint="Enter the expected finished length."
+        >
+          <div className="duration-fields">
+            <label>
+              <span>Minutes</span>
+              <input
+                id="durationMinutes"
+                name="durationMinutes"
+                type="number"
+                inputMode="numeric"
+                min="0"
+                max="720"
+                value={values.durationMinutes}
+                disabled={isLoading}
+                className={inputClass(errors.duration)}
+                aria-invalid={Boolean(errors.duration)}
+                aria-describedby={describedBy(
+                  "durationMinutes",
+                  true,
+                  errors.duration,
+                )}
+                onChange={(event) =>
+                  setValue(
+                    "durationMinutes",
+                    event.target.value,
+                    "duration",
+                  )
+                }
+              />
+            </label>
+            <label>
+              <span>Seconds</span>
+              <input
+                id="durationSeconds"
+                name="durationSeconds"
+                type="number"
+                inputMode="numeric"
+                min="0"
+                max="59"
+                value={values.durationSeconds}
+                disabled={isLoading}
+                className={inputClass(errors.duration)}
+                aria-invalid={Boolean(errors.duration)}
+                aria-describedby={[
+                  "durationMinutes-hint",
+                  errors.duration ? "durationMinutes-error" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onChange={(event) =>
+                  setValue(
+                    "durationSeconds",
+                    event.target.value,
+                    "duration",
+                  )
+                }
+              />
+            </label>
+          </div>
+        </Field>
+
+        <Field
+          id="audioLanguage"
+          label="Audio language"
+          requirement="required"
+          error={errors.audioLanguage}
+          hint="Choose the main spoken or sung language; use Mixed / multilingual when several are used."
+        >
+          <select
+            id="audioLanguage"
+            name="audioLanguage"
+            value={values.audioLanguage}
             disabled={isLoading}
-            className={inputClass}
-            aria-label="Planned publish time in Sri Lanka Time"
+            className={inputClass(errors.audioLanguage)}
+            aria-invalid={Boolean(errors.audioLanguage)}
+            aria-describedby={describedBy(
+              "audioLanguage",
+              true,
+              errors.audioLanguage,
+            )}
+            onChange={(event) =>
+              setValue(
+                "audioLanguage",
+                event.target.value as AudioLanguage | "",
+                "audioLanguage",
+              )
+            }
+          >
+            <option value="">Choose the main audio language</option>
+            {AUDIO_LANGUAGES.map((language) => (
+              <option value={language} key={language}>
+                {language}
+              </option>
+            ))}
+          </select>
+        </Field>
+
+        <fieldset
+          className="field"
+          aria-invalid={Boolean(errors.madeForKids)}
+          aria-describedby={[
+            "madeForKids-hint",
+            errors.madeForKids ? "madeForKids-error" : null,
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          <div className="field__heading">
+            <legend className="field__label">Made for kids</legend>
+            <span className="field__requirement field__requirement--required">
+              Required
+            </span>
+          </div>
+          <p className="field__hint" id="madeForKids-hint">
+            Use the audience setting you plan to select when publishing on
+            YouTube.
+          </p>
+          <div className="choice-group">
+            {[
+              { value: "yes", label: "Yes" },
+              { value: "no", label: "No" },
+            ].map((option) => (
+              <label className="choice-control" key={option.value}>
+                <input
+                  id={"madeForKids-" + option.value}
+                  type="radio"
+                  name="madeForKids"
+                  value={option.value}
+                  checked={values.madeForKids === option.value}
+                  disabled={isLoading}
+                  onChange={(event) =>
+                    setValue(
+                      "madeForKids",
+                      event.target.value as MadeForKidsSelection,
+                      "madeForKids",
+                    )
+                  }
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+          {errors.madeForKids && (
+            <p className="field__error" id="madeForKids-error" role="alert">
+              {errors.madeForKids}
+            </p>
+          )}
+        </fieldset>
+
+        <Field
+          id="channelIdentifier"
+          label="YouTube channel"
+          requirement="required"
+          error={errors.channelIdentifier}
+          hint="Use a channel URL, @handle, or channel ID. Channel statistics are retrieved automatically."
+        >
+          <input
+            id="channelIdentifier"
+            name="channelIdentifier"
+            type="text"
+            value={values.channelIdentifier}
+            disabled={isLoading}
+            className={inputClass(errors.channelIdentifier)}
+            placeholder="https://youtube.com/@yourchannel"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck="false"
+            aria-invalid={Boolean(errors.channelIdentifier)}
+            aria-describedby={describedBy(
+              "channelIdentifier",
+              true,
+              errors.channelIdentifier,
+            )}
+            onChange={(event) =>
+              setValue(
+                "channelIdentifier",
+                event.target.value,
+                "channelIdentifier",
+              )
+            }
           />
         </Field>
       </div>
 
-      {/* Channel handle */}
-      <Field
-        id="channelHandle"
-        label="Channel handle or channel ID"
-        error={errors.channelHandle}
-        hint="Optional. e.g. @mychannel or UCxxxxxxxxxxxxxxxxxx"
-      >
-        <input
-          id="channelHandle"
-          type="text"
-          value={input.channelHandle}
-          onChange={(e) => set("channelHandle", e.target.value)}
-          placeholder="@mychannel"
-          disabled={isLoading}
-          className={errors.channelHandle ? errorInputClass : inputClass}
-          aria-describedby={errors.channelHandle ? "channelHandle-error" : undefined}
-          aria-invalid={!!errors.channelHandle}
-        />
-      </Field>
+      <section className="optional-section" aria-labelledby="timing-title">
+        <div>
+          <p className="section-kicker">Optional</p>
+          <h3 id="timing-title">Publishing plan</h3>
+          <p>
+            Leave either field blank if the publishing schedule is not decided.
+          </p>
+        </div>
 
-      {/* Actions */}
-      <div className="flex gap-3 pt-1">
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 px-6 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-offset-2 focus:ring-offset-slate-900 text-white font-semibold text-sm disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
-        >
-          {isLoading ? (
-            <>
-              <svg
-                className="w-4 h-4 animate-spin"
-                viewBox="0 0 24 24"
-                fill="none"
-                aria-hidden="true"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l-3 3 3 3v-4a8 8 0 01-8-8z"
-                />
-              </svg>
-              Generating forecast…
-            </>
-          ) : (
-            "Generate forecast"
-          )}
+        <div className="form-grid form-grid--timing">
+          <Field
+            id="plannedPublishDay"
+            label="Publishing day"
+            requirement="optional"
+            error={errors.plannedPublishDay}
+            hint="Choose a planned day only if you have decided one."
+          >
+            <select
+              id="plannedPublishDay"
+              name="plannedPublishDay"
+              value={values.plannedPublishDay}
+              disabled={isLoading}
+              className={inputClass(errors.plannedPublishDay)}
+              aria-invalid={Boolean(errors.plannedPublishDay)}
+              aria-describedby={describedBy(
+                "plannedPublishDay",
+                true,
+                errors.plannedPublishDay,
+              )}
+              onChange={(event) =>
+                setValue(
+                  "plannedPublishDay",
+                  event.target.value as PublishDay | "",
+                  "plannedPublishDay",
+                )
+              }
+            >
+              <option value="">Not decided</option>
+              {PUBLISH_DAYS.map((day) => (
+                <option value={day} key={day}>
+                  {day}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field
+            id="plannedPublishHour"
+            label="Publishing hour (SLT)"
+            requirement="optional"
+            error={errors.plannedPublishHour}
+            hint="Choose the planned Sri Lanka time only if it is decided."
+          >
+            <select
+              id="plannedPublishHour"
+              name="plannedPublishHour"
+              value={values.plannedPublishHour}
+              disabled={isLoading}
+              className={inputClass(errors.plannedPublishHour)}
+              aria-invalid={Boolean(errors.plannedPublishHour)}
+              aria-describedby={describedBy(
+                "plannedPublishHour",
+                true,
+                errors.plannedPublishHour,
+              )}
+              onChange={(event) =>
+                setValue(
+                  "plannedPublishHour",
+                  event.target.value,
+                  "plannedPublishHour",
+                )
+              }
+            >
+              <option value="">Not decided</option>
+              {Array.from({ length: 24 }, (_, hour) => (
+                <option value={String(hour)} key={hour}>
+                  {String(hour).padStart(2, "0")}:00
+                </option>
+              ))}
+            </select>
+          </Field>
+        </div>
+      </section>
+
+      <div className="form-actions">
+        <button className="primary-button" type="submit" disabled={isLoading}>
+          {isLoading ? "Generating forecast…" : "Generate forecast"}
         </button>
         <button
+          className="secondary-button"
           type="button"
-          onClick={handleReset}
           disabled={isLoading}
-          className="px-4 py-2.5 rounded-lg bg-slate-700 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-slate-400 focus:ring-offset-2 focus:ring-offset-slate-900 text-slate-300 text-sm font-medium disabled:opacity-50 transition-colors"
+          onClick={handleReset}
         >
-          Reset
+          Clear form
         </button>
       </div>
 
-      {/* Validation summary for screen readers */}
-      {Object.keys(errors).length > 0 && (
-        <div role="alert" className="sr-only">
-          {Object.values(errors).join(" ")}
-        </div>
+      {hasValidationErrors(errors) && (
+        <p className="sr-only" role="alert" aria-live="assertive">
+          Please correct the highlighted fields before generating a forecast.
+        </p>
       )}
     </form>
   );

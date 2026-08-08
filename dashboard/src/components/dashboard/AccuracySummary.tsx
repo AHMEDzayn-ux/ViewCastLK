@@ -1,74 +1,167 @@
-// Model accuracy section.
-// Fabricated numbers have been intentionally omitted.
-// These fields will be populated with genuine hold-out evaluation results
-// after model training and approved evaluation are complete.
+"use client";
 
-const METRICS = [
-  {
-    label: "MAPE",
-    description: "Mean Absolute Percentage Error",
-    colour: "text-slate-400",
-    bg: "bg-slate-800/50",
-    ring: "ring-slate-700",
-  },
-  {
-    label: "R²",
-    description: "Variance explained",
-    colour: "text-slate-400",
-    bg: "bg-slate-800/50",
-    ring: "ring-slate-700",
-  },
-  {
-    label: "MAE",
-    description: "Mean Absolute Error (views)",
-    colour: "text-slate-400",
-    bg: "bg-slate-800/50",
-    ring: "ring-slate-700",
-  },
-  {
-    label: "Baseline",
-    description: "Category-average naive baseline",
-    colour: "text-slate-400",
-    bg: "bg-slate-800/50",
-    ring: "ring-slate-700",
-  },
-];
+import { useState } from "react";
+import type {
+  AccuracyMetric,
+  AccuracyResponse,
+  AccuracyScope,
+} from "@/types/forecast";
 
-export default function AccuracySummary() {
+interface AccuracySummaryProps {
+  accuracy: AccuracyResponse;
+}
+
+const SCOPE_LABELS: Record<AccuracyScope, string> = {
+  combined: "Combined model",
+  day_7: "Day 7",
+  day_14: "Day 14",
+  day_21: "Day 21",
+  day_30: "Day 30",
+};
+
+function formatMetric(metric: AccuracyMetric, value: number | null): string {
+  if (value === null) return "Not published";
+  if (metric.unit === "percent") return `${value.toFixed(1)}%`;
+  if (metric.unit === "views") return value.toLocaleString("en-LK");
+  return value.toFixed(3);
+}
+
+export default function AccuracySummary({ accuracy }: AccuracySummaryProps) {
+  const [selectedScope, setSelectedScope] =
+    useState<AccuracyScope>("combined");
+  const selectedEvaluation =
+    accuracy.evaluations.find(
+      (evaluation) => evaluation.scope === selectedScope,
+    ) ?? accuracy.evaluations[0];
+  const primaryMetric = selectedEvaluation.metrics.find(
+    (metric) => metric.key === "mape",
+  );
+  const supportingMetrics = selectedEvaluation.metrics.filter(
+    (metric) => metric.key !== "mape",
+  );
+
   return (
-    <div className="bg-slate-800/30 rounded-2xl border border-slate-700 p-5 sm:p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-slate-100 font-semibold text-base">
-          Model accuracy
-        </h3>
-        <span className="text-xs text-slate-500 font-medium">
-          Awaiting evaluation
-        </span>
+    <div className="accuracy-summary">
+      {accuracy.status === "unavailable" && (
+        <section className="accuracy-unavailable" role="status">
+          <p className="section-kicker">Evaluation pending</p>
+          <h2>No accuracy figures are published yet</h2>
+          <p>
+            {accuracy.message ??
+              "Held-out model evaluation has not been approved for publication."}
+          </p>
+          <p>
+            ViewCastLK does not substitute demonstration values when real
+            evaluation results are unavailable.
+          </p>
+        </section>
+      )}
+
+      <div className="accuracy-scope-control">
+        <div>
+          <label htmlFor="accuracy-scope">Accuracy view</label>
+          <p>Compare the combined model or one forecast horizon.</p>
+        </div>
+        <select
+          id="accuracy-scope"
+          className="field-control"
+          value={selectedScope}
+          onChange={(event) =>
+            setSelectedScope(event.target.value as AccuracyScope)
+          }
+        >
+          {accuracy.evaluations.map((evaluation) => (
+            <option value={evaluation.scope} key={evaluation.scope}>
+              {SCOPE_LABELS[evaluation.scope]}
+            </option>
+          ))}
+        </select>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {METRICS.map((m) => (
-          <div
-            key={m.label}
-            className={`rounded-xl ${m.bg} ring-1 ${m.ring} p-3 flex flex-col gap-1`}
-          >
-            <span className="text-xs text-slate-500 uppercase tracking-wider font-semibold">
-              {m.label}
-            </span>
-            <span className={`text-sm font-semibold ${m.colour}`}>
-              Awaiting evaluation
-            </span>
-            <span className="text-xs text-slate-500 leading-tight">
-              {m.description}
-            </span>
+      {primaryMetric && (
+        <section className="primary-metric" aria-labelledby="primary-metric-title">
+          <div>
+            <p className="section-kicker">
+              {SCOPE_LABELS[selectedEvaluation.scope]} accuracy
+            </p>
+            <h2 id="primary-metric-title">{primaryMetric.label}</h2>
+            <p>{primaryMetric.description}</p>
           </div>
-        ))}
-      </div>
+          <dl className="metric-comparison">
+            <div>
+              <dt>{accuracy.modelName}</dt>
+              <dd>{formatMetric(primaryMetric, primaryMetric.modelValue)}</dd>
+            </div>
+            <div>
+              <dt>{accuracy.baselineName}</dt>
+              <dd>{formatMetric(primaryMetric, primaryMetric.baselineValue)}</dd>
+            </div>
+          </dl>
+          <p className="metric-direction">For MAPE, a lower value is better.</p>
+        </section>
+      )}
 
-      <p className="text-xs text-slate-500 mt-3">
-        Accuracy metrics will be added here after model training and approved
-        held-out evaluation are complete. No placeholder figures are shown.
-      </p>
+      <section className="supporting-metrics" aria-labelledby="supporting-title">
+        <div className="section-heading">
+          <div>
+            <p className="section-kicker">Supporting measures</p>
+            <h2 id="supporting-title">
+              {SCOPE_LABELS[selectedEvaluation.scope]} evaluation details
+            </h2>
+          </div>
+          <p>These measures provide context; none should be read in isolation.</p>
+        </div>
+
+        <div className="metric-table-wrap">
+          <table className="metric-table">
+            <thead>
+              <tr>
+                <th scope="col">Metric</th>
+                <th scope="col">Meaning</th>
+                <th scope="col">Model</th>
+                <th scope="col">Baseline</th>
+              </tr>
+            </thead>
+            <tbody>
+              {supportingMetrics.map((metric) => (
+                <tr key={metric.key}>
+                  <th scope="row">{metric.label}</th>
+                  <td>{metric.description}</td>
+                  <td>{formatMetric(metric, metric.modelValue)}</td>
+                  <td>{formatMetric(metric, metric.baselineValue)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="accuracy-notes" aria-labelledby="accuracy-notes-title">
+        <h2 id="accuracy-notes-title">How to read this page</h2>
+        <ul>
+          <li>
+            The baseline is a simple benchmark. Comparing against it shows
+            whether the forecasting model adds useful predictive value.
+          </li>
+          <li>
+            Evaluation results should come from held-out videos that were not
+            used to fit the model.
+          </li>
+          <li>
+            A strong average result does not guarantee an accurate forecast for
+            every individual video.
+          </li>
+        </ul>
+        {accuracy.evaluatedAt && (
+          <p>
+            Evaluation last updated{" "}
+            {new Date(accuracy.evaluatedAt).toLocaleDateString("en-LK", {
+              dateStyle: "long",
+            })}
+            .
+          </p>
+        )}
+      </section>
     </div>
   );
 }

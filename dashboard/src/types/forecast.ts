@@ -1,5 +1,3 @@
-// ─── Forecast domain types ────────────────────────────────────────────────────
-
 export const YOUTUBE_CATEGORIES = [
   "Film & Animation",
   "Autos & Vehicles",
@@ -20,6 +18,16 @@ export const YOUTUBE_CATEGORIES = [
 
 export type YoutubeCategory = (typeof YOUTUBE_CATEGORIES)[number];
 
+export const AUDIO_LANGUAGES = [
+  "Sinhala",
+  "Tamil",
+  "English",
+  "Mixed / multilingual",
+  "Other",
+] as const;
+
+export type AudioLanguage = (typeof AUDIO_LANGUAGES)[number];
+
 export const PUBLISH_DAYS = [
   "Monday",
   "Tuesday",
@@ -31,57 +39,121 @@ export const PUBLISH_DAYS = [
 ] as const;
 
 export type PublishDay = (typeof PUBLISH_DAYS)[number];
+export type ForecastHorizon = 7 | 14 | 21 | 30;
 
-export interface ForecastInput {
-  /** Planned video title */
+export interface ForecastRequest {
   title: string;
-  /** YouTube category */
-  category: YoutubeCategory | "";
-  /** Planned duration – minutes component */
-  durationMinutes: number;
-  /** Planned duration – seconds component (0-59) */
+  category: YoutubeCategory;
   durationSeconds: number;
-  /** Planned publish day of week */
-  publishDay: PublishDay | "";
-  /** Planned publish hour in Sri Lanka Time (0-23) */
-  publishHour: number;
-  /** Planned publish minute (0 or 30) */
-  publishMinute: number;
-  /** YouTube channel @handle or channel ID */
-  channelHandle: string;
+  audioLanguage: AudioLanguage;
+  madeForKids: boolean;
+  channelIdentifier: string;
+  plannedPublishDay: PublishDay | null;
+  plannedPublishHour: number | null;
 }
 
-export interface HorizonResult {
-  day: 7 | 14 | 21 | 30;
-  /** Lower-bound estimate */
-  low: number;
-  /** Median (central) estimate */
-  median: number;
-  /** Upper-bound estimate */
-  high: number;
+export type MadeForKidsSelection = "" | "yes" | "no";
+
+export interface ForecastFormValues {
+  title: string;
+  category: YoutubeCategory | "";
+  durationMinutes: string;
+  durationSeconds: string;
+  audioLanguage: AudioLanguage | "";
+  madeForKids: MadeForKidsSelection;
+  channelIdentifier: string;
+  plannedPublishDay: PublishDay | "";
+  plannedPublishHour: string;
 }
 
-export type RecommendationType = "timing" | "duration" | "category" | "general";
+export interface ForecastEstimate {
+  horizonDays: ForecastHorizon;
+  cumulativeViews: number;
+}
+
+export type RecommendationType = "timing" | "duration" | "format" | "title";
+
+export interface RecommendationEvidence {
+  label: string;
+  detail: string;
+}
 
 export interface Recommendation {
+  id: string;
   type: RecommendationType;
-  headline: string;
-  body: string;
+  title: string;
+  guidance: string;
+  evidence: RecommendationEvidence[];
 }
 
-export interface ForecastResult {
-  horizons: [HorizonResult, HorizonResult, HorizonResult, HorizonResult];
-  recommendations: Recommendation[];
-  /** ISO 8601 timestamp of when this result was generated */
+export type SupportingSource =
+  | "channel_lookup"
+  | "title_analysis"
+  | "historical_recommendations";
+
+export interface DataCompletenessIssue {
+  source: SupportingSource;
+  message: string;
+}
+
+export interface DataCompleteness {
+  status: "complete" | "degraded";
+  issues: DataCompletenessIssue[];
+}
+
+export interface TitleGuidance {
+  summary: string;
+  suggestions: string[];
+}
+
+export interface ModelMetadata {
+  modelVersion: string;
   generatedAt: string;
-  /** Always true for Phase 1 – mock data flag */
-  isMock: true;
+  dataSource: "prediction_api" | "mock";
 }
 
-export interface ValidationErrors {
+export interface ForecastResponse {
+  forecastId: string;
+  estimates: [
+    ForecastEstimate,
+    ForecastEstimate,
+    ForecastEstimate,
+    ForecastEstimate,
+  ];
+  recommendations: Recommendation[];
+  completeness: DataCompleteness;
+  titleGuidance?: TitleGuidance;
+  model: ModelMetadata;
+}
+
+export type AccuracyMetricKey = "mape" | "mae" | "rmse" | "r2";
+
+export interface AccuracyMetric {
+  key: AccuracyMetricKey;
+  label: string;
+  description: string;
+  unit: "percent" | "views" | "score";
+  modelValue: number | null;
+  baselineValue: number | null;
+}
+
+export interface AccuracyResponse {
+  status: "available" | "unavailable";
+  modelName: string;
+  baselineName: string;
+  evaluatedAt: string | null;
+  metrics: AccuracyMetric[];
+  dataSource: "prediction_api" | "mock";
+  message?: string;
+}
+
+export interface ForecastValidationErrors {
   title?: string;
   category?: string;
   duration?: string;
-  publishDay?: string;
-  channelHandle?: string;
+  audioLanguage?: string;
+  madeForKids?: string;
+  channelIdentifier?: string;
+  plannedPublishDay?: string;
+  plannedPublishHour?: string;
 }

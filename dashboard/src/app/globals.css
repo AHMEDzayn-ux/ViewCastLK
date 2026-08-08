@@ -841,6 +841,38 @@ select.field-control {
   font-size: 0.86rem;
 }
 
+.recommendation-item .recommendation-item__type {
+  margin: 0 0 0.2rem;
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.recommendation-item .recommendation-item__action {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.3rem 0.75rem;
+  margin: 0.65rem 0;
+  padding: 0.7rem 0.8rem;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+}
+
+.recommendation-item__action span {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 750;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.recommendation-item__action strong {
+  color: var(--accent-strong);
+}
+
 .recommendation-item details {
   margin-top: 0.75rem;
   color: var(--text-secondary);
@@ -869,6 +901,25 @@ select.field-control {
 .recommendation-item dd {
   margin: 0.1rem 0 0;
   overflow-wrap: anywhere;
+}
+
+.recommendation-unavailable {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  background: var(--surface-elevated);
+}
+
+.recommendation-unavailable h4 {
+  margin: 0.2rem 0 0;
+  font-size: 0.95rem;
+}
+
+.recommendation-unavailable ul {
+  margin: 0.65rem 0 0;
+  padding-left: 1.15rem;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
 }
 
 .title-guidance {
@@ -950,6 +1001,32 @@ select.field-control {
 .accuracy-summary {
   display: grid;
   gap: 1.25rem;
+}
+
+.accuracy-scope-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.2rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.accuracy-scope-control label {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 750;
+}
+
+.accuracy-scope-control p {
+  margin: 0.15rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+
+.accuracy-scope-control .field-control {
+  width: min(100%, 18rem);
 }
 
 .accuracy-unavailable,
@@ -1289,6 +1366,7 @@ select option {
 
   .form-section__header,
   .section-heading,
+  .accuracy-scope-control,
   .forecast-results__header,
   .forecast-results__footer,
   .methodology-cta,

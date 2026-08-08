@@ -25,6 +25,7 @@ const LIMITATIONS = [
   "Revenue is not predicted.",
   "Subscriber growth is not predicted.",
   "ViewCastLK does not determine the location of individual viewers.",
+  "ViewCastLK uses channels verified as Sri Lankan as a practical proxy for Sri Lankan content and audience patterns. Public data does not report the country of individual viewers, so this does not prove that every viewer is in Sri Lanka.",
   "Prediction intervals and confidence ranges are not part of the current release.",
   "Unexpected news, collaborations, external promotion, platform changes, and other events may cause actual performance to differ from the forecast.",
 ];

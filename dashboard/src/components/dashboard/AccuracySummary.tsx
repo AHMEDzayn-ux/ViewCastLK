@@ -1,11 +1,23 @@
+"use client";
+
+import { useState } from "react";
 import type {
   AccuracyMetric,
   AccuracyResponse,
+  AccuracyScope,
 } from "@/types/forecast";
 
 interface AccuracySummaryProps {
   accuracy: AccuracyResponse;
 }
+
+const SCOPE_LABELS: Record<AccuracyScope, string> = {
+  combined: "Combined model",
+  day_7: "Day 7",
+  day_14: "Day 14",
+  day_21: "Day 21",
+  day_30: "Day 30",
+};
 
 function formatMetric(metric: AccuracyMetric, value: number | null): string {
   if (value === null) return "Not published";
@@ -15,8 +27,16 @@ function formatMetric(metric: AccuracyMetric, value: number | null): string {
 }
 
 export default function AccuracySummary({ accuracy }: AccuracySummaryProps) {
-  const primaryMetric = accuracy.metrics.find((metric) => metric.key === "mape");
-  const supportingMetrics = accuracy.metrics.filter(
+  const [selectedScope, setSelectedScope] =
+    useState<AccuracyScope>("combined");
+  const selectedEvaluation =
+    accuracy.evaluations.find(
+      (evaluation) => evaluation.scope === selectedScope,
+    ) ?? accuracy.evaluations[0];
+  const primaryMetric = selectedEvaluation.metrics.find(
+    (metric) => metric.key === "mape",
+  );
+  const supportingMetrics = selectedEvaluation.metrics.filter(
     (metric) => metric.key !== "mape",
   );
 
@@ -37,10 +57,33 @@ export default function AccuracySummary({ accuracy }: AccuracySummaryProps) {
         </section>
       )}
 
+      <div className="accuracy-scope-control">
+        <div>
+          <label htmlFor="accuracy-scope">Accuracy view</label>
+          <p>Compare the combined model or one forecast horizon.</p>
+        </div>
+        <select
+          id="accuracy-scope"
+          className="field-control"
+          value={selectedScope}
+          onChange={(event) =>
+            setSelectedScope(event.target.value as AccuracyScope)
+          }
+        >
+          {accuracy.evaluations.map((evaluation) => (
+            <option value={evaluation.scope} key={evaluation.scope}>
+              {SCOPE_LABELS[evaluation.scope]}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {primaryMetric && (
         <section className="primary-metric" aria-labelledby="primary-metric-title">
           <div>
-            <p className="section-kicker">Primary metric</p>
+            <p className="section-kicker">
+              {SCOPE_LABELS[selectedEvaluation.scope]} accuracy
+            </p>
             <h2 id="primary-metric-title">{primaryMetric.label}</h2>
             <p>{primaryMetric.description}</p>
           </div>
@@ -62,7 +105,9 @@ export default function AccuracySummary({ accuracy }: AccuracySummaryProps) {
         <div className="section-heading">
           <div>
             <p className="section-kicker">Supporting measures</p>
-            <h2 id="supporting-title">A fuller evaluation view</h2>
+            <h2 id="supporting-title">
+              {SCOPE_LABELS[selectedEvaluation.scope]} evaluation details
+            </h2>
           </div>
           <p>These measures provide context; none should be read in isolation.</p>
         </div>
@@ -109,7 +154,7 @@ export default function AccuracySummary({ accuracy }: AccuracySummaryProps) {
         </ul>
         {accuracy.evaluatedAt && (
           <p>
-            Evaluation last updated {" "}
+            Evaluation last updated{" "}
             {new Date(accuracy.evaluatedAt).toLocaleDateString("en-LK", {
               dateStyle: "long",
             })}

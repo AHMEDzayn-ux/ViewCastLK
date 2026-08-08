@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type {
   AudioLanguage,
   ForecastFormValues,
@@ -38,6 +38,54 @@ const INITIAL_VALUES: ForecastFormValues = {
   plannedPublishDay: "",
   plannedPublishHour: "",
 };
+
+const DRAFT_STORAGE_KEY = "viewcastlk.forecast-draft.v1";
+const DRAFT_FIELDS = [
+  "title",
+  "category",
+  "durationMinutes",
+  "durationSeconds",
+  "audioLanguage",
+  "madeForKids",
+  "channelIdentifier",
+  "plannedPublishDay",
+  "plannedPublishHour",
+] as const satisfies readonly (keyof ForecastFormValues)[];
+
+function readForecastDraft(): ForecastFormValues | null {
+  try {
+    const serialized = window.sessionStorage.getItem(DRAFT_STORAGE_KEY);
+    if (!serialized) return null;
+
+    const candidate = JSON.parse(serialized) as unknown;
+    if (!candidate || typeof candidate !== "object") return null;
+
+    const values = candidate as Record<string, unknown>;
+    if (!DRAFT_FIELDS.every((field) => typeof values[field] === "string")) {
+      return null;
+    }
+
+    return candidate as ForecastFormValues;
+  } catch {
+    return null;
+  }
+}
+
+function storeForecastDraft(values: ForecastFormValues) {
+  try {
+    window.sessionStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(values));
+  } catch {
+    return;
+  }
+}
+
+function removeForecastDraft() {
+  try {
+    window.sessionStorage.removeItem(DRAFT_STORAGE_KEY);
+  } catch {
+    return;
+  }
+}
 
 const ERROR_FOCUS_TARGETS: Record<
   keyof ForecastValidationErrors,
@@ -111,12 +159,33 @@ export default function ForecastForm({
 }: ForecastFormProps) {
   const [values, setValues] = useState<ForecastFormValues>(INITIAL_VALUES);
   const [errors, setErrors] = useState<ForecastValidationErrors>({});
+  const draftRestored = useRef(false);
+  const draftChangedByUser = useRef(false);
+
+  useEffect(() => {
+    const savedDraft = readForecastDraft();
+    const frameId = window.requestAnimationFrame(() => {
+      draftRestored.current = true;
+      if (savedDraft && !draftChangedByUser.current) {
+        setValues(savedDraft);
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, []);
+
+  useEffect(() => {
+    if (draftRestored.current) {
+      storeForecastDraft(values);
+    }
+  }, [values]);
 
   function setValue<K extends keyof ForecastFormValues>(
     key: K,
     value: ForecastFormValues[K],
     errorKey: keyof ForecastValidationErrors,
   ) {
+    draftChangedByUser.current = true;
     setValues((current) => ({ ...current, [key]: value }));
     setErrors((current) => {
       const next = { ...current };
@@ -147,6 +216,8 @@ export default function ForecastForm({
   }
 
   function handleReset() {
+    draftChangedByUser.current = true;
+    removeForecastDraft();
     setValues(INITIAL_VALUES);
     setErrors({});
     onReset();
@@ -204,6 +275,7 @@ export default function ForecastForm({
           label="Video category"
           requirement="required"
           error={errors.category}
+          hint="Choose the category you plan to use when publishing on YouTube."
         >
           <select
             id="category"
@@ -212,7 +284,7 @@ export default function ForecastForm({
             disabled={isLoading}
             className={inputClass(errors.category)}
             aria-invalid={Boolean(errors.category)}
-            aria-describedby={describedBy("category", false, errors.category)}
+            aria-describedby={describedBy("category", true, errors.category)}
             onChange={(event) =>
               setValue(
                 "category",
@@ -278,9 +350,12 @@ export default function ForecastForm({
                 disabled={isLoading}
                 className={inputClass(errors.duration)}
                 aria-invalid={Boolean(errors.duration)}
-                aria-describedby={
-                  errors.duration ? "durationMinutes-error" : undefined
-                }
+                aria-describedby={[
+                  "durationMinutes-hint",
+                  errors.duration ? "durationMinutes-error" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 onChange={(event) =>
                   setValue(
                     "durationSeconds",
@@ -298,6 +373,7 @@ export default function ForecastForm({
           label="Audio language"
           requirement="required"
           error={errors.audioLanguage}
+          hint="Choose the main spoken or sung language; use Mixed / multilingual when several are used."
         >
           <select
             id="audioLanguage"
@@ -308,7 +384,7 @@ export default function ForecastForm({
             aria-invalid={Boolean(errors.audioLanguage)}
             aria-describedby={describedBy(
               "audioLanguage",
-              false,
+              true,
               errors.audioLanguage,
             )}
             onChange={(event) =>
@@ -330,9 +406,13 @@ export default function ForecastForm({
 
         <fieldset
           className="field"
-          aria-describedby={
-            errors.madeForKids ? "madeForKids-error" : undefined
-          }
+          aria-invalid={Boolean(errors.madeForKids)}
+          aria-describedby={[
+            "madeForKids-hint",
+            errors.madeForKids ? "madeForKids-error" : null,
+          ]
+            .filter(Boolean)
+            .join(" ")}
         >
           <div className="field__heading">
             <legend className="field__label">Made for kids</legend>
@@ -340,6 +420,10 @@ export default function ForecastForm({
               Required
             </span>
           </div>
+          <p className="field__hint" id="madeForKids-hint">
+            Use the audience setting you plan to select when publishing on
+            YouTube.
+          </p>
           <div className="choice-group">
             {[
               { value: "yes", label: "Yes" },
@@ -422,6 +506,7 @@ export default function ForecastForm({
             label="Publishing day"
             requirement="optional"
             error={errors.plannedPublishDay}
+            hint="Choose a planned day only if you have decided one."
           >
             <select
               id="plannedPublishDay"
@@ -432,7 +517,7 @@ export default function ForecastForm({
               aria-invalid={Boolean(errors.plannedPublishDay)}
               aria-describedby={describedBy(
                 "plannedPublishDay",
-                false,
+                true,
                 errors.plannedPublishDay,
               )}
               onChange={(event) =>
@@ -457,6 +542,7 @@ export default function ForecastForm({
             label="Publishing hour (SLT)"
             requirement="optional"
             error={errors.plannedPublishHour}
+            hint="Choose the planned Sri Lanka time only if it is decided."
           >
             <select
               id="plannedPublishHour"
@@ -467,7 +553,7 @@ export default function ForecastForm({
               aria-invalid={Boolean(errors.plannedPublishHour)}
               aria-describedby={describedBy(
                 "plannedPublishHour",
-                false,
+                true,
                 errors.plannedPublishHour,
               )}
               onChange={(event) =>

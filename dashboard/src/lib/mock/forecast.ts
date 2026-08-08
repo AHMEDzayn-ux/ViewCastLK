@@ -4,7 +4,9 @@ import type {
   ForecastRequest,
   ForecastResponse,
   Recommendation,
+  UnavailableRecommendation,
 } from "@/types/forecast";
+import { ACCURACY_SCOPES, PUBLISH_DAYS } from "@/types/forecast";
 
 function hashString(value: string): number {
   let hash = 2166136261;
@@ -57,75 +59,89 @@ function makeEstimates(request: ForecastRequest, random: () => number) {
   ];
 }
 
-function makeRecommendations(request: ForecastRequest): Recommendation[] {
-  const timingKnown =
-    request.plannedPublishDay !== null &&
-    request.plannedPublishHour !== null;
+function makeRecommendations(request: ForecastRequest): {
+  recommendations: Recommendation[];
+  unavailableRecommendations: UnavailableRecommendation[];
+} {
   const durationMinutes = Math.round(request.durationSeconds / 60);
+  const timingSeed = hashString(
+    request.category + "|" + request.channelIdentifier,
+  );
+  const recommendedDay = PUBLISH_DAYS[timingSeed % PUBLISH_DAYS.length];
+  const recommendedStartHours = [10, 12, 16, 18, 20] as const;
+  const recommendedStartHour =
+    recommendedStartHours[timingSeed % recommendedStartHours.length];
+  const recommendedEndHour = recommendedStartHour + 2;
 
-  return [
-    {
-      id: "mock-timing",
-      type: "timing",
-      title: timingKnown
-        ? "Compare the planned publishing window"
-        : "Publishing time remains flexible",
-      guidance: timingKnown
-        ? "Historically, similar " +
-          request.category +
-          " videos may perform differently across publishing windows. Review " +
-          request.plannedPublishDay +
-          " at " +
-          String(request.plannedPublishHour).padStart(2, "0") +
-          ":00 SLT alongside the production evidence when it becomes available."
-        : "No publishing day or hour was supplied, so timing is treated as unknown rather than assumed.",
-      evidence: [
-        {
-          label: "Development evidence",
-          detail:
-            "This mock adapter demonstrates the evidence format. The Prediction API will supply the historical category comparison.",
+  return {
+    recommendations: [
+      {
+        id: "mock-timing",
+        type: "timing",
+        title: "Recommended publishing window",
+        guidance:
+          "Historical publishing patterns can differ across time windows. Consider this window when the production evidence supports the same association.",
+        recommendedPublishingWindow: {
+          day: recommendedDay,
+          startHour: recommendedStartHour,
+          endHour: recommendedEndHour,
+          timeZone: "Asia/Colombo",
         },
-      ],
-    },
-    {
-      id: "mock-duration",
-      type: "duration",
-      title: "Review the planned duration",
-      guidance:
-        "Historically, duration can be associated with different viewing patterns. Compare the planned " +
-        durationMinutes +
-        "-minute format with similar videos before publishing.",
-      evidence: [
-        {
-          label: "Submitted plan",
-          detail: durationMinutes + " minutes in " + request.category + ".",
-        },
-        {
-          label: "Development evidence",
-          detail:
-            "A production response will replace this note with category-specific historical ranges.",
-        },
-      ],
-    },
-    {
-      id: "mock-title",
-      type: "title",
-      title: "Keep the title clear and specific",
-      guidance:
-        "Use accurate wording that helps viewers understand the video. Avoid misleading or provocative framing.",
-      evidence: [
-        {
-          label: "Title supplied",
-          detail: request.title,
-        },
-        {
-          label: "Development evidence",
-          detail:
-            "Hosted title analysis will provide neutral, constructive evidence through the Prediction API.",
-        },
-      ],
-    },
-  ];
+        evidence: [
+          {
+            label: "Historical timing evidence — development placeholder",
+            detail:
+              "A production response will provide the observed comparison between this window and alternative publishing times.",
+          },
+        ],
+      },
+      {
+        id: "mock-duration",
+        type: "duration",
+        title: "Review the planned duration",
+        guidance:
+          "Historically, duration can be associated with different viewing patterns. Compare the planned " +
+          durationMinutes +
+          "-minute format with similar videos before publishing.",
+        evidence: [
+          {
+            label: "Submitted plan",
+            detail: durationMinutes + " minutes in " + request.category + ".",
+          },
+          {
+            label: "Historical duration evidence — development placeholder",
+            detail:
+              "A production response will provide the relevant category comparison.",
+          },
+        ],
+      },
+      {
+        id: "mock-title",
+        type: "title",
+        title: "Keep the title clear and specific",
+        guidance:
+          "Historically associated title patterns can support planning. Use accurate wording and avoid misleading or provocative framing.",
+        evidence: [
+          {
+            label: "Title supplied",
+            detail: request.title,
+          },
+          {
+            label: "Historical title evidence — development placeholder",
+            detail:
+              "A production response will provide neutral, constructive title evidence.",
+          },
+        ],
+      },
+    ],
+    unavailableRecommendations: [
+      {
+        type: "format",
+        reason:
+          "Format guidance is unavailable because supporting evaluation evidence is not available for this forecast.",
+      },
+    ],
+  };
 }
 
 export function createMockForecast(request: ForecastRequest): ForecastResponse {
@@ -142,6 +158,7 @@ export function createMockForecast(request: ForecastRequest): ForecastResponse {
     ].join("|"),
   );
   const random = createRandom(seed);
+  const recommendationResult = makeRecommendations(request);
   const channelLookupUnavailable = request.channelIdentifier
     .toLowerCase()
     .includes("degraded-demo");
@@ -149,7 +166,9 @@ export function createMockForecast(request: ForecastRequest): ForecastResponse {
   return {
     forecastId: "mock-" + seed.toString(16),
     estimates: makeEstimates(request, random),
-    recommendations: makeRecommendations(request),
+    recommendations: recommendationResult.recommendations,
+    unavailableRecommendations:
+      recommendationResult.unavailableRecommendations,
     completeness: channelLookupUnavailable
       ? {
           status: "degraded",
@@ -180,6 +199,45 @@ export function createMockForecast(request: ForecastRequest): ForecastResponse {
 }
 
 export function createMockAccuracy(): AccuracyResponse {
+  const createUnpublishedMetrics = () => [
+    {
+      key: "mape" as const,
+      label: "MAPE",
+      description:
+        "Average prediction error expressed as a percentage of actual views.",
+      unit: "percent" as const,
+      modelValue: null,
+      baselineValue: null,
+    },
+    {
+      key: "mae" as const,
+      label: "MAE",
+      description:
+        "Average absolute difference between predicted and actual view counts.",
+      unit: "views" as const,
+      modelValue: null,
+      baselineValue: null,
+    },
+    {
+      key: "rmse" as const,
+      label: "RMSE",
+      description:
+        "A view-count error measure that gives more weight to larger misses.",
+      unit: "views" as const,
+      modelValue: null,
+      baselineValue: null,
+    },
+    {
+      key: "r2" as const,
+      label: "R²",
+      description:
+        "How much of the variation in actual view counts the model explains.",
+      unit: "score" as const,
+      modelValue: null,
+      baselineValue: null,
+    },
+  ];
+
   return {
     status: "unavailable",
     modelName: "Published ViewCastLK model",
@@ -188,43 +246,9 @@ export function createMockAccuracy(): AccuracyResponse {
     dataSource: "mock",
     message:
       "Published evaluation metrics are not available yet. No development values are substituted.",
-    metrics: [
-      {
-        key: "mape",
-        label: "MAPE",
-        description:
-          "Average prediction error expressed as a percentage of actual views.",
-        unit: "percent",
-        modelValue: null,
-        baselineValue: null,
-      },
-      {
-        key: "mae",
-        label: "MAE",
-        description:
-          "Average absolute difference between predicted and actual view counts.",
-        unit: "views",
-        modelValue: null,
-        baselineValue: null,
-      },
-      {
-        key: "rmse",
-        label: "RMSE",
-        description:
-          "A view-count error measure that gives more weight to larger misses.",
-        unit: "views",
-        modelValue: null,
-        baselineValue: null,
-      },
-      {
-        key: "r2",
-        label: "R²",
-        description:
-          "How much of the variation in actual view counts the model explains.",
-        unit: "score",
-        modelValue: null,
-        baselineValue: null,
-      },
-    ],
+    evaluations: ACCURACY_SCOPES.map((scope) => ({
+      scope,
+      metrics: createUnpublishedMetrics(),
+    })) as AccuracyResponse["evaluations"],
   };
 }

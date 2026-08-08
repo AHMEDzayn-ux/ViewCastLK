@@ -53,7 +53,10 @@ export default function ForecastResults({
       <DegradedNotice completeness={response.completeness} />
       <HorizonCards estimates={response.estimates} />
       <ForecastChart estimates={response.estimates} />
-      <RecommendationCards recommendations={response.recommendations} />
+      <RecommendationCards
+        recommendations={response.recommendations}
+        unavailableRecommendations={response.unavailableRecommendations}
+      />
 
       {response.titleGuidance && (
         <section className="title-guidance" aria-labelledby="title-guidance-title">

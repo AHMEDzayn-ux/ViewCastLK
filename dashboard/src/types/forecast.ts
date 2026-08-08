@@ -71,19 +71,48 @@ export interface ForecastEstimate {
   cumulativeViews: number;
 }
 
-export type RecommendationType = "timing" | "duration" | "format" | "title";
+export const RECOMMENDATION_TYPES = [
+  "timing",
+  "duration",
+  "format",
+  "title",
+] as const;
+
+export type RecommendationType = (typeof RECOMMENDATION_TYPES)[number];
 
 export interface RecommendationEvidence {
   label: string;
   detail: string;
 }
 
-export interface Recommendation {
+interface RecommendationBase {
   id: string;
-  type: RecommendationType;
   title: string;
   guidance: string;
-  evidence: RecommendationEvidence[];
+  evidence: [RecommendationEvidence, ...RecommendationEvidence[]];
+}
+
+export interface RecommendedPublishingWindow {
+  day: PublishDay;
+  startHour: number;
+  endHour: number;
+  timeZone: "Asia/Colombo";
+}
+
+export interface TimingRecommendation extends RecommendationBase {
+  type: "timing";
+  recommendedPublishingWindow: RecommendedPublishingWindow;
+}
+
+export interface ContentRecommendation extends RecommendationBase {
+  type: "duration" | "format" | "title";
+}
+
+export type Recommendation = TimingRecommendation | ContentRecommendation;
+
+export interface UnavailableRecommendation {
+  type: RecommendationType;
+  reason: string;
 }
 
 export type SupportingSource =
@@ -121,12 +150,23 @@ export interface ForecastResponse {
     ForecastEstimate,
   ];
   recommendations: Recommendation[];
+  unavailableRecommendations: UnavailableRecommendation[];
   completeness: DataCompleteness;
   titleGuidance?: TitleGuidance;
   model: ModelMetadata;
 }
 
 export type AccuracyMetricKey = "mape" | "mae" | "rmse" | "r2";
+
+export const ACCURACY_SCOPES = [
+  "combined",
+  "day_7",
+  "day_14",
+  "day_21",
+  "day_30",
+] as const;
+
+export type AccuracyScope = (typeof ACCURACY_SCOPES)[number];
 
 export interface AccuracyMetric {
   key: AccuracyMetricKey;
@@ -137,12 +177,23 @@ export interface AccuracyMetric {
   baselineValue: number | null;
 }
 
+export interface AccuracyEvaluation {
+  scope: AccuracyScope;
+  metrics: AccuracyMetric[];
+}
+
 export interface AccuracyResponse {
   status: "available" | "unavailable";
   modelName: string;
   baselineName: string;
   evaluatedAt: string | null;
-  metrics: AccuracyMetric[];
+  evaluations: [
+    AccuracyEvaluation,
+    AccuracyEvaluation,
+    AccuracyEvaluation,
+    AccuracyEvaluation,
+    AccuracyEvaluation,
+  ];
   dataSource: "prediction_api" | "mock";
   message?: string;
 }

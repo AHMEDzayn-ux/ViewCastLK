@@ -4,6 +4,11 @@ import type {
   ForecastResponse,
 } from "@/types/forecast";
 import {
+  ACCURACY_SCOPES,
+  PUBLISH_DAYS,
+  RECOMMENDATION_TYPES,
+} from "@/types/forecast";
+import {
   createMockAccuracy,
   createMockForecast,
 } from "@/lib/mock/forecast";
@@ -64,17 +69,70 @@ function isForecastResponse(value: unknown): value is ForecastResponse {
     );
   });
 
-  return (
-    typeof candidate.forecastId === "string" &&
-    validEstimates &&
+  const validRecommendations =
     Array.isArray(candidate.recommendations) &&
-    candidate.recommendations.every(
-      (recommendation) =>
+    candidate.recommendations.every((recommendation) => {
+      const validEvidence =
+        Array.isArray(recommendation.evidence) &&
+        recommendation.evidence.length > 0 &&
+        recommendation.evidence.every(
+          (evidence) =>
+            typeof evidence.label === "string" &&
+            typeof evidence.detail === "string",
+        );
+      const validBase =
+        RECOMMENDATION_TYPES.includes(recommendation.type) &&
         typeof recommendation.id === "string" &&
         typeof recommendation.title === "string" &&
         typeof recommendation.guidance === "string" &&
-        Array.isArray(recommendation.evidence),
-    ) &&
+        validEvidence;
+
+      if (!validBase || recommendation.type !== "timing") return validBase;
+
+      const window = recommendation.recommendedPublishingWindow;
+      return (
+        PUBLISH_DAYS.includes(window.day) &&
+        Number.isInteger(window.startHour) &&
+        window.startHour >= 0 &&
+        window.startHour <= 23 &&
+        Number.isInteger(window.endHour) &&
+        window.endHour >= 0 &&
+        window.endHour <= 23 &&
+        window.timeZone === "Asia/Colombo"
+      );
+    });
+
+  const validUnavailableRecommendations =
+    Array.isArray(candidate.unavailableRecommendations) &&
+    candidate.unavailableRecommendations.every(
+      (recommendation) =>
+        RECOMMENDATION_TYPES.includes(recommendation.type) &&
+        typeof recommendation.reason === "string" &&
+        recommendation.reason.length > 0,
+    );
+
+  const representedRecommendationTypes = [
+    ...(candidate.recommendations ?? []).map(
+      (recommendation) => recommendation.type,
+    ),
+    ...(candidate.unavailableRecommendations ?? []).map(
+      (recommendation) => recommendation.type,
+    ),
+  ];
+  const validRecommendationCoverage =
+    representedRecommendationTypes.length === RECOMMENDATION_TYPES.length &&
+    new Set(representedRecommendationTypes).size ===
+      RECOMMENDATION_TYPES.length &&
+    RECOMMENDATION_TYPES.every((type) =>
+      representedRecommendationTypes.includes(type),
+    );
+
+  return (
+    typeof candidate.forecastId === "string" &&
+    validEstimates &&
+    validRecommendations &&
+    validUnavailableRecommendations &&
+    validRecommendationCoverage &&
     (candidate.completeness?.status === "complete" ||
       candidate.completeness?.status === "degraded") &&
     Array.isArray(candidate.completeness.issues) &&
@@ -89,19 +147,35 @@ function isAccuracyResponse(value: unknown): value is AccuracyResponse {
   if (!value || typeof value !== "object") return false;
 
   const candidate = value as Partial<AccuracyResponse>;
+  const validEvaluations =
+    Array.isArray(candidate.evaluations) &&
+    candidate.evaluations.length === ACCURACY_SCOPES.length &&
+    candidate.evaluations.every(
+      (evaluation) =>
+        ACCURACY_SCOPES.includes(evaluation.scope) &&
+        Array.isArray(evaluation.metrics) &&
+        evaluation.metrics.some((metric) => metric.key === "mape") &&
+        evaluation.metrics.every(
+          (metric) =>
+            typeof metric.label === "string" &&
+            typeof metric.description === "string" &&
+            (metric.modelValue === null ||
+              Number.isFinite(metric.modelValue)) &&
+            (metric.baselineValue === null ||
+              Number.isFinite(metric.baselineValue)),
+        ),
+    );
+  const evaluationScopes = (candidate.evaluations ?? []).map(
+    (evaluation) => evaluation.scope,
+  );
+
   return (
     (candidate.status === "available" || candidate.status === "unavailable") &&
     typeof candidate.modelName === "string" &&
     typeof candidate.baselineName === "string" &&
-    Array.isArray(candidate.metrics) &&
-    candidate.metrics.some((metric) => metric.key === "mape") &&
-    candidate.metrics.every(
-      (metric) =>
-        typeof metric.label === "string" &&
-        typeof metric.description === "string" &&
-        (metric.modelValue === null || Number.isFinite(metric.modelValue)) &&
-        (metric.baselineValue === null || Number.isFinite(metric.baselineValue)),
-    )
+    validEvaluations &&
+    new Set(evaluationScopes).size === ACCURACY_SCOPES.length &&
+    ACCURACY_SCOPES.every((scope) => evaluationScopes.includes(scope))
   );
 }
 

@@ -21,7 +21,7 @@ on:
       retain_days:
         description: "Never drop a partition newer than this many days"
         required: false
-        default: "7"
+        default: "5"
       drop_above_mb:
         description: "Only start dropping once the database exceeds this size"
         required: false
@@ -112,7 +112,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          retain="${{ github.event.inputs.retain_days || '7' }}"
+          retain="${{ github.event.inputs.retain_days || '5' }}"
           above="${{ github.event.inputs.drop_above_mb || '380' }}"
           extra=""
           if [[ "${{ github.event.inputs.dry_run }}" == "true" ]]; then

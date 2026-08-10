@@ -39,6 +39,7 @@ import tempfile
 from datetime import date, datetime, timedelta, timezone
 
 import pandas as pd
+import psycopg2
 
 # pandas warns on every psycopg2 connection because it prefers SQLAlchemy; the
 # queries here are plain SELECTs and the warning would drown the run log.
@@ -51,6 +52,10 @@ from storage import connect, ensure_snapshot_partitions  # noqa: E402
 PARTITION_RE = re.compile(r"^video_snapshots_(\d{8})$")
 REMOTE = os.environ.get("ARCHIVE_REMOTE", "gdrive:ViewCastLK/archives")
 HORIZONS = (7, 14, 21, 30)
+
+# How far back label extraction looks. Wide enough to absorb several missed
+# runs, narrow enough that the statement stays well inside the timeout.
+LABEL_LOOKBACK_DAYS = int(os.environ.get("LABEL_LOOKBACK_DAYS", "4"))
 
 
 def sha256(path):
@@ -104,14 +109,27 @@ def check_default(conn):
     return n
 
 
-def extract_labels(conn):
+def extract_labels(conn, lookback_days=LABEL_LOOKBACK_DAYS):
     """Materialise the observation nearest each horizon, for every video.
 
-    Runs against whatever is currently in Postgres, every night, so a label is
-    already recorded long before its partition becomes a drop candidate. The
-    conflict clause keeps whichever observation is closest to the mark, so
-    re-running can only improve a label, never degrade one."""
+    Runs every night, so a label is recorded long before its partition becomes
+    a drop candidate. The conflict clause keeps whichever observation is
+    closest to the mark, so re-running can only improve a label, never degrade
+    one.
+
+    Only recent snapshots are considered. Scanning the whole table re-derives
+    labels that earlier runs already settled, and the cost grows with the
+    archive: at 1.9 million rows it exceeded the two-minute statement timeout
+    and took the whole job down with it -- including the export and drop phases
+    that had not run yet, so nothing was freed at exactly the moment space was
+    short. A snapshot can only become the closest observation to a horizon on
+    the run that records it, so a window a few days wide covers every new label
+    plus several missed runs.
+    """
     with conn.cursor() as cur:
+        # Belt and braces: this statement is far smaller now, but a night that
+        # follows a long outage still has more to do than usual.
+        cur.execute("SET LOCAL statement_timeout = '10min'")
         cur.execute("""
             CREATE TABLE IF NOT EXISTS video_horizon_labels (
                 video_id      text NOT NULL REFERENCES videos(video_id),
@@ -135,7 +153,8 @@ def extract_labels(conn):
               FROM video_snapshots s
               JOIN videos v USING (video_id)
         CROSS JOIN (VALUES (7), (14), (21), (30)) AS h(horizon)
-             WHERE abs(EXTRACT(EPOCH FROM (s.captured_at - v.published_at))/3600.0
+             WHERE s.captured_at >= now() - make_interval(days => %s)
+               AND abs(EXTRACT(EPOCH FROM (s.captured_at - v.published_at))/3600.0
                        - h.horizon * 24) <= 12
              ORDER BY s.video_id, h.horizon,
                       abs(EXTRACT(EPOCH FROM (s.captured_at - v.published_at))/3600.0
@@ -147,7 +166,7 @@ def extract_labels(conn):
                        like_count    = EXCLUDED.like_count,
                        comment_count = EXCLUDED.comment_count
                  WHERE abs(EXCLUDED.hours_off) < abs(video_horizon_labels.hours_off)
-        """)
+        """, (lookback_days,))
         n = cur.rowcount
     conn.commit()
     return n
@@ -183,6 +202,35 @@ def remote_size(dest, filename):
         return json.loads(r.stdout)[0]["Size"]
     except (ValueError, IndexError, KeyError):
         return None
+
+
+def report_remote_usage():
+    """How much the archive occupies, and how much room is left on the remote.
+
+    Worth logging every run rather than checking by hand: the archive is the
+    authoritative dataset, so it filling up is a quieter failure than the
+    database filling up -- collection would keep working while nothing new
+    could be preserved.
+    """
+    base = REMOTE.split(":", 1)[0]
+    size = rclone("size", REMOTE, "--json", check=False)
+    if size.returncode == 0 and size.stdout.strip():
+        try:
+            d = json.loads(size.stdout)
+            print(f"archive on {base}: {d['bytes']/1e6:,.0f} MB "
+                  f"across {d['count']:,} files")
+        except (ValueError, KeyError):
+            pass
+    about = rclone("about", f"{base}:", "--json", check=False)
+    if about.returncode == 0 and about.stdout.strip():
+        try:
+            d = json.loads(about.stdout)
+            used, total = d.get("used"), d.get("total")
+            if used is not None and total:
+                print(f"{base} storage: {used/1e9:.2f} GB of {total/1e9:.2f} GB "
+                      f"used ({100*used/total:.1f}%), {d.get('free', 0)/1e9:.2f} GB free")
+        except (ValueError, KeyError):
+            pass
 
 
 def check_remote():
@@ -248,7 +296,7 @@ def export_partition(conn, name, day, rows, work, dry_run):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--retain-days", type=int, default=7,
+    ap.add_argument("--retain-days", type=int, default=5,
                     help="never drop a partition newer than this, whatever the size")
     ap.add_argument("--drop-above-mb", type=float, default=380.0,
                     help="only start dropping once the database exceeds this")
@@ -273,10 +321,24 @@ def main():
     print(f"database: {size_before:.0f} MB "
           f"(drop threshold {args.drop_above_mb:.0f} MB)")
 
-    if not args.dry_run:
-        print(f"horizon labels materialised/updated: {extract_labels(conn):,}")
-    else:
+    # A label failure must not take the whole job down. Exporting is always
+    # safe -- it only copies -- and blocking it achieved nothing except leaving
+    # the database full. Dropping is different: a partition must not be removed
+    # before the observations it holds have been materialised, so that stays
+    # gated on labels having succeeded.
+    labels_ok = True
+    if args.dry_run:
         print("dry run: skipping label extraction")
+    else:
+        try:
+            print(f"horizon labels materialised/updated: {extract_labels(conn):,}")
+        except psycopg2.Error as e:
+            conn.rollback()
+            labels_ok = False
+            print(f"WARNING: label extraction failed ({type(e).__name__}: "
+                  f"{str(e).strip()[:120]}). Exporting anyway; dropping is "
+                  f"skipped this run because a partition must not be removed "
+                  f"before its observations are materialised.")
 
     work = args.workdir or tempfile.mkdtemp(prefix="vcl-archive-")
     os.makedirs(work, exist_ok=True)
@@ -327,10 +389,18 @@ def main():
         print(f"  {name}: empty and older than the floor, dropped")
 
     # --------------------------------------------------------------- drop
+    if not labels_ok:
+        print("\nno drops: label extraction failed, so it cannot be shown that "
+              "every partition's observations are safely materialised.")
+        report_remote_usage()
+        conn.close()
+        return
+
     if size_before < args.drop_above_mb:
         print(f"\nno drops: {size_before:.0f} MB is below the "
               f"{args.drop_above_mb:.0f} MB threshold. History stays queryable "
               f"in Postgres until space actually runs short.")
+        report_remote_usage()
         conn.close()
         return
 
@@ -363,6 +433,7 @@ def main():
 
     print(f"\ndropped {dropped} partition(s); database "
           f"{size_before:.0f} -> {db_size_mb(conn):.0f} MB")
+    report_remote_usage()
     conn.close()
 
 

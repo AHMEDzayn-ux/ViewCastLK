@@ -117,6 +117,47 @@ def connect(session_pooler: bool = False):
 _connect = connect  # internal alias, kept for the calls below
 
 
+FETCH = 5_000
+
+
+def read_df(conn, query: str, fetch: int = FETCH):
+    """Run a read-only query through a SERVER-SIDE cursor into a DataFrame.
+
+    psycopg2's default cursor is client-side: it pulls the entire result before
+    the caller sees a single row, so the whole answer must survive one
+    uninterrupted trip through the pooler. Past a certain size it does not --
+    the connection dies with "SSL connection has been closed unexpectedly" or
+    "SSL error: unexpected eof while reading", which look like network faults
+    and are not. Every bulk reader in this project has hit it in turn: first
+    shipping description (~60 MB), then the videos query at 63,889 rows, then
+    reading video_id and published_at for the whole corpus.
+
+    A named cursor keeps the result on the server and pulls it in batches, so
+    no single round trip is large enough to break and client memory stays flat
+    as the corpus grows. It lives here rather than in any one script because
+    the failure kept reappearing somewhere new -- one implementation means one
+    place to be right.
+
+    Reads only. pandas is imported lazily so collector runs, which never call
+    this, do not pay for it.
+    """
+    import pandas as pd
+
+    name = f"vc_{abs(hash(query)) & 0xffffffff:08x}"
+    with conn.cursor(name=name) as cur:
+        cur.itersize = fetch
+        cur.execute(query)
+        # A named cursor sends no row description until the first fetch, so
+        # cur.description is None if read before this point.
+        frames, rows = [], cur.fetchmany(fetch)
+        cols = [d.name for d in cur.description]
+        while rows:
+            frames.append(pd.DataFrame(rows, columns=cols))
+            rows = cur.fetchmany(fetch)
+    return (pd.concat(frames, ignore_index=True) if frames
+            else pd.DataFrame(columns=cols))
+
+
 def _clean(value):
     """Blank strings from flatten_* (a missing API field) become SQL NULL —
     an empty string is not a valid bigint/boolean/timestamptz literal."""

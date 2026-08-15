@@ -1,0 +1,71 @@
+name: Gemini title scoring
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 02:00 UTC is 07:30 in Sri Lanka.
+    - cron: "0 2 * * *"
+
+permissions:
+  contents: write
+
+# Do not let two runs score and update the CSV at the same time.
+concurrency:
+  group: gemini-title-scoring
+  cancel-in-progress: false
+
+jobs:
+  score-titles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+
+    steps:
+      - name: Check out main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Score pending titles
+        id: scoring
+        continue-on-error: true
+        # Leave time for the following step to commit partial progress.
+        timeout-minutes: 300
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: >-
+          python scripts/score_video_titles.py
+          --limit 500
+          --requests-per-minute 8
+
+      # Save every successful score even if a later API request fails.
+      - name: Commit scoring progress
+        if: always()
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -- Dataset/title_scores.csv
+
+          if git diff --cached --quiet; then
+            echo "No new title scores to commit."
+            exit 0
+          fi
+
+          git commit -m "data: checkpoint Gemini title scores"
+          git pull --rebase origin main
+          git push origin HEAD:main
+
+      # Preserve the original failure after committing any partial progress.
+      - name: Report scoring failure
+        if: ${{ steps.scoring.outcome == 'failure' }}
+        run: exit 1

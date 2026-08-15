@@ -1,5 +1,7 @@
 google-api-python-client
 python-dotenv
 psycopg2-binary
-pandas
+pandas>=2.2,<4
 pyarrow
+google-genai==2.11.0
+pydantic>=2,<3

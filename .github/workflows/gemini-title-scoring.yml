@@ -1,23 +1,30 @@
-name: Gemini title scoring
+name: Gemini title scoring batch proof
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/gemini-title-scoring.yml"
+      - "scripts/score_video_titles.py"
+      - "scripts/score_video_titles_batch.py"
+      - "tests/test_score_video_titles_batch.py"
   schedule:
-    # 02:00 UTC is 07:30 in Sri Lanka.
-    - cron: "0 2 * * *"
+    # Resume asynchronously without keeping a runner alive while Gemini works.
+    - cron: "17 */6 * * *"
 
 permissions:
   contents: write
 
-# Do not let two runs score and update the CSV at the same time.
 concurrency:
   group: gemini-title-scoring
   cancel-in-progress: false
 
 jobs:
-  score-titles:
+  batch-proof:
     runs-on: ubuntu-latest
-    timeout-minutes: 330
+    timeout-minutes: 15
 
     steps:
       - name: Check out main
@@ -35,37 +42,38 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Score pending titles
-        id: scoring
+      - name: Test Batch proof components
+        run: python -m unittest discover -s tests -p "test_score_video_titles_batch.py" -v
+
+      - name: Submit or poll the 100-title proof
+        id: batch
         continue-on-error: true
-        # Leave time for the following step to commit partial progress.
-        timeout-minutes: 300
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: >-
-          python scripts/score_video_titles.py
-          --limit 500
-          --requests-per-minute 8
+          python scripts/score_video_titles_batch.py run
+          --limit 100
 
-      # Save every successful score even if a later API request fails.
-      - name: Commit scoring progress
+      - name: Commit Batch proof state and scores
         if: always()
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -- Dataset/title_scores.csv
+          if [[ -f Dataset/title_batch_proof_state.json ]]; then
+            git add -- Dataset/title_batch_proof_state.json
+          fi
 
           if git diff --cached --quiet; then
-            echo "No new title scores to commit."
+            echo "No Batch proof progress to commit."
             exit 0
           fi
 
-          git commit -m "data: checkpoint Gemini title scores"
+          git commit -m "data: checkpoint Gemini Batch title-scoring proof"
           git pull --rebase origin main
           git push origin HEAD:main
 
-      # Preserve the original failure after committing any partial progress.
-      - name: Report scoring failure
-        if: ${{ steps.scoring.outcome == 'failure' }}
+      - name: Report Batch proof failure
+        if: ${{ steps.batch.outcome == 'failure' }}
         run: exit 1

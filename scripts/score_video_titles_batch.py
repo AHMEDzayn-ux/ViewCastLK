@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -166,6 +167,40 @@ def api_state_name(batch_job: object) -> str:
     return str(getattr(state, "name", None) or state or "JOB_STATE_UNSPECIFIED")
 
 
+def file_state_name(file: object) -> str:
+    state = getattr(file, "state", None)
+    return str(getattr(state, "name", None) or state or "STATE_UNSPECIFIED")
+
+
+def wait_for_file_active(
+    client: genai.Client,
+    file_name: str,
+    *,
+    timeout_seconds: float = 120.0,
+    poll_seconds: float = 2.0,
+) -> object:
+    """Wait until a JSONL upload is ready before creating its Batch job."""
+    if timeout_seconds <= 0 or poll_seconds <= 0:
+        raise ValueError("File readiness timeout and poll interval must be positive")
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        uploaded_file = client.files.get(name=file_name)
+        state = file_state_name(uploaded_file)
+        if state == "ACTIVE":
+            return uploaded_file
+        if state == "FAILED":
+            raise RuntimeError(
+                f"Gemini File API processing failed for {file_name}: "
+                f"{json_safe(getattr(uploaded_file, 'error', None))}"
+            )
+        if time.monotonic() >= deadline:
+            raise TimeoutError(
+                f"Gemini File API did not make {file_name} ACTIVE within {timeout_seconds:g}s; "
+                f"last state was {state}"
+            )
+        time.sleep(poll_seconds)
+
+
 def json_safe(value: object) -> Any:
     if value is None:
         return None
@@ -205,6 +240,7 @@ def submit_proof(
         input_file_name = str(getattr(uploaded_file, "name", "") or "")
         if not input_file_name:
             raise ValueError("Gemini File API returned no uploaded file name")
+        wait_for_file_active(client, input_file_name)
         batch_job = client.batches.create(
             model=MODEL_ID,
             src=input_file_name,

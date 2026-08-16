@@ -5,6 +5,8 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -50,6 +52,32 @@ def successful_output(key: str, *, model_version: str = MODEL_ID) -> dict[str, o
 
 
 class BatchScoringTests(unittest.TestCase):
+    def test_file_upload_waits_until_active(self) -> None:
+        files = SimpleNamespace(
+            get=unittest.mock.Mock(
+                side_effect=[
+                    SimpleNamespace(state=SimpleNamespace(name="PROCESSING")),
+                    SimpleNamespace(state=SimpleNamespace(name="ACTIVE")),
+                ]
+            )
+        )
+        client = SimpleNamespace(files=files)
+        with patch.object(batch.time, "sleep") as sleep:
+            result = batch.wait_for_file_active(
+                client, "files/proof", timeout_seconds=10, poll_seconds=0.01
+            )
+        self.assertEqual(batch.file_state_name(result), "ACTIVE")
+        self.assertEqual(files.get.call_count, 2)
+        sleep.assert_called_once_with(0.01)
+
+    def test_file_upload_failure_is_not_submitted(self) -> None:
+        failed_file = SimpleNamespace(
+            state=SimpleNamespace(name="FAILED"), error="invalid JSONL"
+        )
+        client = SimpleNamespace(files=SimpleNamespace(get=lambda **_: failed_file))
+        with self.assertRaisesRegex(RuntimeError, "File API processing failed"):
+            batch.wait_for_file_active(client, "files/proof", timeout_seconds=1, poll_seconds=0.01)
+
     def test_request_uses_frozen_prompt_and_structured_schema(self) -> None:
         row = pd.Series({"video_id": "v1", "title": 'A title saying "now"', "title_sha256": "abc"})
         request = batch.build_batch_request("title-001", row)

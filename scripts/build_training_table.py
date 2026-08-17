@@ -42,7 +42,7 @@ import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import metadata_changes  # noqa: E402
-from storage import connect  # noqa: E402
+from storage import connect, read_df  # noqa: E402
 
 HORIZONS = (7, 14, 21, 30)
 TOLERANCE_HOURS = 12.0
@@ -106,6 +106,7 @@ SELECT v.video_id, v.channel_id, v.published_at, v.title,
        -- the characters as they are.
        encode(sha256(convert_to(coalesce(v.description, '') || chr(31), 'UTF8')),
               'hex') AS description_sha,
+       v.thumbnail_url,
        v.tags, v.category_id, v.category_name, v.duration, v.definition,
        v.caption, v.made_for_kids, v.default_audio_language, v.default_language,
        c.country AS channel_country, c.channel_published_at,
@@ -180,7 +181,8 @@ ORDER BY channel_id, captured_at ASC
 
 
 def read(conn, sql):
-    return pd.read_sql_query(sql, conn)
+    """Bulk read. Server-side cursor -- see storage.read_df for why."""
+    return read_df(conn, sql)
 
 
 def main():
@@ -281,13 +283,29 @@ def main():
         "publish_hour_sin", "publish_hour_cos", "publish_dow_sin", "publish_dow_cos",
         "title_length", "title_word_count", "title_has_number", "title_has_question",
         "title_has_exclaim", "title_upper_ratio", "title_script",
-        "description_length", "tag_count",
+        # Raw tags travel alongside tag_count. They are set by the uploader
+        # before publication, so they are legitimately a feature, and they are
+        # the richest text field available downstream -- the counted form
+        # throws away exactly what a TF-IDF or embedding would use. Pipe
+        # separated, as stored. Description is deliberately NOT here: only its
+        # length and hash are exported, both computed in the database.
+        "tags", "description_length", "tag_count",
         "ch_subs_at_publish", "ch_views_at_publish", "ch_videos_at_publish",
         "channel_age_days_at_publish", "channel_country", "topic_categories",
     ]
     LABELS = [f"d{h}_{k}" for h in HORIZONS
               for k in ("views", "likes", "comments", "hours_off", "usable")]
-    KEYS = ["video_id", "channel_id", "published_at", "title"]
+    # thumbnail_url is a KEY, not a feature. The string itself predicts nothing
+    # -- it is a CDN path built from the video id -- but it is what downstream
+    # work needs to fetch the image and derive real thumbnail features (faces,
+    # text, brightness, colour). It is exported for that, not to be one-hot
+    # encoded.
+    #
+    # It also cannot detect a changed thumbnail: YouTube serves a replaced
+    # image from the SAME url, which is why the metadata-change detector
+    # tracks titles and descriptions but not thumbnails. An image downloaded
+    # today may not be the one published with the video.
+    KEYS = ["video_id", "channel_id", "published_at", "title", "thumbnail_url"]
     META = ["eligible", "is_live_broadcast", "channel_stats_backfilled", "ch_stats_as_of",
             "title_changed", "description_changed"]
 
@@ -300,11 +318,26 @@ def main():
 
     out = df[KEYS + FEATURES + LABELS + META]
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+    # utf-8-sig so Excel reads Sinhala and Tamil titles instead of mojibake.
     out.to_csv(args.out, index=False, encoding="utf-8-sig")
+
+    # Parquet as well, and it is the one to model from. CSV has no types, so
+    # every read re-guesses them: the booleans come back as the strings "True"
+    # and "False", published_at as text, and a missing integer silently turns
+    # the column to float. Parquet carries the schema, so a teammate loading it
+    # gets the same dtypes this script produced.
+    pq = os.path.splitext(args.out)[0] + ".parquet"
+    try:
+        out.to_parquet(pq, index=False, compression="zstd")
+    except Exception as e:                       # pyarrow absent, not fatal
+        pq = None
+        print(f"note: parquet not written ({e.__class__.__name__}); CSV only")
 
     # ---- summary ----------------------------------------------------------
     el = out[out.eligible]
     print(f"\nwrote {os.path.abspath(args.out)}")
+    if pq:
+        print(f"wrote {os.path.abspath(pq)}")
     print(f"rows: {len(out):,}   eligible: {len(el):,}   "
           f"features: {len(FEATURES)}   labels: {len(LABELS)}")
     print(f"tolerance: +/-{args.tolerance:g}h from each horizon\n")

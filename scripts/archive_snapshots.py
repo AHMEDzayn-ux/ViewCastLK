@@ -296,7 +296,16 @@ def export_partition(conn, name, day, rows, work, dry_run):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--retain-days", type=int, default=5,
+    # Three days, down from five on 16 August. At five the job could only ever
+    # free one partition a night while collection added a slightly larger one,
+    # so the database climbed to 479 MB of the 500 MB tier -- about two days
+    # from failing writes. Nothing is lost by holding less: every partition is
+    # on Drive before it can be dropped, and the day 7/14/21/30 labels the
+    # model trains on live in video_horizon_labels, which is never dropped.
+    # The cost is tolerance for consecutive failed runs, which this buys back
+    # by keeping the database far enough below the ceiling to have room to
+    # recover in.
+    ap.add_argument("--retain-days", type=int, default=3,
                     help="never drop a partition newer than this, whatever the size")
     ap.add_argument("--drop-above-mb", type=float, default=380.0,
                     help="only start dropping once the database exceeds this")

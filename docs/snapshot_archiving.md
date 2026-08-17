@@ -26,9 +26,23 @@ pipeline is unaffected by how aggressively partitions are dropped.
 
 Partition granularity sets the smallest unit that can be dropped. With weekly
 partitions the database would hold between 7 and 14 days depending on where the
-week boundary falls, and the peak exceeds the free tier. Daily partitions settle
-at 7–8 days once dropping begins, and absorb four or five consecutive failed
-runs before space becomes a concern.
+week boundary falls, and the peak exceeds the free tier. Daily partitions can be
+retained to the exact day, which is what makes the retention floor a usable
+control rather than a coarse one.
+
+That control has had to tighten. Retention was 7 days, then 5, and from
+16 August 3. The reason is that the steady state is not stable: the job frees
+one partition a night while collection adds a slightly larger one, because the
+roster and the tracking window keep growing. At five days the database reached
+479 MB of the 500 MB tier — roughly two days from failing writes — and the
+archive could not dig itself out, since only one partition was ever eligible.
+
+Holding less costs nothing in data. A partition is on Drive before it can be
+dropped, and the day 7/14/21/30 labels the model trains on live in
+`video_horizon_labels`, which is never dropped. What it does cost is slack: at
+three days the job tolerates fewer consecutive failures before a horizon could
+pass unlabelled. It buys that back by keeping the database far enough below the
+ceiling to have room to recover in.
 
 Empty partitions — one for each day the collector produced nothing, as on
 19 July — hold nothing to preserve, so they are dropped on age alone without

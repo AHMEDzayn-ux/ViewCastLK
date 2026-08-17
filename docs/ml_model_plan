@@ -1,0 +1,731 @@
+# ViewCastLK — Machine Learning Model Plan
+ 
+**A Data-Driven Tool for Forecasting Viewership Trends of Sri Lankan YouTube Content**
+ 
+| | |
+|---|---|
+| **Group ID** | 2 |
+| **Project ID** | P07 |
+| **Module** | In22-S5-CS3501 Data Science and Engineering Project |
+| **Department** | Computer Science and Engineering, University of Moratuwa |
+| **Mentor** | Dr. Chathuranga Hettiarachchi |
+| **Teaching Assistant** | Muthumala V.D.W. |
+| **Document owner** | AHMEDH M.R.R (230027U) — Feature Engineering & Model Training |
+| **Document status** | Draft for team review and sign-off |
+| **Date** | 29 July 2026 |
+ 
+---
+ 
+## Purpose of this document
+ 
+This document records the complete design of the ViewCastLK forecasting model: the modelling
+approach, the exact feature set, how each feature is produced, how the model is trained and
+validated, what metrics are reported, what the dashboard sends to the model and receives back,
+and who owns which piece of work.
+ 
+It is written to be:
+ 
+1. **Approved by the team** — every design decision is stated explicitly so that agreement or
+   disagreement can be recorded before implementation begins.
+2. **Executed by Claude Code** — Sections 4 through 10 are specific enough to be handed to an
+   agent as an implementation specification.
+3. **Reused in the final report** — the rationale for each decision is written out, not just the
+   decision itself.
+Items that are **not yet decided** are collected in Section 12 (Open Decisions) rather than being
+silently assumed. Nothing in Section 12 blocks the start of implementation.
+ 
+---
+ 
+## 1. Modelling Approach and Rationale
+ 
+### 1.1 The core constraint: this is a pre-publication forecast
+ 
+ViewCastLK predicts how a video will perform **before it is published**. At prediction time the
+video does not exist on YouTube yet. There are no day-1 views, no day-2 views, no early
+engagement curve — only the metadata the creator is planning to use.
+ 
+This single constraint determines the entire modelling approach and must be understood by everyone
+on the team, because it rules out a class of methods that would otherwise be natural for this
+problem.
+ 
+### 1.2 Why not classical time-series forecasting
+ 
+Classical time-series methods (ARIMA, SARIMA, Prophet) and sequence models (LSTM, GRU,
+Transformers) forecast future values of a series **from past values of that same series**. They
+require a history of the target variable as input.
+ 
+For ViewCastLK that history does not exist at prediction time. A model that needs "views on day 1
+through day 6" in order to predict day 7 cannot serve a creator who has not published yet. It
+would be solving a different problem: *trajectory refinement for an already-published video*.
+ 
+That is a legitimate and interesting problem, and it is recorded in Section 11 as a possible
+version 2 feature. It is explicitly **out of scope for version 1**.
+ 
+### 1.3 Chosen approach: XGBoost multi-output regression
+ 
+The chosen approach is a gradient-boosted decision tree model (XGBoost) trained on **pre-publication
+tabular features only**, producing four outputs simultaneously:
+ 
+- `d7_views` — predicted view count 7 days after publication
+- `d14_views` — predicted view count 14 days after publication
+- `d21_views` — predicted view count 21 days after publication
+- `d30_views` — predicted view count 30 days after publication
+This is justified because:
+ 
+- The feature space is tabular, mixed-type (numeric, boolean, categorical) and moderate in size —
+  exactly the regime where gradient-boosted trees are the strongest default.
+- XGBoost handles missing values natively, which matters because the dashboard allows optional
+  inputs (Section 9).
+- Feature importances are directly interpretable, which the project needs for the insights layer
+  and for the ablation study (Section 8.4).
+- The dataset is in the hundreds-to-low-thousands of videos. Deep sequence models would be
+  data-starved at this scale; boosted trees will not be.
+### 1.4 One multi-output model, not four separate models
+ 
+**Decision: a single multi-output model with four target columns.**
+ 
+The four horizons are strongly correlated with each other — a video at 10,000 views on day 7 will
+almost certainly exceed that by day 14. This correlation is *helpful*, not a problem: the shared
+model structure lets the four horizons reinforce each other rather than being learned from scratch
+four times.
+ 
+Practical benefits:
+ 
+- One training run, one artefact to version, one artefact to deploy.
+- Consistent feature handling across horizons — no risk of the day-7 model and the day-30 model
+  silently diverging in preprocessing.
+- Videos with incomplete tracking can still contribute to the horizons they *do* have
+  (Section 5.3), which a four-separate-models setup makes messier to manage.
+Implementation note for Claude Code: use `xgboost.XGBRegressor` with
+`multi_strategy="one_output_per_tree"` (or `MultiOutputRegressor` as a fallback if the installed
+XGBoost version predates native multi-output support). Both are acceptable; the wrapper choice is
+an implementation detail, not a design decision.
+ 
+---
+ 
+## 2. Data Source and Starting Point
+ 
+The model consumes the `ml_video_features` view already built on the Supabase PostgreSQL
+warehouse. That view is one row per video and already contains:
+ 
+- Publication metadata (timestamp, category, duration, definition, caption, made-for-kids flag,
+  language fields)
+- Pre-derived title features (length, word count, number/question/exclamation flags, uppercase
+  ratio, script)
+- Channel-state-at-publish snapshots (subscribers, views, video count, channel age)
+- The four horizon targets with accompanying quality flags (`d*_hours_off`, `d*_usable`)
+- Row-level gating flags (`eligible`, `is_live_broadcast`, `channel_stats_backfilled`)
+As of the feasibility study the pipeline had collected 95,768 engagement snapshots across 6,870
+videos from 377 channels covering 14 of the 15 target categories. The 40-day collection window
+continues to accumulate data, so all volume figures in this plan are lower bounds.
+ 
+**The model layer treats `ml_video_features` as its contract with the pipeline layer.** Any new
+feature the model needs must be added to that view by the pipeline owner, not computed ad hoc in a
+notebook.
+ 
+---
+ 
+## 3. Row Selection: which videos enter training
+ 
+Rows are filtered in this order, and the count dropped at each stage is logged (this table goes
+into the final report):
+ 
+| Step | Rule | Reason |
+|---|---|---|
+| 1 | `eligible = true` | Existing pipeline-level validity gate |
+| 2 | `is_live_broadcast = false` | Live streams have a fundamentally different view accumulation pattern and would pollute the training signal |
+| 3 | At least one horizon has `d*_usable = true` | A row with no usable target teaches the model nothing |
+| 4 | `channel_stats_backfilled` recorded, not filtered | Backfilled channel stats are kept but flagged, so their effect can be tested during ablation |
+ 
+**Videos with fewer than 30 days of tracking are kept.** They are not excluded. See Section 5.3.
+ 
+**Outlier handling:** apply the 3-sigma filter described in the project proposal, but apply it on
+the **log scale** of the target, not the raw scale. On the raw scale a genuinely viral Sri Lankan
+video would be discarded as an outlier when it is in fact the most interesting row in the dataset.
+On the log scale only corrupted or impossible records are removed. The number of rows removed and
+a sample of them is documented.
+ 
+---
+ 
+## 4. Feature Set
+ 
+This is the definitive feature list. Anything not on this list is not used.
+ 
+### 4.1 Features kept as-is from `ml_video_features`
+ 
+| Feature | Type | Notes |
+|---|---|---|
+| `duration_seconds` | Numeric, continuous | **Not bucketed.** See 4.5. |
+| `is_short` | Boolean | Kept in addition to `duration_seconds` — see 4.5. |
+| `made_for_kids` | Boolean | YouTube's own classification; affects recommendation behaviour |
+| `default_audio_language` | Categorical | Central to the Sinhala / Tamil / English content mix that motivates this project |
+| `publish_is_weekend` | Boolean | Cheap, clean, behaviourally meaningful |
+| `title_has_number` | Boolean | |
+| `title_has_question` | Boolean | |
+| `title_has_exclaim` | Boolean | |
+| `title_upper_ratio` | Numeric | |
+| `title_script` | Categorical | Sinhala / Tamil / Latin / mixed. Directly encodes the language dimension of the local market |
+| `title_word_count` | Numeric | Retained pending correlation check against `title_length` (Section 12) |
+| `tag_count` | Numeric | Hypothesis: discoverability proxy |
+| `description_length` | Numeric | Hypothesis: effort / SEO proxy |
+| `ch_subs_at_publish` | Numeric | |
+| `ch_views_at_publish` | Numeric | |
+| `ch_videos_at_publish` | Numeric | |
+| `channel_age_days_at_publish` | Numeric | |
+ 
+### 4.2 Features engineered before training
+ 
+| Feature | Derived from | Definition |
+|---|---|---|
+| `publish_time_bucket` | `publish_hour_slt` | Sri Lanka local time, four buckets: early morning (00:00–05:59), morning/afternoon (06:00–14:59), evening (15:00–20:59), late night (21:00–23:59). Exact cut points confirmed against the observed hour histogram before finalising |
+| `category_encoded` | `category_name` | Target encoding — see 4.4 |
+| `title_urgency` | Title via Gemini | 0–10, see Section 6 |
+| `title_emotional_appeal` | Title via Gemini | 0–10, see Section 6 |
+| `title_seriousness` | Title via Gemini | 0–10, see Section 6 |
+| `title_curiosity_gap` | Title via Gemini | 0–10, see Section 6 |
+ 
+### 4.3 Features explicitly dropped
+ 
+| Feature | Reason for dropping |
+|---|---|
+| `channel_id` | Identifier. Would let the model memorise specific channels instead of learning transferable patterns, and cannot generalise to a channel not in training |
+| `category_id` | Redundant with `category_name`, and numeric IDs imply a false ordering |
+| `published_at` | Raw timestamp. Its useful content is already extracted into hour/day-of-week/weekend features. Feeding the raw timestamp would let the model learn "later dates get fewer recorded views", which is a collection artefact, not a real effect |
+| `definition` (HD/SD) | Effectively constant in the modern data; viewers do not filter on it |
+| `caption` | Low signal, high missingness; most uploads have no captions |
+| `default_language` | Near-duplicate of `default_audio_language`. **Keep exactly one** — whichever has fewer nulls in the collected data. Verify before training |
+| `channel_country` | Effectively constant (the entire dataset is scoped to Sri Lanka-based channels). Zero-variance features add nothing |
+| `d*_hours_off`, `d*_usable`, `eligible`, `is_live_broadcast`, `ch_stats_as_of` | Data-quality metadata, used for row filtering and target validation only — never as model inputs |
+ 
+### 4.4 Categorical encoding: target encoding, not one-hot
+ 
+**Decision: target encoding for `category_name`.**
+ 
+One-hot encoding the 15 YouTube categories would add 15 sparse binary columns to a feature set
+that is already around 20 columns wide, on a dataset of low thousands of rows. That worsens the
+rows-per-feature ratio for no gain.
+ 
+Target encoding replaces `category_name` with a **single numeric column** holding the mean target
+value for that category. Because there are four targets, four encoded columns are produced
+(`category_enc_d7`, `category_enc_d14`, `category_enc_d21`, `category_enc_d30`) — still far leaner
+than 15 sparse columns, and each carries real signal.
+ 
+**Leakage protection (mandatory):**
+ 
+- Encoding values are computed on the **training split only**.
+- Use the **log mean** (`mean of log1p(views)`) rather than the raw mean, so that one viral video
+  does not dominate its category's encoding.
+- Apply **smoothing** toward the global mean for categories with few training videos:
+  `encoded = (n * category_mean + k * global_mean) / (n + k)`, with `k` around 10. This prevents a
+  sparse category such as Nonprofits & Activism from being encoded off a handful of rows.
+- The resulting category → value mapping is **saved as an artefact** alongside the model. Test-set
+  rows and live dashboard requests both look up this frozen mapping. They never recompute it.
+- Any category unseen at inference falls back to the global mean.
+This last point also answers the concern raised during design about the dashboard: *the creator
+never sees or enters an encoded value.* They pick "Music" from a dropdown; the backend looks up the
+stored mapping. The same applies to every derived feature — see Section 9.3.
+ 
+### 4.5 Two decisions worth recording explicitly
+ 
+**Duration is kept continuous and is *not* pre-bucketed.**
+Gradient-boosted trees perform their own binning at every split, and they choose the cut points
+from the data. Manually bucketing into "under 30 s / under 5 min / under 10 min" throws away
+resolution and hard-codes cut points that may be wrong for this market. Feed the raw seconds.
+ 
+**`is_short` is kept anyway, alongside `duration_seconds`.**
+This is not redundancy. YouTube Shorts are served through a separate surface with different
+discovery and retention dynamics — a 55-second Short and a 55-second regular upload are different
+products with the same duration. The boolean encodes format, not length.
+ 
+### 4.6 Channel ratio features — to be tested, not assumed
+ 
+Three interpretable ratios can be derived from the four raw channel snapshots without any
+historical channel data:
+ 
+| Ratio | Formula | Interpretation |
+|---|---|---|
+| `ch_videos_per_day` | `ch_videos_at_publish / channel_age_days_at_publish` | Upload frequency / channel activity level |
+| `ch_views_per_video` | `ch_views_at_publish / ch_videos_at_publish` | Historical average performance per upload |
+| `ch_views_per_sub` | `ch_views_at_publish / ch_subs_at_publish` | Engagement efficiency relative to audience size |
+ 
+**Decision: generate all three, then let the data decide.** They are included in the correlation
+analysis (Section 8.1) and in the ablation study (Section 8.4). Whichever ratios fail to improve
+the model are dropped and the removal is documented.
+ 
+Two points that were raised during design and are resolved here:
+ 
+- *Subscriber growth rate* is **not available** and is not attempted. It would require channel
+  snapshots from before the collection window, which do not exist. It is listed in Section 11 as a
+  future extension once `channel_snapshots` has accumulated enough history.
+- *PCA on the channel features* is **rejected.** PCA would compress the four channel columns into
+  unnamed components, destroying exactly the interpretability the project needs for its insights
+  layer and its ablation study. Four correlated but interpretable columns are strictly better here
+  than two uninterpretable ones. Correlation between features is not a problem for tree models in
+  the first place.
+- The objection that "the user cannot compute these ratios by hand" **does not apply**, because the
+  dashboard auto-pulls channel statistics from the YouTube API (Section 9.2). The backend computes
+  the ratios; the creator never touches them.
+---
+ 
+## 5. Target Variables
+ 
+### 5.1 Definition
+ 
+Four targets, taken from the existing view: `d7_views`, `d14_views`, `d21_views`, `d30_views`.
+ 
+### 5.2 Target validity via the existing quality flags
+ 
+The pipeline polls twice daily, so a snapshot rarely lands exactly on the horizon boundary. The
+view already records this: `d7_hours_off` gives the deviation between the snapshot used and the
+true day-7 boundary, and `d7_usable` gives the pipeline's own verdict on whether that deviation is
+acceptable.
+ 
+**Rule: a horizon is used as a training target only where `d*_usable = true`.** Do not re-derive
+this logic in the model code; the pipeline owner's definition is authoritative. `d*_hours_off` is
+retained for reporting — the distribution of offsets goes into the data-quality section of the
+final report.
+ 
+### 5.3 Partial targets: videos younger than 30 days are kept
+ 
+A video published 20 days ago has usable `d7` and `d14` targets but no `d21` or `d30`. Such videos
+are **not excluded**. Excluding them would discard a large and growing share of the dataset — and
+would bias training toward older videos, which is precisely the wrong bias for a forecasting tool
+meant to work on new content.
+ 
+Handling: the unavailable horizons are left as missing (NaN) for that row. The multi-output model
+trains each horizon's trees on the rows where that horizon is present, and skips the row for
+horizons where it is absent. No penalty is applied for missing targets.
+ 
+The count of usable rows **per horizon** is reported (d7 will have the most rows, d30 the fewest),
+because it is the honest explanation for why d30 accuracy will be weaker than d7 accuracy.
+ 
+### 5.4 Train on log-transformed targets
+ 
+**Decision: train on `log1p(views)`; invert with `expm1` before reporting any metric.**
+ 
+View counts across the dataset span several orders of magnitude — from a few hundred views on a
+small-channel upload to millions on a viral news clip. On the raw scale, squared-error training
+means one viral video contributes more loss than several thousand ordinary videos, and the model
+optimises almost entirely for the tail.
+ 
+Training on the log scale makes the model optimise *proportional* accuracy, which is exactly what
+MAPE measures and exactly what matters to a creator: being wrong by 200 views on a 100-view video
+is a serious error, and being wrong by 200 views on a 10,000-view video is not.
+ 
+**All reported metrics are computed after inverting back to the real view-count scale.** The log
+transform is a training device, not a reporting device.
+ 
+---
+ 
+## 6. LLM Title Scoring
+ 
+### 6.1 Motivation
+ 
+The title is the single strongest lever a creator controls, and the existing title features
+(`title_has_question`, `title_upper_ratio`, and so on) capture only surface form. They cannot tell
+the difference between an urgent title and a calm one, or a curiosity-driven title and a plain
+descriptive one. Scoring the *tone* of the title adds a dimension no other feature covers.
+ 
+### 6.2 Dimensions scored
+ 
+Four dimensions, each scored **0–10**:
+ 
+| Dimension | What it measures |
+|---|---|
+| `title_urgency` | Time pressure — "breaking", "now", "today", "last chance" |
+| `title_emotional_appeal` | Emotional intensity — anger, joy, sadness, outrage, sympathy |
+| `title_seriousness` | Register — formal and factual at the high end, playful and casual at the low end |
+| `title_curiosity_gap` | How much the title withholds. Covers both explicit withholding ("you won't believe what happened next") and implicit promising ("5 reasons why...", "this one trick..."). The withheld-information case is one *type* of curiosity gap, not the whole of it |
+ 
+These four are deliberately not orthogonal — urgency and emotional appeal overlap on some titles,
+and seriousness anti-correlates with both on others. That overlap is acceptable: tree models are
+untroubled by correlated inputs, and the correlation analysis will quantify how much redundancy
+actually exists.
+ 
+### 6.3 What is deliberately NOT scored — ethics position
+ 
+**No score is produced for divisiveness, communal or ethnic provocation, controversy potential, or
+clickbait/misleading-claim strength.**
+ 
+This is a considered decision, and it is stated in the final report as an ethics section.
+ 
+The reasoning: titles that inflame ethnic or religious tension, or that make deliberately
+misleading claims, very likely *do* attract higher view counts in this market. That makes them
+predictive. It does not make them appropriate to build a feature for. A feature named
+"divisiveness score" turns a forecasting tool into an optimisation engine for exactly the content
+that damages public discourse — and the tool would then be recommending it to creators.
+ 
+The distinction the project holds to is:
+ 
+> **The model may learn patterns from whatever exists in the data. The tool never recommends
+> sensationalism or communal provocation to a creator.**
+ 
+`title_emotional_appeal` captures emotional intensity in general, which is legitimate and neutral.
+The recommendation layer (Section 9.4) is built around sustainable levers — genuine curiosity
+hooks, clear framing, timing, format — never around outrage or misleading claims.
+ 
+### 6.4 Implementation
+ 
+| Aspect | Decision |
+|---|---|
+| Provider | Google Gemini, free tier. Budget for the project is effectively zero and must remain so |
+| Call structure | **One call per title returning all four scores.** Four separate calls per title would quadruple token use and hit free-tier rate limits during backfill |
+| Output format | Strict JSON: `{"urgency": 0-10, "emotional_appeal": 0-10, "seriousness": 0-10, "curiosity_gap": 0-10}`. The prompt instructs the model to return JSON only, with no prose and no code fences |
+| Prompt content | Must state that titles may be in Sinhala, Tamil, English or a mix, and that scores should reflect the title as a Sri Lankan viewer would read it |
+| Parsing | Strip any stray fences, parse, validate that all four keys are present and numeric and in range. Failed parses are retried once, then recorded as null |
+| Backfill | All ~6,870 already-collected videos are scored in a batched, rate-limit-aware run |
+| Ongoing | New videos are scored inside the daily collection pipeline, as each day's videos are discovered |
+| Live inference | When a creator submits a title on the dashboard, Gemini is called in real time for that one title. At roughly 10 predictions per day this is negligible against the free tier |
+| Failure handling | If the live call fails or times out, the four scores are passed as missing. XGBoost handles missing values natively, so a prediction is still returned — degraded, not broken |
+ 
+### 6.5 Storage — one schema recommendation
+ 
+The four scores were provisionally to be stored on `video_snapshots`. **Recommendation: store them
+on the `videos` table instead** (or on a dedicated `video_title_scores` table keyed by video ID).
+ 
+The reason is that a title's tone scores are a **static property of the video**, not a
+time-varying measurement. `video_snapshots` holds one row per video per poll — storing the scores
+there would duplicate the same four numbers across roughly 14 rows per video for no benefit, and
+would create the risk of the copies disagreeing after a re-score.
+ 
+This is a small change and is worth raising with the pipeline owner before backfill begins, since
+correcting it afterwards means a migration. If the team prefers to keep them on
+`video_snapshots`, the model layer can work with either — the `ml_video_features` view just needs
+to expose one value per video.
+ 
+---
+ 
+## 7. Data Splitting
+ 
+**Decision: time-based split. Random k-fold cross-validation is not used.**
+ 
+### 7.1 The split
+ 
+Videos are ordered by `published_at`. The earlier portion becomes the training set; the later
+portion becomes the test set. Indicative proportion: the first ~75–80 % of the collection window
+for training, the final ~20–25 % for testing, with the exact date boundary fixed once the
+collection window closes and recorded in the report.
+ 
+A validation slice is carved from the end of the training portion (again by date, not randomly)
+for hyperparameter tuning and early stopping, so that the test set stays untouched until final
+evaluation.
+ 
+### 7.2 Why not random k-fold
+ 
+Random shuffling would place videos published on the same day, and often by the same channel, on
+both sides of the split. The model would then be scored partly on its ability to recall
+conditions it had already seen — a platform-wide traffic spike, a trending news event, a channel's
+recent surge — rather than on its ability to forecast genuinely unseen future content.
+ 
+The time-based split matches how the tool is actually used: a model trained on the past, asked
+about a video that has not happened yet. It gives a lower, more honest accuracy figure, and it is
+the defensible choice in the report.
+ 
+### 7.3 Interaction with target encoding
+ 
+The category target-encoding map is computed **inside the training split only**, after the split is
+made. This ordering is not optional — computing it on the full dataset first would leak test-period
+outcomes into training features and silently inflate every metric.
+ 
+---
+ 
+## 8. Evaluation
+ 
+### 8.1 Correlation analysis before training
+ 
+Before any model is trained, produce a correlation matrix covering every candidate feature against
+each of the four targets (on the log scale), plus feature-to-feature correlations.
+ 
+Purpose:
+ 
+- Confirm — rather than assume — that the LLM tone scores actually relate to viewership. Intuition
+  says emotive titles draw views; the data may show that urgency matters far more than seriousness,
+  or that curiosity gap is weaker in this market than expected. It is a short piece of work and it
+  prevents building the model around a weak signal.
+- Identify redundant pairs (correlation above roughly 0.9) — `title_length` against
+  `title_word_count` is the obvious candidate, and `ch_subs_at_publish` against
+  `ch_views_at_publish` is likely.
+- Produce figures for the EDA section of the final report.
+Redundant features are not automatically dropped — the ablation study (8.4) makes that call — but
+they are flagged here.
+ 
+### 8.2 The naive baseline (build this first)
+ 
+**The baseline is built and measured before the XGBoost model.**
+ 
+Baseline definition: for a video in category *C*, predict the **median** (not mean) log-scale view
+count of training-set videos in category *C* at each horizon, inverted back to the view scale.
+Median is used because a single viral video would otherwise drag a category's mean far above what
+a typical video in that category achieves.
+ 
+Two variants are measured so the report can show the effect of channel size:
+ 
+1. **Category-only baseline** — the naive baseline named in the proposal.
+2. **Category × channel-tier baseline** — the same, split by the mega/mid/small subscriber tier
+   already assigned at ingest. This is a *harder* baseline to beat and makes the XGBoost result
+   more credible.
+The baseline MAPE is what defines success. It is not known yet, and it will not be guessed.
+ 
+### 8.3 Metrics
+ 
+| Metric | Role |
+|---|---|
+| **MAPE, combined across all four horizons** | Primary headline metric, as specified in the proposal |
+| **MAPE, per horizon (d7 / d14 / d21 / d30)** | Reported alongside the combined figure. Combined MAPE alone hides the fact that d30 will be weaker than d7, both because it is intrinsically harder and because fewer rows have a usable d30 target |
+| R² | Variance explained |
+| MAE | Absolute error magnitude in views |
+| RMSE | Penalises large misses; reported for completeness |
+ 
+All metrics are computed on the **original view-count scale**, after inverting the log transform.
+ 
+**On a target MAPE figure.** A 10 % MAPE target was raised early in design. It should not be
+adopted, and here is the honest reasoning: individual video performance on YouTube is driven
+substantially by factors this model cannot observe — thumbnail quality, algorithmic promotion,
+external sharing, timing luck. Published work on social-media popularity prediction does not reach
+10 % on individual-item view forecasting. Setting that target guarantees the report ends with an
+apparent failure even if the model is genuinely good.
+ 
+Realistic expectations, to be confirmed against the measured baseline:
+ 
+- Naive category baseline: roughly **40–60 % MAPE**
+- XGBoost with the full feature set: plausibly **25–35 % MAPE**
+**The success criterion is relative, not absolute:** a meaningful, quantified reduction in MAPE
+versus the naive baseline, consistent across all four horizons. This is what the proposal already
+committed to, and it is the criterion that will be defended in the report.
+ 
+### 8.4 Ablation study
+ 
+The ablation study quantifies what each feature group actually contributes. It is a required
+deliverable, not optional.
+ 
+Method: train the full model, record its metrics, then retrain with one feature group removed at a
+time and record the change in MAPE.
+ 
+| Configuration | Question it answers |
+|---|---|
+| Full model | Reference point |
+| Minus LLM title scores | Did the Gemini integration earn its place? |
+| Minus all title features (LLM and surface) | How much does the title matter at all? |
+| Minus channel ratio features (6.4) | Should the engineered ratios be kept? |
+| Minus raw channel snapshots | How much of the forecast is just "big channel gets big numbers"? |
+| Minus publish-timing features | Is timing a real lever in this market, or folklore? |
+| Minus category encoding | Does category carry signal beyond channel size? |
+ 
+Results are presented as a table of MAPE deltas, plus XGBoost's own feature importances (gain-based,
+and SHAP values if time permits). The timing and title ablations feed directly into the
+dashboard's recommendation layer — a recommendation should only be shown to creators if the
+ablation shows the underlying feature actually matters.
+ 
+---
+ 
+## 9. Dashboard Integration
+ 
+### 9.1 Input contract
+ 
+| Field | Required | Control | Notes |
+|---|---|---|---|
+| Category | Yes | Dropdown, 15 YouTube categories | |
+| Duration | Yes | Numeric input, converted to seconds | |
+| Title | Yes | Text input | Sent to Gemini in real time for tone scores |
+| Default audio language | Yes | Dropdown (Sinhala / Tamil / English / other) | |
+| Made-for-kids | Yes | Toggle | |
+| Channel URL or channel ID | Yes | Text input | Used to auto-pull channel statistics |
+| Publish day of week | **Optional** | Dropdown | If omitted, the tool recommends the best day instead |
+| Publish hour | **Optional** | Time picker, mapped to the SLT bucket | If omitted, the tool recommends the best time slot instead |
+ 
+**Requirement: the model must return a prediction when optional fields are absent.** This is
+satisfied without extra work — omitted fields are passed as missing values and XGBoost routes them
+through its learned default direction at each split. No imputation step is required, and none
+should be added.
+ 
+### 9.2 Channel statistics are auto-pulled, never typed
+ 
+The creator supplies a channel URL or ID. The backend calls `channels.list` (1 quota unit) and
+retrieves subscriber count, total view count, video count and channel creation date, from which
+`channel_age_days_at_publish` is computed.
+ 
+At an expected volume of roughly 10 predictions per day this consumes on the order of 10 quota
+units daily against the 10,000-unit free allowance — entirely negligible, and it removes a whole
+class of manual-entry errors.
+ 
+### 9.3 The feature-parity requirement
+ 
+**The dashboard backend must apply exactly the same transformations, in exactly the same order, as
+the training pipeline.** A mismatch here is the single most common way a model that scored well in
+a notebook produces nonsense in production.
+ 
+Concretely, the inference path must:
+ 
+1. Look up `category_encoded` from the **saved encoding artefact** — never recompute it.
+2. Map publish hour into the same SLT bucket boundaries used in training.
+3. Compute `publish_is_weekend` from the selected day.
+4. Derive the surface title features (`title_has_number`, `title_has_question`, `title_has_exclaim`,
+   `title_upper_ratio`, `title_script`, `title_word_count`) using the **same code** the pipeline
+   uses — shared module, not a reimplementation.
+5. Call Gemini for the four tone scores.
+6. Compute any retained channel ratios from the auto-pulled statistics.
+7. Assemble the feature vector in the **same column order** the model was trained on.
+Mitigation: the preprocessing logic is written once as a shared, importable module used by both
+training and serving. It is not duplicated. A test asserting that a known training row, passed
+through the serving path, reproduces its training feature vector exactly is worth the fifteen
+minutes it takes to write.
+ 
+### 9.4 Output
+ 
+**Forecast.** All four horizons are shown as point predictions:
+ 
+> "Based on this metadata, this video is projected to reach approximately X views by day 7,
+> Y by day 14, Z by day 21 and W by day 30."
+ 
+Presented as a curve with the four points marked, in plain language, without statistical notation.
+ 
+**No confidence intervals in version 1.** This is a deliberate scope decision. XGBoost does not
+produce prediction intervals natively; obtaining them would require either quantile regression
+(additional models, additional training time) or post-hoc interval construction from test-set
+residuals. Neither is justified before the point forecast itself is solid. Intervals are recorded
+as a version 2 item (Section 11).
+ 
+**Recommendations.** Every recommendation shown must be backed by a feature that survived the
+ablation study:
+ 
+- **Timing** — best publishing day and time slot for the selected category and channel tier,
+  shown especially when the creator left those fields blank.
+- **Title** — concrete suggestions derived from the tone scores of the submitted title, framed
+  around genuine curiosity and clarity. Never around outrage, communal provocation or misleading
+  claims (Section 6.3).
+- **Duration** — whether the planned length sits inside the range that historically performs well
+  for the chosen category.
+- **Format** — whether Shorts or standard uploads perform better in this category for a channel of
+  this size.
+Each recommendation is accompanied by the evidence behind it ("videos in this category published
+on Sunday evenings reached on average N % more views by day 7"), so the tool teaches rather than
+just instructs.
+ 
+---
+ 
+## 10. Ownership and Sequencing
+ 
+### 10.1 Ownership
+ 
+| Area | Owner |
+|---|---|
+| Collection pipeline, GitHub Actions, Supabase schema, Gemini backfill and daily scoring job | AHMEDH M.R.R (230027U) — pipeline; delivers data with title scores populated |
+| Data cleaning, preprocessing, exploratory data analysis, deployment and integration testing | AHAMED M.J.S (230023E) |
+| Feature engineering, target construction, baseline, model training, ablation study, evaluation | AHMEDH M.R.R (230027U) — modelling |
+| Dashboard front end and prediction API | AHAMED M.U.A (230025L) |
+ 
+The modelling owner's dependency on the pipeline owner is: **`ml_video_features` exposing the four
+Gemini tone scores, one value per video.** That is the handoff.
+ 
+### 10.2 Suggested sequence
+ 
+| # | Step | Depends on |
+|---|---|---|
+| 1 | Finalise `default_language` vs `default_audio_language`; inspect `topic_categories`; confirm hour-bucket boundaries against the real histogram | Current data |
+| 2 | Correlation analysis and EDA figures | Step 1 |
+| 3 | Build and measure both naive baselines; record baseline MAPE | Step 1 |
+| 4 | Gemini backfill of existing titles | Pipeline owner |
+| 5 | First XGBoost model on default hyperparameters — establish that the pipeline runs end to end | Steps 1–3 |
+| 6 | Hyperparameter tuning on the date-based validation slice | Step 5 |
+| 7 | Ablation study | Steps 4–6 |
+| 8 | Freeze model, export artefacts (model, encoding map, feature order, preprocessing module) | Step 7 |
+| 9 | Dashboard integration and feature-parity test | Step 8 |
+| 10 | Final evaluation on the untouched test set; write-up | Step 9 |
+ 
+**Step 3 does not wait for step 4.** The baseline needs neither the LLM scores nor a trained model,
+so it can be measured immediately — and it is what makes every later number interpretable.
+ 
+### 10.3 Artefacts the model layer must export
+ 
+1. Trained model file
+2. Category target-encoding map (JSON)
+3. Ordered feature-name list
+4. Shared preprocessing module (used by both training and serving)
+5. Metrics report — baseline, full model, per-horizon, ablation table
+6. Training run configuration (hyperparameters, split date, row-filter counts, random seed)
+---
+ 
+## 11. Deferred to Version 2
+ 
+These are recorded so that the report can state them as considered-and-scoped-out rather than
+overlooked:
+ 
+- **Trajectory refinement for published videos.** Given day-1 to day-6 actuals, refine the day-7
+  through day-30 forecast. This *is* a genuine time-series problem, and the collected data supports
+  it. It is a different product from pre-publication forecasting and would be an excellent
+  extension.
+- **Prediction intervals**, via quantile regression or residual-based bands.
+- **Channel growth-rate features**, once `channel_snapshots` has accumulated enough history to
+  compute a trend rather than a single point.
+- **Thumbnail features.** Thumbnails plausibly rival titles in influence, but thumbnail modelling
+  requires a vision model and would not fit the remaining timeline.
+- **Sequence models** (LSTM / Transformer), only if the dataset grows by an order of magnitude.
+---
+ 
+## 12. Open Decisions
+ 
+None of these block implementation. Each has a designated resolution point.
+ 
+| # | Question | Resolution |
+|---|---|---|
+| 1 | `title_length` and `title_word_count` are likely near-duplicates | Correlation check in step 2; drop one if correlation exceeds ~0.9 |
+| 2 | `default_language` vs `default_audio_language` — which to keep | Null-count comparison in step 1 |
+| 3 | `topic_categories` — is the field structured enough to be usable? | Inspect in step 1. If it is a clean list of topic IDs, consider a small set of binary flags for the most common topics. If messy, drop |
+| 4 | Cyclical (sine/cosine) hour and day encodings versus the SLT buckets | Buckets are the default, for interpretability and because they map directly onto a dashboard recommendation. The trig encodings already exist in the view, so testing both costs one extra training run in step 6. Do not use both simultaneously |
+| 5 | Which channel ratio features to retain | Ablation study, step 7 |
+| 6 | Whether to keep `channel_stats_backfilled` rows | Compare metrics with and without them during step 7 |
+| 7 | Exact train/test boundary date | Fixed once the collection window closes; recorded in the report |
+| 8 | **Peer-percentile feature** — see below | Section 12.1 |
+ 
+### 12.1 On the peer-percentile feature
+ 
+A feature was proposed of the form *"among videos in the same category published within the same
+24 hours, where does this video rank?"* It needs a careful answer, because the intuition behind it
+is sound but the version as stated cannot be used.
+ 
+**As stated, it is not usable, for two independent reasons:**
+ 
+1. **The peer cohort does not exist yet at prediction time.** A creator asking for a forecast has
+   not published. The set of "videos published in the same 24 hours" is not merely unknown — it has
+   not happened. The dashboard could not populate this field.
+2. **It encodes the outcome.** Ranking a video against its same-day peers requires knowing the
+   peers' view counts *and* this video's view counts. That is the target on both sides. A model
+   given this feature would score spectacularly in the notebook and be useless in production —
+   textbook target leakage.
+**A lagged version is legitimate and worth testing.** Everything that is knowable strictly *before*
+the publish timestamp is fair game. For example:
+ 
+- `category_median_d7_views_trailing_30d` — the median day-7 view count of videos in this category
+  published in the 30 days *before* this video's publish date. Captures whether the category is
+  currently hot or cooling.
+- `category_video_volume_trailing_7d` — how crowded the category was in the preceding week. A
+  proxy for competition for attention.
+- `channel_median_d7_views_prior_uploads` — the channel's own median day-7 performance across its
+  earlier uploads in the dataset. This is likely the strongest single addition available, and it is
+  fully legitimate: it uses only the channel's own past, and at inference time the backend can
+  compute it from the warehouse using the supplied channel ID.
+These are strictly backward-looking and computable at inference time, so they carry the useful part
+of the original idea — relative positioning within a category — without the leakage.
+ 
+**Recommendation:** add the three lagged features above to the ablation study if time allows in
+step 7. Do not add the same-24-hour percentile in any form.
+ 
+---
+ 
+## 13. Sign-off
+ 
+| Name | Role | Reviewed | Comments |
+|---|---|---|---|
+| AHMEDH M.R.R (230027U) | Pipeline & modelling | | |
+| AHAMED M.J.S (230023E) | Preprocessing, EDA, deployment | | |
+| AHAMED M.U.A (230025L) | API integration, dashboard | | |
+ 
+**Specific items that need explicit agreement before implementation starts:**
+ 
+1. Target encoding rather than one-hot for category (Section 4.4)
+2. Time-based split rather than random k-fold (Section 7)
+3. Training on log-transformed targets (Section 5.4)
+4. No confidence intervals in version 1 (Section 9.4)
+5. MAPE target set relative to the measured baseline, not fixed at 10 % (Section 8.3)
+6. Storing the four Gemini scores on `videos` rather than `video_snapshots` (Section 6.5)
+7. The ethics position on divisiveness and clickbait scoring (Section 6.3)

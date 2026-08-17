@@ -1,0 +1,17 @@
+feature,horizon,eta_squared_log_target,levels,high_cardinality
+category_name,day_7,0.09130323421258325,15,False
+definition,day_7,0.0030959431485551264,2,False
+default_language,day_7,0.019770512087174997,28,False
+publish_time_bucket,day_7,0.009240697738992897,4,False
+category_name,day_14,0.0897782560489551,15,False
+definition,day_14,0.0015965485312813606,2,False
+default_language,day_14,0.017835067694293764,25,False
+publish_time_bucket,day_14,0.009255550380726906,4,False
+category_name,day_21,0.0924957646854015,15,False
+definition,day_21,0.0015406220796232075,2,False
+default_language,day_21,0.018445589653858334,25,False
+publish_time_bucket,day_21,0.012038940323091139,4,False
+category_name,day_30,0.08800979566831314,15,False
+definition,day_30,0.004383977544995144,2,False
+default_language,day_30,0.027553908005839404,26,False
+publish_time_bucket,day_30,0.017452071721382217,4,False

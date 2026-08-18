@@ -1,0 +1,36 @@
+# Analysis working directory: source and results are tracked, bulk data is not.
+#
+# Everything ignored here is either derived (regenerable by a script in this
+# folder), a copy of something tracked elsewhere, or a one-off test artefact.
+# The rule is that a clone should be able to reproduce anything missing.
+
+# Dataset copies. The canonical build lives in ../Dataset and is produced by
+# ViewCastLK/scripts/build_training_table.py -- a stale duplicate here would
+# eventually be analysed by mistake.
+viewcastlk_training_table.csv
+prior_batch_training_table.csv
+
+# Restore-verification artefacts. These are downloaded copies of the Parquet
+# archives already held on Google Drive; verify_archives.py re-fetches them.
+restore_test/
+
+# Pre-partition snapshot taken as insurance before the 2026-08-02 migration.
+# The migration succeeded and the archives supersede it.
+safety/
+
+# Figures extracted from SAD PDFs while rewriting the document. Inputs to that
+# work, not outputs of this analysis.
+sad_figs/
+sad_figs_clean/
+
+# Intermediate channel-discovery scratch. channels_to_add.csv is the result and
+# IS tracked; these are the working files behind it.
+candidate_channels.csv
+candidates_live_checked.csv
+candidates_nontop3.csv
+candidate_liveness_sample.csv
+prior_channel_countries.csv
+
+__pycache__/
+*.pyc
+_*.txt

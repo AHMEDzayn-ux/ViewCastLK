@@ -1,0 +1,5 @@
+horizon_days,total_rows,development_rows,test_rows,test_row_percent,development_channels,test_channels,channel_overlap
+7,20455,16375,4080,19.95,1392,349,0
+14,15599,12480,3119,19.99,1341,336,0
+21,15058,12049,3009,19.98,1295,324,0
+30,14741,11789,2952,20.03,1318,330,0

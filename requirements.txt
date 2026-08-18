@@ -1,7 +1,12 @@
 google-api-python-client
 python-dotenv
 psycopg2-binary
+numpy>=2,<3
 pandas>=2.2,<4
 pyarrow
+matplotlib>=3.9,<4
+scikit-learn>=1.5,<2
+xgboost>=3,<4
+joblib>=1.4,<2
 google-genai==2.11.0
 pydantic>=2,<3

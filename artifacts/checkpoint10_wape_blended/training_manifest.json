@@ -1,0 +1,140 @@
+{
+  "artifact_version": "checkpoint10_wape_blended",
+  "status": "candidate_reserved_test_not_evaluated",
+  "primary_metric": "wape_pct",
+  "mape_status": "not_reported_or_used",
+  "validation_design": "five saved channel-grouped development folds",
+  "channel_ids_used_as_features": false,
+  "reserved_test_used": false,
+  "selected_oof_combined_metrics": {
+    "wape_pct": 93.00998913117122,
+    "total_view_capture_pct": 21.108548175089386,
+    "top_decile_wape_pct": 91.00389854810714,
+    "top_decile_view_capture_pct": 9.892836669019408,
+    "median_absolute_error_views": 1318.9369430760732,
+    "mae_views": 18637.964783559364,
+    "rmsle": 2.067063712232904,
+    "log_r2": 0.3304425286747852
+  },
+  "selected_ensembles": [
+    {
+      "horizon_days": 7,
+      "components": "log_squared_filtered",
+      "weights": "1.00",
+      "selected_n_estimators": "90",
+      "cross_fitted_oof_wape_pct": 92.95373919142517,
+      "cross_fitted_oof_total_view_capture_pct": 17.778203667823757,
+      "cross_fitted_oof_top_decile_view_capture_pct": 8.071388664288232,
+      "cross_fitted_oof_rmsle": 1.9865720607659254,
+      "model_path": "models\\day_7_ensemble.joblib",
+      "model_sha256": "0c207ddf2805018c2d9a055dc1d2f00a84164ce4861fb10c2380c80b9a6ab904"
+    },
+    {
+      "horizon_days": 14,
+      "components": "log_squared_filtered|raw_absolute",
+      "weights": "0.25|0.75",
+      "selected_n_estimators": "87|42",
+      "cross_fitted_oof_wape_pct": 93.78009909828378,
+      "cross_fitted_oof_total_view_capture_pct": 21.757757666253077,
+      "cross_fitted_oof_top_decile_view_capture_pct": 10.160324496009757,
+      "cross_fitted_oof_rmsle": 2.04642788177469,
+      "model_path": "models\\day_14_ensemble.joblib",
+      "model_sha256": "2fcb6dfa079f208880f37dddce3990307a98e4dc51c816ba866ebd5bd6b1b81e"
+    },
+    {
+      "horizon_days": 21,
+      "components": "log_squared_filtered|raw_absolute",
+      "weights": "0.23|0.77",
+      "selected_n_estimators": "223|31",
+      "cross_fitted_oof_wape_pct": 92.6499337495904,
+      "cross_fitted_oof_total_view_capture_pct": 25.58963192961674,
+      "cross_fitted_oof_top_decile_view_capture_pct": 12.744652692671968,
+      "cross_fitted_oof_rmsle": 2.1756650043295664,
+      "model_path": "models\\day_21_ensemble.joblib",
+      "model_sha256": "daefea022ad7d6a538589922f4bddf14e490e119fd51e2c60e8306b8c392941a"
+    },
+    {
+      "horizon_days": 30,
+      "components": "log_squared_all_rows|raw_absolute",
+      "weights": "0.56|0.44",
+      "selected_n_estimators": "231|32",
+      "cross_fitted_oof_wape_pct": 92.5327386633927,
+      "cross_fitted_oof_total_view_capture_pct": 19.938745267101815,
+      "cross_fitted_oof_top_decile_view_capture_pct": 8.809261261972456,
+      "cross_fitted_oof_rmsle": 2.0844413751760653,
+      "model_path": "models\\day_30_ensemble.joblib",
+      "model_sha256": "90b749e1f7f9fd51ae1e6a871d67c233d58fda192be28c15457f4a708268fb2f"
+    }
+  ],
+  "candidate_definitions": [
+    {
+      "name": "log_squared_filtered",
+      "target_scale": "log1p",
+      "objective": "reg:squarederror",
+      "eval_metric": "rmse",
+      "sample_weight": "none",
+      "remove_log_outliers": true
+    },
+    {
+      "name": "log_squared_all_rows",
+      "target_scale": "log1p",
+      "objective": "reg:squarederror",
+      "eval_metric": "rmse",
+      "sample_weight": "none",
+      "remove_log_outliers": false
+    },
+    {
+      "name": "log_weighted_sqrt",
+      "target_scale": "log1p",
+      "objective": "reg:squarederror",
+      "eval_metric": "rmse",
+      "sample_weight": "sqrt_views",
+      "remove_log_outliers": false
+    },
+    {
+      "name": "log_weighted_linear_capped",
+      "target_scale": "log1p",
+      "objective": "reg:squarederror",
+      "eval_metric": "rmse",
+      "sample_weight": "linear_views_capped",
+      "remove_log_outliers": false
+    },
+    {
+      "name": "raw_absolute",
+      "target_scale": "views",
+      "objective": "reg:absoluteerror",
+      "eval_metric": "mae",
+      "sample_weight": "none",
+      "remove_log_outliers": false
+    },
+    {
+      "name": "raw_squared",
+      "target_scale": "views",
+      "objective": "reg:squarederror",
+      "eval_metric": "rmse",
+      "sample_weight": "none",
+      "remove_log_outliers": false
+    }
+  ],
+  "explicitly_excluded_model_columns": [
+    "definition",
+    "caption",
+    "made_for_kids",
+    "publish_hour_slt",
+    "publish_dow_slt",
+    "tag_count",
+    "description_length",
+    "title_length",
+    "title_word_count",
+    "title_has_number",
+    "title_has_question",
+    "title_has_exclaim",
+    "title_upper_ratio",
+    "title_script",
+    "ch_views_at_publish",
+    "video_id",
+    "channel_id",
+    "published_at"
+  ],
+  "selection_note": "Component pairs and blend weights use development OOF predictions only. Final unbiased performance requires the still-reserved test."
+}

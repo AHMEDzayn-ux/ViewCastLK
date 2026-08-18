@@ -69,7 +69,6 @@ TOPIC_COLUMNS = (
 
 BOOLEAN_COLUMNS = (
     "is_short",
-    "made_for_kids",
     "publish_is_weekend",
 ) + TOPIC_COLUMNS
 
@@ -100,6 +99,7 @@ TARGET_ENCODED_COLUMN = "category_name"
 EXCLUDED_MODEL_COLUMNS = (
     "definition",
     "caption",
+    "made_for_kids",
     "publish_hour_slt",
     "publish_dow_slt",
     "tag_count",

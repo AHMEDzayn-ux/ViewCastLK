@@ -60,6 +60,7 @@ class HorizonDatasetPreprocessorTests(unittest.TestCase):
             all(np.issubdtype(dtype, np.number) for dtype in transformed.dtypes)
         )
         self.assertTrue(set(EXCLUDED_MODEL_COLUMNS).isdisjoint(transformed))
+        self.assertNotIn("made_for_kids", transformed.columns)
         self.assertTrue(set(LLM_SCORE_COLUMNS).isdisjoint(transformed))
         self.assertFalse(np.isinf(transformed.to_numpy()).any())
 
@@ -114,6 +115,14 @@ class HorizonDatasetPreprocessorTests(unittest.TestCase):
         )
         transformed = preprocessor.transform(request)
         self.assertEqual(transformed.shape[1], len(preprocessor.get_feature_names_out()))
+
+    def test_removed_content_fields_are_not_required_for_training(self) -> None:
+        removed = ["definition", "caption", "made_for_kids", "description_length"]
+        reduced = self.X.drop(
+            columns=[column for column in removed if column in self.X],
+        )
+        transformed = HorizonDatasetPreprocessor().fit_transform(reduced, self.y)
+        self.assertTrue(set(removed).isdisjoint(transformed.columns))
 
     def test_llm_switch_rejects_incomplete_backfill(self) -> None:
         frame = self.X.copy()

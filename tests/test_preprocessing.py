@@ -106,6 +106,7 @@ class HorizonPreprocessorTests(unittest.TestCase):
         self.assertNotIn("channel_id", transformed.columns)
         self.assertTrue(set(LLM_SCORE_COLUMNS).isdisjoint(transformed.columns))
         self.assertTrue(set(USER_REMOVED_FEATURES).isdisjoint(transformed.columns))
+        self.assertNotIn("made_for_kids", transformed.columns)
         self.assertFalse(np.isinf(transformed.to_numpy()).any())
 
     def test_transform_accepts_omitted_optional_fields(self) -> None:

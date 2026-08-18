@@ -35,6 +35,7 @@ USER_REMOVED_FEATURES = (
     "title_has_number",
     "title_has_question",
     "title_has_exclaim",
+    "made_for_kids",
 )
 
 # The stable input contract. LLM scores are intentionally absent until the
@@ -64,7 +65,6 @@ RAW_INPUT_COLUMNS = (
 
 BOOLEAN_COLUMNS = (
     "is_short",
-    "made_for_kids",
     "publish_is_weekend",
 )
 

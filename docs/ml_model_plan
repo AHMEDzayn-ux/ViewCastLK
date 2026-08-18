@@ -157,7 +157,6 @@ This is the definitive feature list. Anything not on this list is not used.
 |---|---|---|
 | `duration_seconds` | Numeric, continuous | **Not bucketed.** See 4.5. |
 | `is_short` | Boolean | Kept in addition to `duration_seconds` — see 4.5. |
-| `made_for_kids` | Boolean | YouTube's own classification; affects recommendation behaviour |
 | `default_audio_language` | Categorical | Central to the Sinhala / Tamil / English content mix that motivates this project |
 | `publish_is_weekend` | Boolean | Cheap, clean, behaviourally meaningful |
 | `title_has_number` | Boolean | |
@@ -167,7 +166,6 @@ This is the definitive feature list. Anything not on this list is not used.
 | `title_script` | Categorical | Sinhala / Tamil / Latin / mixed. Directly encodes the language dimension of the local market |
 | `title_word_count` | Numeric | Retained pending correlation check against `title_length` (Section 12) |
 | `tag_count` | Numeric | Hypothesis: discoverability proxy |
-| `description_length` | Numeric | Hypothesis: effort / SEO proxy |
 | `ch_subs_at_publish` | Numeric | |
 | `ch_views_at_publish` | Numeric | |
 | `ch_videos_at_publish` | Numeric | |
@@ -193,6 +191,8 @@ This is the definitive feature list. Anything not on this list is not used.
 | `published_at` | Raw timestamp. Its useful content is already extracted into hour/day-of-week/weekend features. Feeding the raw timestamp would let the model learn "later dates get fewer recorded views", which is a collection artefact, not a real effect |
 | `definition` (HD/SD) | Effectively constant in the modern data; viewers do not filter on it |
 | `caption` | Low signal, high missingness; most uploads have no captions |
+| `made_for_kids` | Removed after feature review; not exported to horizon model datasets |
+| `description_length` | Removed after feature review; not exported to horizon model datasets |
 | `default_language` | Near-duplicate of `default_audio_language`. **Keep exactly one** — whichever has fewer nulls in the collected data. Verify before training |
 | `channel_country` | Effectively constant (the entire dataset is scoped to Sri Lanka-based channels). Zero-variance features add nothing |
 | `d*_hours_off`, `d*_usable`, `eligible`, `is_live_broadcast`, `ch_stats_as_of` | Data-quality metadata, used for row filtering and target validation only — never as model inputs |

@@ -1320,7 +1320,7 @@ Structure to follow:
 4. **Format and duration**: the within-channel shorts effect, and whether the
    duration profile is monotonic or has a sweet spot.
 
-5. **What this means for feature engineering** — the section Ruzain needs:
+5. **What this means for feature engineering** — the section that the modelling work depends on:
    which features earned their place, which are channel-proxies in disguise,
    and which should be encoded as *deviation from the channel's own norm*
    rather than as absolute values.

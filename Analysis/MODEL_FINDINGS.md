@@ -148,7 +148,8 @@ Optional thumbnail block adds 16 more (`brightness`, `contrast`, `saturation`,
 ### Deliberately excluded
 
 `gap_next_h` was the strongest cadence signal in the EDA and **cannot be
-known at prediction time** — you do not know when your next upload will be.
+known at prediction time** — the timing of the next upload is unknown when
+the forecast is made.
 
 Scored at or near zero and dropped: `is_short`, `publish_dow_slt`,
 `publish_is_weekend`, `definition`, `made_for_kids`, `caption`,
@@ -238,7 +239,7 @@ while a classifier can jump anywhere.
 
 **Recommendation: keep the regressor, present banded output.**
 
-### Can we predict "will this beat your own average?" No.
+### Is "will this beat the channel's own average?" predictable? No.
 
 Predicting which quartile of its own channel's output a video lands in:
 **37.4% warm, 28.4% cold, against 25% chance.**

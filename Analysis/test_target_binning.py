@@ -59,7 +59,7 @@ def bin_views(v):
 
 
 def score(y_true, y_pred, n_classes):
-    """Accuracy, macro-F1, and how often we are at most one band out."""
+    """Accuracy, macro-F1, and how often the prediction is at most one band out."""
     exact = accuracy_score(y_true, y_pred)
     within1 = np.mean(np.abs(np.asarray(y_true) - np.asarray(y_pred)) <= 1)
     return {"accuracy": exact, "macro_f1": f1_score(y_true, y_pred,

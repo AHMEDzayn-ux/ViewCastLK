@@ -590,7 +590,7 @@ non-monotonic relationship.
 
 5. **The replacement caveat** from §6, stated plainly whatever it shows.
 
-6. **What to hand Ruzain**: only the features that survived the held-out-channel
+6. **What to carry into modelling**: only the features that survived the held-out-channel
    test, plus a note that `fetch_thumbnails.py` is resumable and must be re-run
    before final training so newly collected videos are covered.
 """)

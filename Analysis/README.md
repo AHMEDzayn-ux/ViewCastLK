@@ -35,6 +35,22 @@ Model comparisons are **paired across eight splits**. A single grouped split on
 this data swings by ±0.1 R² and will answer whichever way the seed falls; an
 earlier draft reported a single-split figure and was wrong because of it.
 
+## Modelling
+
+`MODEL_FINDINGS.md` is the consolidated result: what the model achieves, in
+which regime, against which baseline, with the feature set and the questions
+that were tested and settled. Read that before re-running anything.
+
+| script | purpose |
+|---|---|
+| `train_baseline.py` | R^2/MAE per horizon, cold and warm, with the channel-history trap measured |
+| `evaluate_srs_metrics.py` | MAPE and the metrics SRS v1.1 names, against the naive category-average baseline |
+| `test_target_binning.py` | Does predicting view bands beat regressing? |
+| `compare_encodings.py` | Full correlation table; ordinal vs native vs one-hot |
+
+Every figure is a mean over five splits. A single grouped split swings by
+±0.1 R^2 on this data, so single-split numbers are not reportable.
+
 ## Tools
 
 | script | purpose |

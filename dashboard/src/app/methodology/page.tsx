@@ -12,7 +12,6 @@ const REQUIRED_INPUTS = [
   "YouTube category",
   "Expected duration",
   "Main audio language",
-  "Made-for-kids setting",
   "Channel URL, handle, or ID",
 ];
 

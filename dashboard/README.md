@@ -37,14 +37,52 @@ Versions below match `package.json`:
 - `/about` — redirects to `/methodology`.
 
 ## Forecast Inputs
+# ViewCastLK Dashboard
+
+ViewCastLK is a pre-publication forecasting tool for Sri Lankan YouTube
+creators. The dashboard lets a creator:
+
+- describe a planned video;
+- receive cumulative view forecasts for Day 7, 14, 21, and 30;
+- review evidence-backed publishing guidance;
+- view published model accuracy; and
+- read the methodology and limitations.
+
+The dashboard is the presentation layer. It communicates with the Prediction
+API abstraction and does not perform data collection or model execution in the
+browser.
+
+## Tech Stack
+
+Versions below match `package.json`:
+
+| Technology | Version / usage |
+| --- | --- |
+| Next.js | `16.2.12` |
+| React / React DOM | `19.2.4` |
+| TypeScript | `^5` |
+| Tailwind CSS | `^4` |
+| Recharts | `^3.10.1` |
+| Routing | Next.js App Router |
+
+## Dashboard Routes
+
+- `/forecast` — forecast request form, cumulative forecast result, trajectory,
+  and recommendations.
+- `/accuracy` — combined model evaluation plus Day 7, 14, 21, and 30 views,
+  each comparing the published ViewCastLK model with the naive category
+  baseline.
+- `/methodology` — creator-friendly methodology and limitations.
+- `/about` — redirects to `/methodology`.
+
+## Forecast Inputs
 
 Required inputs:
 
 - video title;
 - video category;
 - planned duration;
-- audio language;
-- made-for-kids setting; and
+- audio language; and
 - YouTube channel URL, handle, or ID.
 
 Publishing day and publishing hour are optional. If either is omitted, its
@@ -53,6 +91,13 @@ request value remains unknown (`null`) and is not replaced with a default.
 Draft form values are stored in `sessionStorage`, so they remain available when
 the creator visits another dashboard route and returns during the same browser
 session. Clearing the form also clears the stored draft.
+
+Channel statistics are retrieved automatically from the supplied channel
+identifier through the Prediction API abstraction. Subscriber count, total
+channel views, video count, and channel age are displayed as read-only context;
+they are not manually entered or sent as creator-authored forecast fields.
+Development mode supplies clearly illustrative channel details until the real
+Prediction API contract is connected.
 
 ## Forecast Output
 
@@ -112,6 +157,7 @@ directly access Supabase, the YouTube Data API, Gemini, or model artefacts.
 The frontend currently expects these API contracts:
 
 - `POST /forecast`
+- `POST /channel-lookup`
 - `GET /accuracy`
 
 These are expected frontend contracts while the real Prediction API is still

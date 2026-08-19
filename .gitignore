@@ -3,6 +3,7 @@
 !.env.example
 __pycache__/
 *.pyc
+.pytest_cache/
 .venv/
 .mcp.json
 

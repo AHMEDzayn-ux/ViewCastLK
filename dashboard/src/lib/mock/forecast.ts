@@ -1,5 +1,6 @@
 import type {
   AccuracyResponse,
+  ChannelStats,
   ForecastEstimate,
   ForecastRequest,
   ForecastResponse,
@@ -151,7 +152,6 @@ export function createMockForecast(request: ForecastRequest): ForecastResponse {
       request.category,
       request.durationSeconds,
       request.audioLanguage,
-      request.madeForKids,
       request.channelIdentifier,
       request.plannedPublishDay ?? "unknown-day",
       request.plannedPublishHour ?? "unknown-hour",
@@ -250,5 +250,21 @@ export function createMockAccuracy(): AccuracyResponse {
       scope,
       metrics: createUnpublishedMetrics(),
     })) as AccuracyResponse["evaluations"],
+  };
+}
+
+export function createMockChannelStats(
+  channelIdentifier: string,
+): ChannelStats {
+  const seed = hashString(channelIdentifier.toLowerCase());
+  const random = createRandom(seed);
+
+  return {
+    subscriberCount: Math.round(1_000 + random() * 450_000),
+    totalViewCount: Math.round(50_000 + random() * 25_000_000),
+    videoCount: Math.round(15 + random() * 600),
+    createdAt: new Date(
+      Date.now() - Math.round((180 + random() * 3000) * 86_400_000),
+    ).toISOString(),
   };
 }

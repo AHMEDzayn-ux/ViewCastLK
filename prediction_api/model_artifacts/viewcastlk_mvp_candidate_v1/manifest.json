@@ -1,0 +1,239 @@
+{
+  "format_version": 1,
+  "artifact_version": "viewcastlk_mvp_candidate_v1",
+  "created_at_utc": "2026-08-18T14:46:56.926682+00:00",
+  "status": "candidate_reserved_test_not_evaluated",
+  "supported_horizons_days": [
+    7,
+    14,
+    21,
+    30
+  ],
+  "prediction_interface": "predict.py CSV CLI or bundle.predict_views(DataFrame)",
+  "source_checkpoint": "checkpoint10_wape_blended",
+  "source_checkpoint_manifest_sha256": "6d089b262a2853ff786b89312fbd0a297617194665f19fef609a504b9f371af4",
+  "source_git_commit": "458403bc644d9ebe67fad217b03b7747ce394083",
+  "runtime_versions_used_for_export": {
+    "python": "3.11.9",
+    "numpy": "2.4.4",
+    "pandas": "3.0.2",
+    "scikit-learn": "1.8.0",
+    "xgboost": "3.2.0",
+    "joblib": "1.5.3"
+  },
+  "input_schema": {
+    "expected_columns": [
+      "category_name",
+      "duration_seconds",
+      "ch_subs_at_publish",
+      "ch_avg_views_per_video_at_publish",
+      "ch_videos_at_publish",
+      "channel_age_days_at_publish",
+      "is_short",
+      "publish_is_weekend",
+      "topic_entertainment",
+      "topic_fashion",
+      "topic_food",
+      "topic_gaming",
+      "topic_health",
+      "topic_hobby",
+      "topic_humour",
+      "topic_knowledge",
+      "topic_lifestyle",
+      "topic_music",
+      "topic_pet",
+      "topic_politics",
+      "topic_religion",
+      "topic_society",
+      "topic_sports",
+      "topic_technology",
+      "topic_tourism",
+      "topic_vehicle",
+      "topic_missing",
+      "default_language",
+      "publish_time_bucket",
+      "subscriber_tier"
+    ],
+    "numeric_columns": [
+      "duration_seconds",
+      "ch_subs_at_publish",
+      "ch_avg_views_per_video_at_publish",
+      "ch_videos_at_publish",
+      "channel_age_days_at_publish"
+    ],
+    "boolean_columns": [
+      "is_short",
+      "publish_is_weekend",
+      "topic_entertainment",
+      "topic_fashion",
+      "topic_food",
+      "topic_gaming",
+      "topic_health",
+      "topic_hobby",
+      "topic_humour",
+      "topic_knowledge",
+      "topic_lifestyle",
+      "topic_music",
+      "topic_pet",
+      "topic_politics",
+      "topic_religion",
+      "topic_society",
+      "topic_sports",
+      "topic_technology",
+      "topic_tourism",
+      "topic_vehicle",
+      "topic_missing"
+    ],
+    "categorical_columns": [
+      "category_name",
+      "default_language",
+      "publish_time_bucket",
+      "subscriber_tier"
+    ],
+    "missing_values": "Allowed in values, but every expected column must exist.",
+    "subscriber_tier_note": "Use the exported tier if available. It can also be derived from ch_subs_at_publish with the boundaries documented in the model code.",
+    "future_optional_llm_score_columns": [
+      "title_urgency",
+      "title_emotional_appeal",
+      "title_seriousness",
+      "title_curiosity_gap"
+    ],
+    "llm_scores_enabled_in_this_artifact": false,
+    "explicitly_excluded_columns": [
+      "definition",
+      "caption",
+      "made_for_kids",
+      "publish_hour_slt",
+      "publish_dow_slt",
+      "tag_count",
+      "description_length",
+      "title_length",
+      "title_word_count",
+      "title_has_number",
+      "title_has_question",
+      "title_has_exclaim",
+      "title_upper_ratio",
+      "title_script",
+      "ch_views_at_publish",
+      "video_id",
+      "channel_id",
+      "published_at"
+    ]
+  },
+  "evaluation": {
+    "design": "five saved channel-grouped development folds",
+    "primary_metric": "wape_pct",
+    "reserved_test_used": false,
+    "combined_development_oof": {
+      "wape_pct": 93.00998913117122,
+      "total_view_capture_pct": 21.108548175089386,
+      "top_decile_wape_pct": 91.00389854810714,
+      "top_decile_view_capture_pct": 9.892836669019408,
+      "median_absolute_error_views": 1318.9369430760732,
+      "mae_views": 18637.964783559364,
+      "rmsle": 2.067063712232904,
+      "log_r2": 0.3304425286747852
+    }
+  },
+  "models": [
+    {
+      "horizon_days": 7,
+      "model_path": "models/day_7_ensemble.joblib",
+      "sha256": "0c207ddf2805018c2d9a055dc1d2f00a84164ce4861fb10c2380c80b9a6ab904",
+      "size_bytes": 389316,
+      "components": [
+        "log_squared_filtered"
+      ],
+      "weights": [
+        1.0
+      ],
+      "selected_n_estimators": [
+        90
+      ],
+      "development_oof_metrics": {
+        "wape_pct": 92.95373919142517,
+        "rmsle": 1.9865720607659254,
+        "total_view_capture_pct": 17.778203667823757,
+        "top_decile_view_capture_pct": 8.071388664288232
+      }
+    },
+    {
+      "horizon_days": 14,
+      "model_path": "models/day_14_ensemble.joblib",
+      "sha256": "2fcb6dfa079f208880f37dddce3990307a98e4dc51c816ba866ebd5bd6b1b81e",
+      "size_bytes": 569246,
+      "components": [
+        "log_squared_filtered",
+        "raw_absolute"
+      ],
+      "weights": [
+        0.25,
+        0.75
+      ],
+      "selected_n_estimators": [
+        87,
+        42
+      ],
+      "development_oof_metrics": {
+        "wape_pct": 93.78009909828378,
+        "rmsle": 2.04642788177469,
+        "total_view_capture_pct": 21.757757666253077,
+        "top_decile_view_capture_pct": 10.160324496009757
+      }
+    },
+    {
+      "horizon_days": 21,
+      "model_path": "models/day_21_ensemble.joblib",
+      "sha256": "daefea022ad7d6a538589922f4bddf14e490e119fd51e2c60e8306b8c392941a",
+      "size_bytes": 970028,
+      "components": [
+        "log_squared_filtered",
+        "raw_absolute"
+      ],
+      "weights": [
+        0.23,
+        0.77
+      ],
+      "selected_n_estimators": [
+        223,
+        31
+      ],
+      "development_oof_metrics": {
+        "wape_pct": 92.6499337495904,
+        "rmsle": 2.1756650043295664,
+        "total_view_capture_pct": 25.58963192961674,
+        "top_decile_view_capture_pct": 12.744652692671968
+      }
+    },
+    {
+      "horizon_days": 30,
+      "model_path": "models/day_30_ensemble.joblib",
+      "sha256": "90b749e1f7f9fd51ae1e6a871d67c233d58fda192be28c15457f4a708268fb2f",
+      "size_bytes": 993822,
+      "components": [
+        "log_squared_all_rows",
+        "raw_absolute"
+      ],
+      "weights": [
+        0.56,
+        0.44
+      ],
+      "selected_n_estimators": [
+        231,
+        32
+      ],
+      "development_oof_metrics": {
+        "wape_pct": 92.5327386633927,
+        "rmsle": 2.0844413751760653,
+        "total_view_capture_pct": 19.938745267101815,
+        "top_decile_view_capture_pct": 8.809261261972456
+      }
+    }
+  ],
+  "sample_smoke_predictions": {
+    "7": 1433.952523531347,
+    "14": 1770.7518655866588,
+    "21": 8778.036334509176,
+    "30": 5459.917968810896
+  }
+}

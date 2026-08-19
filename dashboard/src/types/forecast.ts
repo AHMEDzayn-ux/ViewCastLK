@@ -41,18 +41,22 @@ export const PUBLISH_DAYS = [
 export type PublishDay = (typeof PUBLISH_DAYS)[number];
 export type ForecastHorizon = 7 | 14 | 21 | 30;
 
+export interface ChannelStats {
+  subscriberCount: number | null;
+  totalViewCount: number | null;
+  videoCount: number | null;
+  createdAt: string | null;
+}
+
 export interface ForecastRequest {
   title: string;
   category: YoutubeCategory;
   durationSeconds: number;
   audioLanguage: AudioLanguage;
-  madeForKids: boolean;
   channelIdentifier: string;
   plannedPublishDay: PublishDay | null;
   plannedPublishHour: number | null;
 }
-
-export type MadeForKidsSelection = "" | "yes" | "no";
 
 export interface ForecastFormValues {
   title: string;
@@ -60,7 +64,6 @@ export interface ForecastFormValues {
   durationMinutes: string;
   durationSeconds: string;
   audioLanguage: AudioLanguage | "";
-  madeForKids: MadeForKidsSelection;
   channelIdentifier: string;
   plannedPublishDay: PublishDay | "";
   plannedPublishHour: string;
@@ -203,7 +206,6 @@ export interface ForecastValidationErrors {
   category?: string;
   duration?: string;
   audioLanguage?: string;
-  madeForKids?: string;
   channelIdentifier?: string;
   plannedPublishDay?: string;
   plannedPublishHour?: string;

@@ -522,6 +522,86 @@ select.field-control {
   accent-color: var(--accent);
 }
 
+.channel-lookup-control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: stretch;
+  gap: 0.65rem;
+}
+
+.channel-lookup-button {
+  white-space: nowrap;
+}
+
+.channel-details {
+  padding: 1rem;
+  border: 1px solid #cad6cf;
+  background: var(--surface-soft);
+}
+
+.channel-details__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.channel-details__header h3 {
+  margin: 0.12rem 0 0;
+  font-size: 0.95rem;
+}
+
+.channel-details__header > p {
+  margin: 0.1rem 0 0;
+  color: var(--warning);
+  font-size: 0.68rem;
+  font-weight: 750;
+  text-align: right;
+}
+
+.channel-details__state {
+  margin: 0.75rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+}
+
+.channel-details__state--error {
+  color: var(--danger);
+  font-weight: 650;
+}
+
+.channel-details__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0.85rem 0 0;
+  padding: 1px;
+  background: var(--border);
+}
+
+.channel-details__grid div {
+  min-width: 0;
+  padding: 0.72rem;
+  background: var(--surface);
+}
+
+.channel-details__grid dt {
+  color: var(--text-muted);
+  font-size: 0.66rem;
+  font-weight: 750;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.channel-details__grid dd {
+  margin: 0.22rem 0 0;
+  overflow-wrap: anywhere;
+  color: var(--accent-strong);
+  font-size: 1rem;
+  font-weight: 760;
+  font-variant-numeric: tabular-nums;
+}
+
 .optional-section {
   margin-top: 1.65rem;
   padding: 1.3rem;
@@ -1383,9 +1463,24 @@ select option {
 
   .form-grid--timing,
   .duration-fields,
+  .channel-lookup-control,
+  .channel-details__grid,
   .title-guidance,
   .check-list {
     grid-template-columns: 1fr;
+  }
+
+  .channel-details__header {
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .channel-details__header > p {
+    text-align: left;
+  }
+
+  .channel-lookup-button {
+    width: 100%;
   }
 
   .forecast-results__meta {

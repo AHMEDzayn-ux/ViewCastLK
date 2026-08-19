@@ -57,10 +57,6 @@ export function validateForecastForm(
     errors.audioLanguage = "Choose a valid audio language.";
   }
 
-  if (!values.madeForKids) {
-    errors.madeForKids = "Select whether the video is made for kids.";
-  }
-
   const channelIdentifier = values.channelIdentifier.trim();
   if (!channelIdentifier) {
     errors.channelIdentifier =
@@ -106,7 +102,6 @@ export function toForecastRequest(
       Number(values.durationSeconds || "0"),
     audioLanguage:
       values.audioLanguage as ForecastRequest["audioLanguage"],
-    madeForKids: values.madeForKids === "yes",
     channelIdentifier: values.channelIdentifier.trim(),
     plannedPublishDay: values.plannedPublishDay || null,
     plannedPublishHour:

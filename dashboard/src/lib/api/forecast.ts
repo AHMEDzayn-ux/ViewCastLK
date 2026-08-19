@@ -1,5 +1,6 @@
 import type {
   AccuracyResponse,
+  ChannelStats,
   ForecastRequest,
   ForecastResponse,
 } from "@/types/forecast";
@@ -10,6 +11,7 @@ import {
 } from "@/types/forecast";
 import {
   createMockAccuracy,
+  createMockChannelStats,
   createMockForecast,
 } from "@/lib/mock/forecast";
 
@@ -179,6 +181,30 @@ function isAccuracyResponse(value: unknown): value is AccuracyResponse {
   );
 }
 
+function isNullableNonNegativeInteger(value: unknown): boolean {
+  return (
+    value === null ||
+    (Number.isInteger(value) && typeof value === "number" && value >= 0)
+  );
+}
+
+function isChannelStats(value: unknown): value is ChannelStats {
+  if (!value || typeof value !== "object") return false;
+
+  const candidate = value as Partial<ChannelStats>;
+  const validCreatedAt =
+    candidate.createdAt === null ||
+    (typeof candidate.createdAt === "string" &&
+      Number.isFinite(Date.parse(candidate.createdAt)));
+
+  return (
+    isNullableNonNegativeInteger(candidate.subscriberCount) &&
+    isNullableNonNegativeInteger(candidate.totalViewCount) &&
+    isNullableNonNegativeInteger(candidate.videoCount) &&
+    validCreatedAt
+  );
+}
+
 async function requestJson<T>(
   path: string,
   init?: RequestInit,
@@ -222,6 +248,10 @@ export function isDevelopmentMockMode(): boolean {
   return USE_MOCK_API;
 }
 
+export function isChannelLookupMockMode(): boolean {
+  return !API_BASE_URL;
+}
+
 export async function generateForecast(
   request: ForecastRequest,
   options?: { signal?: AbortSignal },
@@ -240,6 +270,54 @@ export async function generateForecast(
   if (!isForecastResponse(response)) {
     throw new PredictionApiError(
       "The Prediction API returned an unsupported forecast response.",
+      undefined,
+      "invalid_response",
+    );
+  }
+
+  return response;
+}
+
+export async function lookupChannelStats(
+  channelIdentifier: string,
+  options?: { signal?: AbortSignal },
+): Promise<ChannelStats> {
+  const normalizedIdentifier = channelIdentifier.trim();
+
+  if (!API_BASE_URL) {
+    await wait(550, options?.signal);
+
+    if (normalizedIdentifier.toLowerCase().includes("not-found-demo")) {
+      throw new PredictionApiError(
+        "The channel could not be found.",
+        undefined,
+        "channel_not_found",
+      );
+    }
+
+    if (
+      normalizedIdentifier.toLowerCase().includes("lookup-failure-demo") ||
+      normalizedIdentifier.toLowerCase().includes("degraded-demo")
+    ) {
+      throw new PredictionApiError(
+        "Channel statistics are unavailable.",
+        undefined,
+        "channel_stats_unavailable",
+      );
+    }
+
+    return createMockChannelStats(normalizedIdentifier);
+  }
+
+  const response = await requestJson<ChannelStats>("/channel-lookup", {
+    method: "POST",
+    body: JSON.stringify({ channelIdentifier: normalizedIdentifier }),
+    signal: options?.signal,
+  });
+
+  if (!isChannelStats(response)) {
+    throw new PredictionApiError(
+      "The Prediction API returned unsupported channel information.",
       undefined,
       "invalid_response",
     );

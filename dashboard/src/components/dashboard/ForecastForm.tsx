@@ -3,10 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import type {
   AudioLanguage,
+  ChannelStats,
   ForecastFormValues,
   ForecastRequest,
   ForecastValidationErrors,
-  MadeForKidsSelection,
   PublishDay,
   YoutubeCategory,
 } from "@/types/forecast";
@@ -16,10 +16,52 @@ import {
   YOUTUBE_CATEGORIES,
 } from "@/types/forecast";
 import {
+  isChannelLookupMockMode,
+  lookupChannelStats,
+  PredictionApiError,
+} from "@/lib/api/forecast";
+import {
   hasValidationErrors,
   toForecastRequest,
   validateForecastForm,
 } from "@/lib/validation";
+
+function formatCount(value: number | null): string {
+  if (value === null || value === undefined) return "Unavailable";
+  if (value < 1000) return value.toLocaleString("en-US");
+  if (value < 1_000_000) {
+    const k = value / 1000;
+    return (k % 1 === 0 ? k.toFixed(0) : k.toFixed(1)) + "K";
+  }
+  if (value < 1_000_000_000) {
+    const m = value / 1_000_000;
+    return (m % 1 === 0 ? m.toFixed(0) : m.toFixed(1)) + "M";
+  }
+  const b = value / 1_000_000_000;
+  return (b % 1 === 0 ? b.toFixed(0) : b.toFixed(2)) + "B";
+}
+
+function formatChannelAge(createdAtIso: string | null): string {
+  if (!createdAtIso) return "Unavailable";
+  try {
+    const created = new Date(createdAtIso);
+    if (isNaN(created.getTime())) return "Unavailable";
+    const diffMs = Date.now() - created.getTime();
+    const days = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+    const years = Math.floor(days / 365.25);
+    if (years >= 1) {
+      return `${years} ${years === 1 ? "year" : "years"}`;
+    }
+    const months = Math.floor(days / 30.44);
+    if (months >= 1) {
+      return `${months} ${months === 1 ? "month" : "months"}`;
+    }
+    return `${days} ${days === 1 ? "day" : "days"}`;
+  } catch {
+    return "Unavailable";
+  }
+}
+
 
 interface ForecastFormProps {
   onSubmit: (request: ForecastRequest) => void;
@@ -33,7 +75,6 @@ const INITIAL_VALUES: ForecastFormValues = {
   durationMinutes: "",
   durationSeconds: "",
   audioLanguage: "",
-  madeForKids: "",
   channelIdentifier: "",
   plannedPublishDay: "",
   plannedPublishHour: "",
@@ -46,7 +87,6 @@ const DRAFT_FIELDS = [
   "durationMinutes",
   "durationSeconds",
   "audioLanguage",
-  "madeForKids",
   "channelIdentifier",
   "plannedPublishDay",
   "plannedPublishHour",
@@ -95,7 +135,6 @@ const ERROR_FOCUS_TARGETS: Record<
   category: "category",
   duration: "durationMinutes",
   audioLanguage: "audioLanguage",
-  madeForKids: "madeForKids-yes",
   channelIdentifier: "channelIdentifier",
   plannedPublishDay: "plannedPublishDay",
   plannedPublishHour: "plannedPublishHour",
@@ -159,6 +198,9 @@ export default function ForecastForm({
 }: ForecastFormProps) {
   const [values, setValues] = useState<ForecastFormValues>(INITIAL_VALUES);
   const [errors, setErrors] = useState<ForecastValidationErrors>({});
+  const [channelStats, setChannelStats] = useState<ChannelStats | null>(null);
+  const [isLookupLoading, setIsLookupLoading] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
   const draftRestored = useRef(false);
   const draftChangedByUser = useRef(false);
 
@@ -192,6 +234,32 @@ export default function ForecastForm({
       delete next[errorKey];
       return next;
     });
+    if (key === "channelIdentifier") {
+      setChannelStats(null);
+      setLookupError(null);
+    }
+  }
+
+  async function handleChannelLookup() {
+    const identifier = values.channelIdentifier.trim();
+    if (!identifier || isLookupLoading || isLoading) return;
+
+    setIsLookupLoading(true);
+    setLookupError(null);
+    setChannelStats(null);
+
+    try {
+      const stats = await lookupChannelStats(identifier);
+      setChannelStats(stats);
+    } catch (error) {
+      if (error instanceof PredictionApiError && error.message) {
+        setLookupError(error.message);
+      } else {
+        setLookupError("Channel details could not be retrieved.");
+      }
+    } finally {
+      setIsLookupLoading(false);
+    }
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -220,9 +288,13 @@ export default function ForecastForm({
     removeForecastDraft();
     setValues(INITIAL_VALUES);
     setErrors({});
+    setChannelStats(null);
+    setLookupError(null);
+    setIsLookupLoading(false);
     onReset();
     requestAnimationFrame(() => document.getElementById("title")?.focus());
   }
+
 
   const inputClass = (error?: string) =>
     "field-control" + (error ? " field-control--invalid" : "");
@@ -404,57 +476,6 @@ export default function ForecastForm({
           </select>
         </Field>
 
-        <fieldset
-          className="field"
-          aria-invalid={Boolean(errors.madeForKids)}
-          aria-describedby={[
-            "madeForKids-hint",
-            errors.madeForKids ? "madeForKids-error" : null,
-          ]
-            .filter(Boolean)
-            .join(" ")}
-        >
-          <div className="field__heading">
-            <legend className="field__label">Made for kids</legend>
-            <span className="field__requirement field__requirement--required">
-              Required
-            </span>
-          </div>
-          <p className="field__hint" id="madeForKids-hint">
-            Use the audience setting you plan to select when publishing on
-            YouTube.
-          </p>
-          <div className="choice-group">
-            {[
-              { value: "yes", label: "Yes" },
-              { value: "no", label: "No" },
-            ].map((option) => (
-              <label className="choice-control" key={option.value}>
-                <input
-                  id={"madeForKids-" + option.value}
-                  type="radio"
-                  name="madeForKids"
-                  value={option.value}
-                  checked={values.madeForKids === option.value}
-                  disabled={isLoading}
-                  onChange={(event) =>
-                    setValue(
-                      "madeForKids",
-                      event.target.value as MadeForKidsSelection,
-                      "madeForKids",
-                    )
-                  }
-                />
-                <span>{option.label}</span>
-              </label>
-            ))}
-          </div>
-          {errors.madeForKids && (
-            <p className="field__error" id="madeForKids-error" role="alert">
-              {errors.madeForKids}
-            </p>
-          )}
-        </fieldset>
 
         <Field
           id="channelIdentifier"
@@ -463,31 +484,93 @@ export default function ForecastForm({
           error={errors.channelIdentifier}
           hint="Use a channel URL, @handle, or channel ID. Channel statistics are retrieved automatically."
         >
-          <input
-            id="channelIdentifier"
-            name="channelIdentifier"
-            type="text"
-            value={values.channelIdentifier}
-            disabled={isLoading}
-            className={inputClass(errors.channelIdentifier)}
-            placeholder="https://youtube.com/@yourchannel"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck="false"
-            aria-invalid={Boolean(errors.channelIdentifier)}
-            aria-describedby={describedBy(
-              "channelIdentifier",
-              true,
-              errors.channelIdentifier,
-            )}
-            onChange={(event) =>
-              setValue(
+          <div className="channel-lookup-control">
+            <input
+              id="channelIdentifier"
+              name="channelIdentifier"
+              type="text"
+              value={values.channelIdentifier}
+              disabled={isLoading || isLookupLoading}
+              className={inputClass(errors.channelIdentifier)}
+              placeholder="https://youtube.com/@yourchannel"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck="false"
+              aria-invalid={Boolean(errors.channelIdentifier)}
+              aria-describedby={describedBy(
                 "channelIdentifier",
-                event.target.value,
-                "channelIdentifier",
-              )
-            }
-          />
+                true,
+                errors.channelIdentifier,
+              )}
+              onChange={(event) =>
+                setValue(
+                  "channelIdentifier",
+                  event.target.value,
+                  "channelIdentifier",
+                )
+              }
+            />
+            <button
+              type="button"
+              className="secondary-button channel-lookup-button"
+              disabled={
+                isLoading ||
+                isLookupLoading ||
+                !values.channelIdentifier.trim()
+              }
+              onClick={handleChannelLookup}
+            >
+              {isLookupLoading ? "Retrieving…" : "Retrieve details"}
+            </button>
+          </div>
+
+          {isLookupLoading && (
+            <p className="channel-details__state" role="status">
+              Retrieving channel details…
+            </p>
+          )}
+
+          {lookupError && (
+            <p
+              className="channel-details__state channel-details__state--error"
+              role="alert"
+            >
+              {lookupError}
+            </p>
+          )}
+
+          {channelStats && (
+            <div className="channel-details">
+              <div className="channel-details__header">
+                <div>
+                  <p className="section-kicker">Channel details</p>
+                  <h3>Retrieved automatically</h3>
+                </div>
+                {isChannelLookupMockMode() && (
+                  <p>Illustrative development data</p>
+                )}
+              </div>
+
+              <dl className="channel-details__grid">
+                <div>
+                  <dt>Subscribers</dt>
+                  <dd>{formatCount(channelStats.subscriberCount)}</dd>
+                </div>
+                <div>
+                  <dt>Total views</dt>
+                  <dd>{formatCount(channelStats.totalViewCount)}</dd>
+                </div>
+                <div>
+                  <dt>Videos</dt>
+                  <dd>{formatCount(channelStats.videoCount)}</dd>
+                </div>
+                <div>
+                  <dt>Channel age</dt>
+                  <dd>{formatChannelAge(channelStats.createdAt)}</dd>
+                </div>
+              </dl>
+            </div>
+          )}
         </Field>
       </div>
 

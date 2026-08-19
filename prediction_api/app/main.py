@@ -22,8 +22,10 @@ from app.schemas import (
     ForecastResponse,
     HealthResponse,
     ModelMetadata,
+    TitleGuidance,
     UnavailableRecommendation,
 )
+from app.title_analysis import analyze_title_tone
 from app.youtube import ChannelLookupException, fetch_channel_stats
 
 app = FastAPI(
@@ -111,7 +113,10 @@ async def create_forecast(payload: ForecastRequest):
     # 1. Resolve real YouTube channel statistics using reusable service
     channel_stats = fetch_channel_stats(payload.channelIdentifier, YOUTUBE_API_KEY)
 
-    # 2. Build 30-column model-ready raw feature frame
+    # 2. Analyze submitted title using Gemini server-side adapter
+    title_guidance, internal_tone_analysis = analyze_title_tone(payload.title)
+
+    # 3. Build 30-column model-ready raw feature frame
     try:
         df = build_candidate_feature_frame(payload, channel_stats)
     except Exception as err:
@@ -120,7 +125,7 @@ async def create_forecast(payload: ForecastRequest):
             content={"message": "Failed to construct candidate model feature frame.", "code": "feature_building_error"},
         )
 
-    # 3. Perform model inference across all 4 horizons using cached ModelRegistry
+    # 4. Perform model inference across all 4 horizons using cached ModelRegistry
     try:
         model_registry.load_models()
     except Exception as err:
@@ -150,12 +155,12 @@ async def create_forecast(payload: ForecastRequest):
                 content={"message": f"Model inference failed for Day {horizon}.", "code": "inference_error"},
             )
 
-    # 4. Check trajectory monotonicity (day7 <= day14 <= day21 <= day30)
+    # 5. Check trajectory monotonicity (day7 <= day14 <= day21 <= day30)
     is_monotonic = (
         raw_predictions[7] <= raw_predictions[14] <= raw_predictions[21] <= raw_predictions[30]
     )
 
-    # 5. Build response metadata & documentation fields
+    # 6. Build response metadata & documentation fields
     forecast_id = f"fc_{uuid.uuid4().hex[:12]}"
     manifest = model_registry.get_manifest()
     artifact_ver = manifest.get("artifact_version", "viewcastlk_mvp_candidate_v1")
@@ -188,17 +193,25 @@ async def create_forecast(payload: ForecastRequest):
         ),
     ]
 
-    has_sub_count = channel_stats.subscriberCount is not None
-    completeness = DataCompleteness(
-        status="complete" if has_sub_count else "degraded",
-        issues=[
+    issues: list[DataCompletenessIssue] = []
+    if channel_stats.subscriberCount is None:
+        issues.append(
             DataCompletenessIssue(
                 source="channel_lookup",
                 message="Subscriber count is hidden or unavailable for this channel.",
             )
-        ]
-        if not has_sub_count
-        else [],
+        )
+    if title_guidance is None:
+        issues.append(
+            DataCompletenessIssue(
+                source="title_analysis",
+                message="Title analysis is temporarily unavailable.",
+            )
+        )
+
+    completeness = DataCompleteness(
+        status="complete" if len(issues) == 0 else "degraded",
+        issues=issues,
     )
 
     return ForecastResponse(
@@ -208,5 +221,6 @@ async def create_forecast(payload: ForecastRequest):
         recommendations=[],
         unavailableRecommendations=unavailable_recs,
         completeness=completeness,
+        titleGuidance=title_guidance,
         model=model_metadata,
     )

@@ -129,6 +129,13 @@ class ModelMetadata(BaseModel):
     trajectoryMonotonic: bool = Field(True, description="Whether horizon sequence is non-decreasing")
 
 
+class TitleGuidance(BaseModel):
+    summary: str = Field(..., description="Creator-facing summary of title tone")
+    suggestions: List[str] = Field(
+        default_factory=list, description="List of title phrasing suggestions"
+    )
+
+
 class ForecastResponse(BaseModel):
     forecastId: str = Field(..., description="Unique forecast execution ID")
     estimates: List[ForecastEstimate] = Field(
@@ -146,5 +153,8 @@ class ForecastResponse(BaseModel):
     completeness: DataCompleteness = Field(
         default_factory=lambda: DataCompleteness(status="complete", issues=[]),
         description="Data completeness metadata",
+    )
+    titleGuidance: Optional[TitleGuidance] = Field(
+        None, description="Creator-facing title guidance"
     )
     model: ModelMetadata = Field(..., description="Model artifact metadata")

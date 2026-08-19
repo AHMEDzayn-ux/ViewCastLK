@@ -29,7 +29,7 @@ and how much of its first-week viewership does that explain?**
 
 This notebook answers that question and hands the answer to feature
 engineering. It is not a data-quality report — `dataset_statistics.txt` covers
-that. Here we look for *patterns*.
+that. This looks for *patterns*.
 
 ---
 
@@ -42,7 +42,7 @@ One fact governs every analysis below:
 
 That single fact invalidates the obvious way of doing this. If you group by
 category and compare means, you are mostly comparing *which channels post in
-which category*, not the effect of category. We show this concretely in §4,
+which category*, not the effect of category. §4 shows this concretely,
 where the raw category ranking **inverts** once channel is controlled for.
 
 So the rule throughout:
@@ -101,7 +101,7 @@ HORIZON = 7
 md(r"""
 ## 1. Scope and preparation
 
-We keep **eligible** videos (live broadcasts and unparseable durations removed)
+Scope is **eligible** videos (live broadcasts and unparseable durations removed)
 that have a **usable** day-7 label — an observation within 12 hours of the
 168-hour mark. Anything else is not an observation of day-7 viewership.
 
@@ -205,7 +205,7 @@ md(r"""
 
 `channel_id` has thousands of levels, so some of its apparent power is
 overfitting — with enough groups you can explain anything. The honest
-comparison is against a *permuted* channel label, which we do next.
+comparison is against a *permuted* channel label, done next.
 
 Everything below `channel_id` is measured on few levels and is not inflated
 this way.
@@ -724,8 +724,8 @@ save("11_category_x_size"); plt.show()
 """)
 
 code(r"""
-# How an effect varies ACROSS segments. Each effect is a single number that we
-# recompute inside every segment, so the spread across segments tells us
+# How an effect varies ACROSS segments. Each effect is a single number
+# recomputed inside every segment, so the spread across segments shows
 # whether the global figure is a real constant or an average of opposites.
 
 def shorts_effect(f):

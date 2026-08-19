@@ -26,7 +26,7 @@ video outperforms another *from the same channel* is in the dataset.
 
 The thumbnail is the most obvious missing piece. It is the only part of the
 pre-publication package a viewer actually looks at before clicking, and until
-now we had a URL and nothing else.
+now only a URL was available.
 
 This notebook asks two questions, and they get different answers:
 
@@ -162,7 +162,7 @@ fc = d.groupby("has_face").channel_resid.agg(["size", "mean", "std"])
 fc["se"] = fc["std"]/np.sqrt(fc["size"])
 print("has_face, all channels:\n"); print(fc.to_string())
 
-# Only channels that vary -- a channel always using faces tells us nothing.
+# Only channels that vary -- a channel always using faces is uninformative.
 v = d.groupby("channel_id").has_face.nunique()
 dv = d[d.channel_id.isin(v[v > 1].index)]
 fv = dv.groupby("has_face").channel_resid.agg(["size", "mean", "std"])

@@ -1,5 +1,5 @@
 """Find frequently-posting, API-verified Sri Lankan channels in the previous
-batch's dataset that our roster does not already track.
+batch's dataset that the roster does not already track.
 
 Their release is a snapshot, so posting frequency has to be inferred from the
 publication dates of the videos it happens to contain, over the window it
@@ -53,12 +53,12 @@ def main():
     df = df[df.channel_id.isin(set(lk.channel_id))]
     print(f"videos from verified-LK channels: {len(df):,}")
 
-    # --- exclude what we already track
+    # --- exclude what is already tracked
     from storage import connect
     conn = connect()
     ours = set(pd.read_sql_query("select channel_id from channels", conn).channel_id)
     conn.close()
-    print(f"our roster: {len(ours):,}")
+    print(f"roster: {len(ours):,}")
 
     span_days = max((df.publish_date.max() - df.publish_date.min()).days, 1)
     g = df.groupby("channel_id").agg(
@@ -75,7 +75,7 @@ def main():
     g["category"] = g.top_cat.map(CATEGORY_NAMES).fillna("(unknown)")
 
     overlap = int(g.already_tracked.sum())
-    print(f"\noverlap with our roster: {overlap:,} of {len(g):,} verified-LK channels")
+    print(f"\noverlap with the roster: {overlap:,} of {len(g):,} verified-LK channels")
     new = g[~g.already_tracked].copy()
     print(f"candidates not yet tracked: {len(new):,}")
 

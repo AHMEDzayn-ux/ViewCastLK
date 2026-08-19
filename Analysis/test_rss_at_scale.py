@@ -11,7 +11,7 @@ Measures what matters for that decision:
   * how many feeds cannot prove they cover the look-back, because those are the
     ones still needing an API call
 
-404s are expected and are not failures: a channel deleted since we last saw it
+404s are expected and are not failures: a channel deleted since it was last seen
 has no feed. They are counted separately from errors that would make RSS
 unreliable.
 

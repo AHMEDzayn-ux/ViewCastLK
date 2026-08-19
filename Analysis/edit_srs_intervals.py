@@ -60,7 +60,7 @@ log = []
 # ---------------------------------------------------------------- 1. scope
 assert "Prediction intervals or confidence bands" in P[105].text
 set_text(P[105], "Publishing, scheduling or uploading content to YouTube on the creator's behalf.")
-# P[106] already carries that sentence; remove the duplicate we just created
+# P[106] already carries that sentence; remove the duplicate just created
 if P[106].text.strip().startswith("Publishing, scheduling or uploading"):
     P[105]._p.getparent().remove(P[105]._p)
     log.append("1.2  removed prediction-intervals exclusion from out-of-scope list")

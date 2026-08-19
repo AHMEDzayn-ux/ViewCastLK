@@ -1,6 +1,6 @@
 """Establish, per rostered channel, when it last uploaded anything.
 
-Why this exists: 853 of our 1,282 channels produced no video in the 16 days we
+Why this exists: 853 of the 1,282 channels produced no video in the 16 days
 have been collecting, and at four discovery runs a day they cost about 3,400
 quota units daily for nothing. But "silent for 16 days" is not "dead" — a
 creator who posts monthly looks identical to one who has stopped. Pruning on
@@ -39,7 +39,7 @@ OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "channel_last_upl
 FIELDS = ["channel_id", "title", "country", "source", "last_upload",
           "days_since", "status"]
 
-DORMANT_AFTER = 30   # days without an upload before we stop calling it active
+DORMANT_AFTER = 30   # days without an upload before a channel stops counting as active
 DEAD_AFTER = 60      # days without an upload before it is a pruning candidate
 
 
@@ -118,7 +118,7 @@ def main():
         if channel_id in done:
             continue
         if newest_known is not None and not args.all:
-            # already alive on our own evidence; costs nothing to record
+            # already alive on local evidence; costs nothing to record
             days = (now - newest_known).total_seconds() / 86400
             rec = dict(channel_id=channel_id, title=title, country=country,
                        source="warehouse", last_upload=newest_known.isoformat(),

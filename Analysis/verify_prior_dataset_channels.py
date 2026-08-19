@@ -38,11 +38,11 @@ print(f"prior file 1 channels : {len(ch1):,}")
 print(f"prior file 2 channels : {len(ch2):,}")
 print(f"prior combined        : {len(prior):,}")
 print(f"ViewCastLK roster     : {len(ours):,}")
-print(f"shared with our roster: {len(prior & ours):,} "
-      f"({100*len(prior & ours)/max(len(ours),1):.1f}% of our roster)")
+print(f"shared with the roster: {len(prior & ours):,} "
+      f"({100*len(prior & ours)/max(len(ours),1):.1f}% of the roster)")
 print(f"  via file 1: {len(ch1 & ours):,}   via file 2: {len(ch2 & ours):,}")
 
-# videos per channel — tells us how each file was collected
+# videos per channel — indicates how each file was collected
 print(f"\nvideos per channel  file1: {len(f1)/len(ch1):.2f}   file2: {len(f2)/len(ch2):.2f}")
 
 print()

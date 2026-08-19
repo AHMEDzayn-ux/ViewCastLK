@@ -1,0 +1,2477 @@
+[
+ [
+  "p",
+  "University of Moratuwa Department of Computer Science and Engineering ViewCastLK A Data-Driven Tool for Forecasting Viewership Trends of Sri Lankan YouTube Content Software Architecture Document Version 2.0"
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Item",
+    "Detail"
+   ],
+   [
+    "Group / Project",
+    "Group 2 | Project P07"
+   ],
+   [
+    "Document owner",
+    "AHAMED M.U.A. (230025L)"
+   ],
+   [
+    "Authors",
+    "AHAMED M.U.A. (230025L)​ AHAMED M.J.S. (230023E)​ AHMEDH M.R.R. (230027U)"
+   ],
+   [
+    "Mentor",
+    "Dr. Chathuranga Hettiarachchi"
+   ],
+   [
+    "Teaching Assistant",
+    "Muthumala V.D.W."
+   ],
+   [
+    "Date",
+    "30 July 2026"
+   ]
+  ]
+ ],
+ [
+  "p",
+  "Revision History"
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Date",
+    "Version",
+    "Description",
+    "Author"
+   ],
+   [
+    "28/Jul/202 6",
+    "1.0",
+    "Initial architecture document based on the verified team briefing, project schedule and feasibility study.",
+    "AHAMED M.U.A. (230025L)"
+   ],
+   [
+    "30/Jul/202 6",
+    "1.1",
+    "Revised and aligned with the course template and the current implementation state.",
+    "AHAMED M.U.A. (230025L)"
+   ],
+   [
+    "30/Jul/202 6",
+    "2.0",
+    "Complete rewrite following review feedback on Section 2. Section 2 expanded from a single paragraph and a context diagram into a full architectural-representation section covering the view model, per-view model elements and notation, architectural style, architectural mechanisms and traceability convention. All views rewritten to the depth required by the RUP template; sixteen UML figures added; class-level detail, a process and thread model, and node-to-process mapping introduced; data view extended from five tables to eight tables and one derived view to satisfy SRS DB-02 and DB-03; full requirements-traceability appendix added; open conflicts with the SRS recorded in Appendix A.",
+    "AHAMED M.U.A. (230025L)"
+   ]
+  ]
+ ],
+ [
+  "p",
+  "Document precedence. The Software Requirements Specification is the authority on what the system must do. This document is the authority on how the internal structure realises it. Where the two disagree on a requirement, the SRS governs and the conflict is recorded in Appendix A rather than resolved silently here."
+ ],
+ [
+  "p",
+  "Table of Contents Right-click the table above and choose \"Update Field\" to populate page numbers."
+ ],
+ [
+  "h",
+  1,
+  "1 Introduction"
+ ],
+ [
+  "p",
+  "ViewCastLK is a pre-publication forecasting tool for Sri Lankan YouTube content. A creator describes a video they intend to publish — its category, title, planned duration, audio language and the channel it will appear on — and receives projected cumulative view counts at day 7, day 14, day 21 and day 30 after publication, each accompanied by a range, together with publishing recommendations grounded in observed Sri Lankan publishing patterns. Behind that single interaction the system runs a continuous collection pipeline that tracks a roster of country-verified Sri Lankan channels, discovers their new uploads and re-records engagement statistics on a repeating schedule, building the day-by-day history from which the forecasting model is trained. The architectural problem this document addresses is not the forecast itself but the fact that the video does not exist at the moment the forecast is requested. Every architectural decision recorded here follows from that single constraint."
+ ],
+ [
+  "h",
+  2,
+  "1.1 Purpose"
+ ],
+ [
+  "p",
+  "This document provides a comprehensive architectural overview of ViewCastLK, using a number of different architectural views to depict different aspects of the system. It is intended to capture and convey the significant architectural decisions which have been made on the system. It serves four audiences, each of which reads it differently:"
+ ],
+ [
+  "b",
+  "​ The implementing team, who use the logical, implementation and data views as the specification for"
+ ],
+ [
+  "p",
+  "what to build and where each piece of code belongs."
+ ],
+ [
+  "b",
+  "​ The mentor and teaching assistant, who use the architectural representation and goals sections to"
+ ],
+ [
+  "p",
+  "judge whether the structure is justified by the requirements rather than assembled by habit."
+ ],
+ [
+  "b",
+  "​ Testers, who use the use-case realisations and the process view to derive integration and system test"
+ ],
+ [
+  "p",
+  "cases, and the traceability appendix to confirm that every architecturally significant requirement is realised somewhere."
+ ],
+ [
+  "b",
+  "​ Future maintainers, who use the deployment and data views to operate the system and the"
+ ],
+ [
+  "p",
+  "open-decisions appendix to understand what was left deliberately unresolved and why. This document does not restate the requirements. It records structure, and it records the reasoning that ties structure to requirement. Where a decision could reasonably have gone another way, the rejected alternative is stated alongside the chosen one, because an architecture document that presents only its conclusions cannot be reviewed."
+ ],
+ [
+  "h",
+  2,
+  "1.2 Scope"
+ ],
+ [
+  "p",
+  "This document applies to the whole of the ViewCastLK software system as a single deliverable: the web dashboard, the prediction service, the feature-assembly and recommendation components, the published model artefact, the PostgreSQL warehouse and its schema migrations, the scheduled collection workflow, the offline training pipeline, the backup workflow, and the deployment environment that carries all of them. The following are within the scope of this document:"
+ ],
+ [
+  "b",
+  "​ The decomposition of the system into subsystems, packages and architecturally significant classes,"
+ ],
+ [
+  "p",
+  "and the dependency rules that govern them."
+ ],
+ [
+  "b",
+  "​ The run-time process and thread model, including the scheduling of unattended work and the"
+ ],
+ [
+  "p",
+  "concurrency present in the forecast path."
+ ],
+ [
+  "b",
+  "​ The physical topology onto which the software is deployed, and the mapping of processes to nodes."
+ ],
+ [
+  "b",
+  "​ The persistent data structures, their keys, and the integrity invariants the architecture must enforce."
+ ],
+ [
+  "b",
+  "​ The architectural mechanisms — idempotent writes, quota governance, graceful degradation,"
+ ],
+ [
+  "p",
+  "artefact freezing, publication-anchored ageing — that recur across views. The following are outside the scope of this document:"
+ ],
+ [
+  "b",
+  "​ The internal mathematics of the forecasting model. The architecture fixes the interface the model"
+ ],
+ [
+  "p",
+  "must satisfy, not the algorithm behind it; XGBoost, LightGBM and an ensemble of the two remain candidates until benchmarking is complete, and the architecture is deliberately indifferent between them."
+ ],
+ [
+  "b",
+  "​ Detailed user-interface design, wireframes and visual styling, which are illustrative of the interface"
+ ],
+ [
+  "p",
+  "requirements in SRS §3.9.1 and do not constitute architecture."
+ ],
+ [
+  "b",
+  "​ The requirements themselves, which are stated in the SRS and referenced here by identifier."
+ ],
+ [
+  "b",
+  "​ Any claim about the country of origin of a video's views. The data source does not expose it; the"
+ ],
+ [
+  "p",
+  "architecture scopes collection to country-verified Sri Lankan channels as a documented assumption."
+ ],
+ [
+  "h",
+  2,
+  "1.3 Definitions, Acronyms, and Abbreviations"
+ ],
+ [
+  "p",
+  "Terms already defined in SRS §1.3 are not repeated. The table below defines terms introduced by this document or used here in a specifically architectural sense."
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Term",
+    "Meaning in this document"
+   ],
+   [
+    "Architecturally significant",
+    "A requirement, element or decision is architecturally significant if changing it would force a change to the decomposition, the process model, the deployment topology or the data model. Elements that are not architecturally significant are omitted from this document by design."
+   ],
+   [
+    "Architectural mechanism",
+    "A recurring solution applied consistently across several views — for example idempotent writing or graceful degradation. Mechanisms are named once in Section 2.6 and referred to thereafter."
+   ],
+   [
+    "Artefact (model)",
+    "The frozen, versioned bundle published by a training run: the fitted model, the categorical encoding map, the ordered feature list, the interval calibration parameters, the shared preprocessing implementation and the metrics report."
+   ],
+   [
+    "Degraded forecast",
+    "A forecast produced with one or more inputs recorded as genuinely missing rather than imputed. It is a valid result, explicitly labelled as such to the creator, not an error."
+   ],
+   [
+    "Frozen encoding",
+    "The categorical encoding map computed once inside the training portion and published with the artefact. It is read at serving time and never recomputed, so training and serving cannot diverge."
+   ],
+   [
+    "Identity table / snapshot table",
+    "An identity table holds attributes that do not change for an entity and is written once per entity. A snapshot table holds attributes that do change and holds one row per entity per observation. The split is the foundation of the data view."
+   ],
+   [
+    "Idempotent write",
+    "A write that produces the same end state whether applied once or repeated, implemented as an insert-or-update on a natural key. It is what makes a retried or duplicated collection run safe."
+   ],
+   [
+    "Lagged aggregate",
+    "A backward-looking category or channel statistic computed strictly over a period ending before a video's publication timestamp, and therefore legitimately available at forecast time."
+   ]
+  ]
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Term",
+    "Meaning in this document"
+   ],
+   [
+    "Publication-anchored age",
+    "The age of a video measured from that video's own published at value. The _ architecture enforces this structurally by making it part of the snapshot key."
+   ],
+   [
+    "Serving tier / collection tier / model tier",
+    "The three run-time tiers of the system, described in Section 2.4. They are coupled only through the warehouse and the published artefact, never by synchronous call."
+   ],
+   [
+    "View",
+    "A representation of the system from the perspective of one related set of concerns, as defined by the 4+1 model. Section 2 enumerates the views used and what each contains."
+   ]
+  ]
+ ],
+ [
+  "h",
+  2,
+  "1.4 References"
+ ],
+ [
+  "p",
+  "All documents and online resources cited in this Software Architecture Document are listed in full, in IEEE style, in Section 12. Every web resource carries the date on which it was accessed. Diagramming tool. All sixteen figures in this document were produced with PlantUML version 1.2025.4 using the Graphviz dot layout engine. The diagram source is plain text and is held in the project repository under docs/architecture/puml/, so that every figure can be regenerated deterministically rather than redrawn by hand. Diagrams are rendered in monochrome with unfilled shapes on a white background, as required by the course template."
+ ],
+ [
+  "h",
+  2,
+  "1.5 Overview"
+ ],
+ [
+  "p",
+  "Section 2 is the entry point to the rest of the document: it states what architecture means for this system, enumerates the views used and the model elements each contains, names the architectural style and the mechanisms that recur across views, and explains the traceability convention. Section 3 records the goals and constraints that shaped the architecture, each tied to the requirement it derives from. Sections 4 to 9 present the views themselves. Section 4 gives the use-case view, which motivates every other view. Section 5 gives the logical view — the decomposition into subsystems, packages and significant classes. Section 6 gives the process view, covering the run-time process and thread model and the two principal scenarios in activity and sequence form. Section 7 gives the deployment view and maps processes onto physical nodes. Section 8 gives the implementation view, defining the layers and their dependency rules. Section 9 gives the data view, which for this system is architecturally significant rather than optional, because the correctness of every training label depends on the structure of the stored data. Sections 10 and 11 address dimensioning, performance and the quality attributes the architecture is required to deliver. Section 12 lists the references. Appendix A records decisions that remain open, including two points on which this document and the SRS currently disagree. Appendix B is the traceability matrix from SRS requirement identifiers to the architectural elements that realise them."
+ ],
+ [
+  "h",
+  1,
+  "2 Architectural Representation"
+ ],
+ [
+  "p",
+  "This section describes what software architecture is for ViewCastLK and how it is represented in this document. It enumerates the views that are necessary, and for each view explains what types of model element it contains, what notation is used, and which stakeholder concerns it answers. It then names the architectural style, records the mechanisms that recur across views, and states the traceability convention used throughout."
+ ],
+ [
+  "h",
+  2,
+  "2.1 What is architectural in this system"
+ ],
+ [
+  "p",
+  "Not every design decision belongs in this document. For ViewCastLK an element, decision or requirement is treated as architecturally significant when at least one of the following holds: it constrains the decomposition of the system into parts; it determines how those parts communicate at run time; it fixes where software executes; it shapes the persistent data model; or it would be expensive to reverse once implemented. Applying that test, four properties of this system dominate the architecture, and the reader should carry them through every subsequent view:"
+ ],
+ [
+  "b",
+  "​ The forecast target does not exist. At the moment a creator asks for a forecast there is no video, no"
+ ],
+ [
+  "p",
+  "early view curve and no peer cohort. This rules out the entire family of time-series architectures that forecast a series from its own past values, and it imposes a structural obligation — enforced in the feature layer and in the data view — that no value derived at or after a publication timestamp may ever reach the model."
+ ],
+ [
+  "b",
+  "​ Training and serving must produce identical features. A model that performs well in development"
+ ],
+ [
+  "p",
+  "and poorly in service usually fails because feature preparation quietly diverged between the two paths. The architecture removes the possibility structurally rather than by discipline: one shared implementation, one frozen encoding map, one published feature order."
+ ],
+ [
+  "b",
+  "​ The engagement history cannot be reconstructed. The data source reports only current values, so a"
+ ],
+ [
+  "p",
+  "collection run that does not happen leaves a permanent gap. Continuity of unattended collection therefore outranks availability of the dashboard as a reliability concern, and every write into the history must be safe to repeat."
+ ],
+ [
+  "b",
+  "​ Everything runs on free tiers. A fixed daily API quota, a bounded database allocation and a"
+ ],
+ [
+  "p",
+  "constrained serverless runtime are hard limits, not budget preferences. Quota is treated as a first-class architectural resource with its own guarding component."
+ ],
+ [
+  "h",
+  2,
+  "2.2 The view model used"
+ ],
+ [
+  "p",
+  "The architecture is documented using the 4+1 view model. Four views each address one related set of concerns — logical, process, implementation and deployment — and a fifth, the use-case view, unifies them: every element in the other four views exists because some scenario in the use-case view requires it, and each of the four is validated by walking the significant scenarios through it. The 4+1 model is used in full rather than in an abbreviated form. All five views are necessary for this system, for the following reasons."
+ ],
+ [
+  "b",
+  "​ The logical view is necessary because the system is not a single program: the same feature-assembly"
+ ],
+ [
+  "p",
+  "logic is exercised by an interactive service and by an offline training pipeline, and the decomposition has to make that sharing explicit."
+ ],
+ [
+  "b",
+  "​ The process view is necessary because the system contains both a synchronous request-response"
+ ],
+ [
+  "p",
+  "path and an unattended batch path on a fixed schedule, with different failure and consistency behaviour. Neither is comprehensible from the logical view alone."
+ ],
+ [
+  "b",
+  "​ The implementation view is necessary because the dependency rules between layers are"
+ ],
+ [
+  "p",
+  "themselves an architectural commitment, and because the repository has several independent entry points rather than one."
+ ],
+ [
+  "b",
+  "​ The deployment view is necessary because the software is distributed across five independently"
+ ],
+ [
+  "p",
+  "managed platforms with different execution models, and because the free-tier constraint is enforced at the level of nodes. One addition is made to the standard model. A data view is included as Section 9 and treated as architecturally significant rather than optional. The RUP template marks this section optional where persistent data is trivial or maps directly onto the design model. That is not the case here: the identity-versus-snapshot split, the composition of the snapshot key, and the derived feature view are the mechanisms that make a training label meaningful, and they cannot be derived from the logical view."
+ ],
+ [
+  "fig",
+  1,
+  "The 4+1 view model as applied to ViewCastLK. The use-case view is the unifying view; each of the other four"
+ ],
+ [
+  "p",
+  "addresses one set of concerns and is validated against the scenarios in Section 4."
+ ],
+ [
+  "p",
+  "Figure 1 shows the five views and, for each, the concern it addresses, the model elements it contains, the notation used and the stakeholders it serves. The arrows indicate validation direction rather than dependency: the four surrounding views are each checked against the use-case view, not derived mechanically from it."
+ ],
+ [
+  "h",
+  2,
+  "2.3 Views, model elements and notation"
+ ],
+ [
+  "p",
+  "The table below is the definitive statement of what each view contains. It is the map a reviewer should use to decide where in this document a given question is answered."
+ ],
+ [
+  "tbl",
+  [
+   [
+    "View",
+    "Concern it answers",
+    "Model elements it contains",
+    "Notation",
+    "Section"
+   ],
+   [
+    "Use-case",
+    "What does the system do, for whom, and which interactions stress the architecture?",
+    "Actors (human, system and time-triggered); use cases; include and extend relationships; scenario realisations with pre- and post-conditions and extension paths.",
+    "UML use-case diagram; tabular scenario realisations",
+    "4"
+   ],
+   [
+    "Logical",
+    "How is the functionality decomposed, and what are the responsibilities of each part?",
+    "Subsystems; design packages; architecturally significant classes and interfaces with their attributes, operations and multiplicities; associations, compositions and realisations.",
+    "UML class diagram; UML package diagram",
+    "5"
+   ],
+   [
+    "Process",
+    "What executes when, how much of it runs concurrently, and how do the parts communicate?",
+    "Heavyweight processes and lightweight threads; triggers and schedules; activity flows with decision, fork and join nodes; message sequences with alternative and loop fragments; consistency strategy per process group.",
+    "UML activity diagram with swimlanes; UML sequence diagram",
+    "6"
+   ],
+   [
+    "Deployme nt",
+    "Where does each piece of software physically run, and over what protocol does it talk?",
+    "Nodes (managed platforms, ephemeral runners, client devices); deployed artefacts; communication paths annotated with protocol; mapping of processes to nodes.",
+    "UML deployment diagram",
+    "7"
+   ],
+   [
+    "Implemen tation",
+    "How is the source organised, and what may depend on what?",
+    "Layers; source packages; components and their provided interfaces; permitted dependency directions and the rules that govern them.",
+    "UML component diagram; UML package diagram",
+    "8"
+   ],
+   [
+    "Data (added)",
+    "What is stored, under what key, and which invariants must the store enforce?",
+    "Tables classified as identity or snapshot; primary, composite and foreign keys; the derived feature view; integrity and retention rules.",
+    "Entity-relationship diagram; UML activity diagram for the backup path",
+    "9"
+   ]
+  ]
+ ],
+ [
+  "h",
+  2,
+  "2.4 Architectural style"
+ ],
+ [
+  "p",
+  "ViewCastLK is not built in a single architectural style. It is composed of three tiers, each in the style appropriate to its own workload, deliberately coupled only through the warehouse and the published model artefact."
+ ],
+ [
+  "b",
+  "​ The serving tier is a conventional layered request-response architecture. A static single-page"
+ ],
+ [
+  "p",
+  "dashboard calls a stateless prediction service, which coordinates feature assembly, inference, interval estimation and recommendation generation before returning one response. It is layered because the dependency direction must be enforceable and because the model technology has to be replaceable without touching the dashboard contract."
+ ],
+ [
+  "b",
+  "​ The collection tier is a scheduled pipes-and-filters batch pipeline. Discovery, statistics retrieval and"
+ ],
+ [
+  "p",
+  "snapshot writing are separate filters operating over a stream of channels and videos, each guarded by a shared quota component. It is a batch pipeline rather than a service because it has no interactive client, because it must be safely restartable at any point, and because its cost is metered per call."
+ ],
+ [
+  "b",
+  "​ The model tier is an offline batch train-and-publish pipeline. It reads a derived view, fits and"
+ ],
+ [
+  "p",
+  "evaluates, and publishes an immutable versioned artefact. It is offline because training must be reproducible and must never be triggered by user traffic."
+ ],
+ [
+  "fig",
+  2,
+  "Architectural style. Three tiers, each in the style suited to its workload, coupled only through the warehouse"
+ ],
+ [
+  "p",
+  "and the published model artefact. Figure 2 shows the consequence that matters most: no tier calls another synchronously. The collection tier writes to the warehouse and knows nothing of the dashboard. The model tier reads the warehouse and publishes an artefact. The serving tier reads the artefact and lagged aggregates. This is what allows collection to continue while the dashboard is down, the dashboard to keep serving forecasts while the warehouse is unreachable, and the model to be retrained without any interruption to either. Those three degradation behaviours are required by SRS REL-09 through REL-12 and by the degradation-modes table in SRS §3.4.3; they are consequences of this style rather than features added on top of it."
+ ],
+ [
+  "fig",
+  3,
+  "System context. The boundary of ViewCastLK and the five external parties it exchanges data with."
+ ],
+ [
+  "p",
+  "Figure 3 places that structure in its environment. The system has two human actors and four external services. Every external dependency is one-directional and initiated by ViewCastLK, with the single exception of the scheduler, which triggers the collection tier from outside. No external party calls into the system, which is why the collection pipeline exposes no inbound network interface at all (SRS IF-14)."
+ ],
+ [
+  "h",
+  2,
+  "2.5 Architectural mechanisms"
+ ],
+ [
+  "p",
+  "Six mechanisms recur across the views. Naming them once here avoids restating the same reasoning in five places; later sections refer to them by name."
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Mechanism",
+    "What it is",
+    "Why the architecture needs it",
+    "Where it appears"
+   ],
+   [
+    "Idempotent write",
+    "Every write to the engagement history is an insert-or-update on a natural key — (video id, age days) _ _ for video snapshots, (channel id, captured at) for _ _ channel snapshots.",
+    "A scheduled pipeline will be retried, delayed and re-run. Without idempotence a retry either duplicates observations or fails on a key collision, and a partially failed run leaves the store inconsistent.",
+    "Figures 10, 11, 15; Sections 6.3, 9.2"
+   ],
+   [
+    "Quota governance",
+    "A single guard component through which every external data-API call passes, maintaining a daily ledger by call class and refusing discretionary expensive calls when the remaining margin is thin.",
+    "The daily allowance is the binding constraint on the whole collection design. Routine collection must never be starved by a discretionary discovery run.",
+    "Figures 7, 10, 11, 13; Section 6.3"
+   ],
+   [
+    "Graceful degradation",
+    "The failure of a supporting service reduces the information content of the answer rather than removing the answer. Missing inputs are passed to the model as genuinely absent and the creator is told.",
+    "Two of the three inputs to a forecast come from external services that will at some point be slow or unreachable. A forecast built on partial information is more useful than no forecast, provided the shortfall is disclosed.",
+    "Figures 8, 9; Sections 6.2, 11"
+   ],
+   [
+    "Frozen artefact",
+    "A release publishes the model together with the encoding map, the ordered feature list, the interval calibration and the preprocessing",
+    "It is the only way to guarantee that the vector presented at serving time is the vector the model was fitted on. Recomputing an encoding at serving",
+    "Figures 6, 7, 13; Sections 5.2, 8.2"
+   ]
+  ]
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Mechanism",
+    "What it is",
+    "Why the architecture needs it",
+    "Where it appears"
+   ],
+   [
+    "",
+    "implementation, as one immutable versioned bundle.",
+    "time would introduce a silent inconsistency that no test would catch.",
+    ""
+   ],
+   [
+    "Publication-ancho red age",
+    "A video's age is always computed from its own published at value, and that _ age forms part of the snapshot primary key.",
+    "The label \"day 7\" only carries consistent meaning when anchored to publication. Making it part of the key enforces the invariant structurally instead of leaving it to downstream correction.",
+    "Figures 10, 11, 15; Sections 6.3, 9.2"
+   ],
+   [
+    "Single-source feature preparation",
+    "Feature preparation exists once, as a shared importable module used by both the training pipeline and the prediction service, with an automated test asserting round-trip equality on a known training row.",
+    "Training-serving skew is the most common way a working model fails in production. Structural prevention is the only reliable prevention.",
+    "Figures 6, 7, 13, 14; Sections 5.2.4, 8.2"
+   ]
+  ]
+ ],
+ [
+  "h",
+  2,
+  "2.6 Traceability convention"
+ ],
+ [
+  "p",
+  "The SRS assigns a unique identifier to every requirement precisely so that design and test artefacts can refer to it. This document uses those identifiers throughout. Where an architectural element exists because a requirement demands it, the identifier is quoted in parentheses at the point the element is introduced — for example, the composition of the snapshot key is annotated (DB-04, DC-11). Appendix B collects these into a matrix in the opposite direction, from requirement identifier to realising element, so that a reviewer can confirm coverage without reading the document linearly. Requirements that are not architecturally significant — presentation wording, help content, individual validation messages — are deliberately absent from the matrix, and their absence is noted there rather than left ambiguous."
+ ],
+ [
+  "h",
+  1,
+  "3 Architectural Goals and Constraints"
+ ],
+ [
+  "p",
+  "This section records the requirements and objectives that have a significant impact on the architecture, together with the special constraints that apply. Each entry names the architectural response and the requirement it derives from. An entry appears here only if removing it would change the structure of the system."
+ ],
+ [
+  "h",
+  2,
+  "3.1 Goals with architectural impact"
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Goal",
+    "Architectural response",
+    "Source"
+   ],
+   [
+    "Genuine pre-publication forecasting",
+    "The prediction service accepts planned metadata only and has no code path that reads engagement data for the subject video. The feature layer admits only values computable before a publication timestamp, and lagged aggregates are computed over a period ending strictly before it.",
+    "FR-26, FR-27, DC-07, DC-08, DC-09"
+   ],
+   [
+    "No training-serving divergence",
+    "One shared feature-preparation module imported by both paths; a frozen encoding map and ordered feature list published with the artefact; an automated round-trip test on a known training row.",
+    "FR-21, FR-22, FR-24, SUP-04, SUP-05"
+   ],
+   [
+    "A forecast survives partial failure",
+    "Channel lookup and title scoring are independent, individually timed-out calls whose failure marks inputs missing rather than aborting the request. Gradient-boosted trees handle absent values natively, so no imputation is needed.",
+    "FR-30, REL-09, REL-10, PERF-03"
+   ],
+   [
+    "Verified Sri Lankan collection",
+    "A channel is admitted to the roster only after channels.list reports a declared country of LK. Discovery walks the roster's uploads playlists rather than issuing region-filtered searches.",
+    "FR-49, FR-51, FR-52"
+   ],
+   [
+    "The engagement history is never silently lost",
+    "Idempotent writes on a natural key; a 26-hour discovery look-back that absorbs a missed run; exactly one run-summary record written from a top-level handler whether the run succeeds, partially succeeds or fails.",
+    "FR-58, FR-66, REL-05, REL-06, REL-08"
+   ],
+   [
+    "Labels carry consistent meaning",
+    "Publication-anchored age is part of the snapshot primary key, so the invariant is enforced by the store rather than by convention. Boundary deviation is recorded per observation and a usability flag is set at write time.",
+    "FR-57, FR-61, DC-10, DC-11, REL-14"
+   ],
+   [
+    "The model technology is not yet fixed",
+    "Inference sits behind an adapter interface. Interval estimation sits behind a second interface with two implementations. Neither the dashboard contract nor the feature layer changes when the underlying model changes.",
+    "DC-06, FR-28"
+   ],
+   [
+    "Honest accuracy reporting",
+    "Evaluation is a first-class component of the model tier, computing baseline comparison, per-horizon error, empirical interval coverage, interval width and an ablation report. A model with miscalibrated intervals cannot be released.",
+    "FR-77 to FR-80, FR-82a to FR-82c"
+   ],
+   [
+    "Recommendations must be earned",
+    "The recommendation engine consults the published ablation report and suppresses any recommendation whose underlying feature group did not measurably contribute.",
+    "FR-42"
+   ],
+   [
+    "Zero-cost operation",
+    "Every node is a free tier. Exceeding a limit degrades or halts a background function; no path can incur a charge.",
+    "DC-01, DC-02"
+   ]
+  ]
+ ],
+ [
+  "h",
+  2,
+  "3.2 Constraints"
+ ],
+ [
+  "p",
+  "The following constraints are binding on the design. They are not preferences and the architecture may not be read as satisfying them optionally."
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Constraint",
+    "Consequence for the architecture",
+    "Source"
+   ],
+   [
+    "Fixed daily API quota",
+    "Quota is modelled as a resource with its own guarding component and a persisted daily ledger. Routine collection uses only one-unit endpoints; the hundred-unit search endpoint is reserved for occasional roster expansion and is permitted only above a configured safety margin.",
+    "SRS §2.4, FR-62, FR-63"
+   ],
+   [
+    "Rate-limited language-model service",
+    "Bulk historical scoring is a separate rate-aware batch process, not part of the collection run. Live scoring must tolerate failure and is retried exactly once.",
+    "FR-16, SRS §2.4"
+   ],
+   [
+    "No viewer-country data",
+    "Collection is scoped to country-verified channels as a documented assumption. No component may compute or expose a Sri-Lanka-share figure, because the input does not exist.",
+    "SRS §2.4, §1.2"
+   ],
+   [
+    "Pre-publication information only",
+    "Classical time-series and sequence architectures are excluded outright. A same-period peer ranking is excluded on two independent grounds: the cohort does not exist at forecast time, and computing it would place the target on both sides of the model.",
+    "DC-07, DC-08"
+   ],
+   [
+    "Dataset of thousands, not millions",
+    "A compact tabular model is the correct family. Deep architectures are excluded by the data regime as well as by the hardware constraint.",
+    "SRS §2.4, DC-06"
+   ],
+   [
+    "Constrained serverless runtime",
+    "The prediction path must execute within limited memory with no long-lived process. The artefact must be exportable to a form the runtime can evaluate, and the model is loaded once per runtime instance where the platform permits.",
+    "PERF-09, SRS §3.6"
+   ],
+   [
+    "Bounded database allocation",
+    "Snapshot growth is monitored against the allocation and made visible to maintainers. The tracking window is bounded so videos leave the polling set once their final horizon has passed.",
+    "PERF-07, FR-59, DB-09"
+   ],
+   [
+    "Scheduler dormancy",
+    "The hosted scheduler disables scheduled workflows after prolonged repository inactivity and may delay runs under load. The architecture answers with the 26-hour look-back and an explicit project obligation to prevent dormancy.",
+    "REL-04, SRS §2.4"
+   ],
+   [
+    "Ethical constraint on guidance",
+    "This is a constraint on structure, not wording. No feature quantifying divisiveness, communal provocation, controversy potential or misleading-claim strength is computed, stored or exposed anywhere, so no layer is in a position to optimise for it.",
+    "DC-13, DC-14, FR-19, FR-43"
+   ],
+   [
+    "Third-party terms of service",
+    "Retention, display and attribution obligations are enforced in the data layer. Records for videos that become unavailable are marked rather than retained as current.",
+    "LEG-01, LEG-02, DB-12"
+   ],
+   [
+    "Team of three, fixed timeline",
+    "The decomposition follows the division of work recorded in the team briefing, so that the collection tier, the model tier and the serving tier can progress in parallel with minimal coupling.",
+    "SRS §2.4"
+   ]
+  ]
+ ],
+ [
+  "h",
+  1,
+  "4 Use-Case View"
+ ],
+ [
+  "p",
+  "This section lists the use cases that represent significant, central functionality of the final system, or that have large architectural coverage — those that exercise many architectural elements, or that stress a specific and delicate point of the architecture. Twelve use cases are identified. They are not the complete set of things the system does; they are the set whose realisation shapes the structure."
+ ],
+ [
+  "h",
+  2,
+  "4.1 Actors"
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Actor",
+    "Type",
+    "Role with respect to the system"
+   ],
+   [
+    "Content Creator",
+    "Human, primary",
+    "A Sri Lankan YouTube creator, typically operating a mid-range channel, with no statistical background. Uses the system occasionally and deliberately when planning a specific upload. Requires no account and supplies no personal data."
+   ],
+   [
+    "Maintainer",
+    "Human, secondary",
+    "A member of the project team. Maintains the verified channel roster, runs and reviews training, monitors pipeline health and quota consumption, and applies schema migrations. Has repository and platform access; has no interface inside the dashboard."
+   ],
+   [
+    "Scheduler",
+    "Time-triggere d, external",
+    "The hosted CI service. Initiates the collection workflow four times daily at six-hourly intervals and the backup workflow nightly. It is modelled as an actor because it originates work that no human requested."
+   ],
+   [
+    "YouTube Data API v3",
+    "System, external",
+    "The sole source of channel and video metadata and engagement statistics, for both background collection and live channel lookup at forecast time."
+   ],
+   [
+    "Gemini API",
+    "System, external",
+    "Scores the tone of a video title on four fixed dimensions, both in bulk over collected history and live at forecast time."
+   ]
+  ]
+ ],
+ [
+  "h",
+  2,
+  "4.2 Architecturally significant use cases"
+ ],
+ [
+  "fig",
+  4,
+  "Use-case view. Twelve architecturally significant use cases, five actors, and the include and extend"
+ ],
+ [
+  "p",
+  "relationships between them. Figure 4 shows that the creator-facing surface is deliberately narrow — four use cases — while the majority of the system's work is initiated by the scheduler or the maintainer and is never visible from the dashboard. That asymmetry is itself architectural: it is why the collection and model tiers are separate deployable units with no inbound interface, and why the dashboard can be unavailable without the system losing data. The three use cases with the largest architectural coverage are UC-01, UC-08 and UC-10. UC-01 crosses every layer of the serving tier and both external services. UC-08 exercises the entire collection tier, the quota mechanism and every integrity invariant in the data view. UC-10 couples the model tier to the data view and produces the artefact on which UC-01 depends. The realisations below therefore treat those three in most detail."
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Ref",
+    "Use case",
+    "Primary actor",
+    "Architectural significance"
+   ],
+   [
+    "UC-01",
+    "Request pre-publication forecast",
+    "Content Creator",
+    "High — crosses all serving layers and both external services"
+   ],
+   [
+    "UC-02",
+    "Compare publishing alternatives",
+    "Content Creator",
+    "Moderate — imposes input retention and statelessness"
+   ],
+   [
+    "UC-03",
+    "Review model accuracy",
+    "Content Creator",
+    "Moderate — requires published metrics to be readable at serving time"
+   ],
+   [
+    "UC-04",
+    "Read methodology and limitations",
+    "Content Creator",
+    "Low — static content; included for completeness of the actor's surface"
+   ]
+  ]
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Ref",
+    "Use case",
+    "Primary actor",
+    "Architectural significance"
+   ],
+   [
+    "UC-05",
+    "Retrieve channel statistics",
+    "Content Creator (included)",
+    "Moderate — first degradation point"
+   ],
+   [
+    "UC-06",
+    "Score title tone",
+    "Content Creator (included)",
+    "Moderate — second degradation point; rate-limited dependency"
+   ],
+   [
+    "UC-07",
+    "Generate publishing recommendations",
+    "Content Creator (included)",
+    "High — couples the serving tier to the published ablation report"
+   ],
+   [
+    "UC-08",
+    "Discover uploads and snapshot engagement",
+    "Scheduler",
+    "High — the whole collection tier and every data invariant"
+   ],
+   [
+    "UC-09",
+    "Maintain verified channel roster",
+    "Maintainer",
+    "High — determines the population the model generalises over"
+   ],
+   [
+    "UC-10",
+    "Train, calibrate and release model",
+    "Maintainer",
+    "High — produces the frozen artefact the serving tier depends on"
+   ],
+   [
+    "UC-11",
+    "Monitor pipeline and quota",
+    "Maintainer",
+    "Moderate — requires the run log and quota ledger to exist as stores"
+   ],
+   [
+    "UC-12",
+    "Back up and verify warehouse",
+    "Scheduler",
+    "Moderate — the only path that leaves the primary platform"
+   ]
+  ]
+ ],
+ [
+  "h",
+  2,
+  "4.3 Use-Case Realizations"
+ ],
+ [
+  "p",
+  "The realisations below show how the design model elements introduced in Sections 5 to 9 cooperate to deliver each use case. Eight of the twelve are given in full; the remainder are covered by the sequence and activity diagrams in Section 6 and by the traceability matrix in Appendix B."
+ ],
+ [
+  "h",
+  3,
+  "4.3.1 UC-01 Request pre-publication forecast"
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Field",
+    "Detail"
+   ],
+   [
+    "Use case name",
+    "UC-01 Request pre-publication forecast"
+   ],
+   [
+    "Actor(s)",
+    "Content Creator (primary); YouTube Data API and Gemini API (supporting)"
+   ],
+   [
+    "Description",
+    "Produce projected cumulative view counts, with a range at each of four horizons, for a video that does not yet exist, from planned metadata alone."
+   ],
+   [
+    "Preconditions",
+    "The dashboard is reachable; a compatible model artefact is loaded by the prediction service; the creator can supply a channel URL or identifier."
+   ],
+   [
+    "Main flow",
+    "1. The creator enters category, title, planned duration, audio language, made-for-kids status and channel reference. Planned day and hour are offered but may be left blank.​ 2. The dashboard validates the inputs and reports any field-level problem in plain language (FR-06, UR-09).​ 3. The prediction service resolves the channel reference and retrieves subscriber count, total view count, uploaded-video count and creation date, deriving channel age (FR-08, FR-09).​ 4. Concurrently, the service submits the title for tone scoring and validates the returned score set (FR-13 to FR-16).​ 5. The feature assembler builds the complete feature vector, applying the frozen encoding map and the published feature order (FR-20 to FR-24).​ 6. A single inference produces all four horizon predictions, which are returned to the real view-count scale (FR-28, FR-29).​"
+   ]
+  ]
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Field",
+    "Detail"
+   ],
+   [
+    "",
+    "7. The interval estimator derives a lower and an upper bound for each horizon from the published per-horizon calibration (FR-31a, FR-31b).​ 8. The recommendation engine derives guidance across timing, duration, format and title framing, suppressing any area whose feature group failed the ablation test (FR-41, FR-42).​ 9. The dashboard renders the trajectory with its band, the plain-language prose, the recommendations with their supporting patterns, and any degradation notice (FR-32 to FR-36)."
+   ],
+   [
+    "Successful end / post-condition",
+    "A four-horizon forecast with bounds, recommendations and supporting evidence is displayed. No creator input is written to the warehouse. The response carries the model version."
+   ],
+   [
+    "Fail end / post-condition",
+    "If the model artefact cannot be loaded, the system states plainly that no forecast can be produced and presents no estimated or placeholder figure (REL-11). Validation failures return to the form with entered values preserved (UR-10)."
+   ],
+   [
+    "Extensions",
+    "Steps 3 and 4 may each fail independently. Either failure marks the corresponding inputs as missing, allows the flow to continue, and causes the result view to state that the forecast was produced with incomplete information (FR-30, FR-35, REL-09, REL-10). Omitted optional inputs at step 1 are carried through as genuinely missing and are never imputed (FR-04)."
+   ],
+   [
+    "Requirements realised",
+    "FR-01 to FR-06, FR-08 to FR-11, FR-13 to FR-17, FR-20 to FR-31b, FR-32 to FR-36b, REL-09 to REL-11, PERF-01 to PERF-03"
+   ]
+  ]
+ ],
+ [
+  "h",
+  3,
+  "4.3.2 UC-02 Compare publishing alternatives"
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Field",
+    "Detail"
+   ],
+   [
+    "Use case name",
+    "UC-02 Compare publishing alternatives"
+   ],
+   [
+    "Actor(s)",
+    "Content Creator"
+   ],
+   [
+    "Description",
+    "Vary one planned input and resubmit, so that the creator can compare forecasts across categories, durations, formats or publishing slots."
+   ],
+   [
+    "Preconditions",
+    "A forecast has been produced and is displayed with its submitted inputs retained."
+   ],
+   [
+    "Main flow",
+    "1. The creator amends a single field on the result view.​ 2. The dashboard resubmits the complete request, including the unchanged fields.​ 3. The prediction service executes UC-01 in full for the amended request.​ 4. The dashboard renders the new forecast alongside or in place of the previous one."
+   ],
+   [
+    "Successful end / post-condition",
+    "A second forecast is displayed and the creator can read the difference attributable to the changed field."
+   ],
+   [
+    "Fail end / post-condition",
+    "A failure of the amended request leaves the previously displayed forecast intact and reports the failure separately."
+   ],
+   [
+    "Extensions",
+    "Because the prediction service is stateless, no comparison state is held server-side; the dashboard is responsible for retaining prior results within the session."
+   ],
+   [
+    "Requirements realised",
+    "FR-07, UR-10, PERF-05"
+   ]
+  ]
+ ],
+ [
+  "h",
+  3,
+  "4.3.3 UC-03 Review model accuracy"
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Field",
+    "Detail"
+   ],
+   [
+    "Use case name",
+    "UC-03 Review model accuracy"
+   ],
+   [
+    "Actor(s)",
+    "Content Creator"
+   ],
+   [
+    "Description",
+    "Disclose how accurate the currently published model was when measured on data it was not trained on."
+   ],
+   [
+    "Preconditions",
+    "A model artefact has been released with its metrics report."
+   ],
+   [
+    "Main flow",
+    "1. The creator opens the accuracy view.​ 2. The service reads the metrics report published with the current artefact.​ 3. The view presents headline proportional error across horizons, the same figure per horizon, and the corresponding naive-baseline figures.​ 4. The size of the evaluation set and the date range it covers are stated.​ 5. A plain-language explanation is shown, including why longer horizons are less accurate."
+   ],
+   [
+    "Successful end / post-condition",
+    "The creator can read the model's measured performance and the baseline it is compared against, and can judge how much weight the forecast will bear."
+   ],
+   [
+    "Fail end / post-condition",
+    "If no metrics report is available for the loaded artefact, the view states that accuracy has not yet been published rather than showing a figure of unknown provenance."
+   ],
+   [
+    "Extensions",
+    "A creator may optionally supply the URL of a published video to record a genuine prediction-and-outcome pair. This is a desirable extension (FR-48) and is not required for the use case to succeed."
+   ],
+   [
+    "Requirements realised",
+    "FR-44 to FR-48, UR-06"
+   ]
+  ]
+ ],
+ [
+  "h",
+  3,
+  "4.3.4 UC-07 Generate publishing recommendations"
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Field",
+    "Detail"
+   ],
+   [
+    "Use case name",
+    "UC-07 Generate publishing recommendations"
+   ],
+   [
+    "Actor(s)",
+    "Content Creator (included from UC-01)"
+   ],
+   [
+    "Description",
+    "Convert learned patterns into specific, defensible and ethically bounded advice, each item accompanied by the historical pattern that supports it."
+   ],
+   [
+    "Preconditions",
+    "A forecast has been computed; the published artefact includes an ablation report; lagged category and channel aggregates are readable."
+   ],
+   [
+    "Main flow",
+    "1. The engine reads the ablation report published with the current artefact.​ 2. For each of the four recommendation areas — timing, duration, format, title framing — it checks whether the underlying feature group was shown to contribute measurably.​ 3. For each approved area it queries the corresponding lagged aggregate for the selected category and channel size tier.​ 4. It composes each recommendation as an observation together with the pattern that supports it, not as an instruction.​ 5. Timing guidance is given prominence when the creator left the publishing slot blank."
+   ],
+   [
+    "Successful end / post-condition",
+    "Only evidence-backed recommendations are returned, each carrying its supporting pattern."
+   ]
+  ]
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Field",
+    "Detail"
+   ],
+   [
+    "Fail end / post-condition",
+    "Where no area passes the ablation test, the forecast is returned with no recommendations rather than with unsupported ones."
+   ],
+   [
+    "Extensions",
+    "The engine has no code path capable of producing guidance that advocates divisiveness, communal or ethnic provocation, or unsupported claims, because no feature quantifying those properties exists anywhere in the system (DC-13, FR-19, FR-43)."
+   ],
+   [
+    "Requirements realised",
+    "FR-37 to FR-43, UR-07, DC-14"
+   ]
+  ]
+ ],
+ [
+  "h",
+  3,
+  "4.3.5 UC-08 Discover uploads and snapshot engagement"
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Field",
+    "Detail"
+   ],
+   [
+    "Use case name",
+    "UC-08 Discover uploads and snapshot engagement"
+   ],
+   [
+    "Actor(s)",
+    "Scheduler (primary); YouTube Data API (supporting)"
+   ],
+   [
+    "Description",
+    "Build and extend the day-by-day engagement history from which every training label is derived. This is the use case on which the entire forecasting capability depends."
+   ],
+   [
+    "Preconditions",
+    "The workflow is enabled and not dormant; credentials are present in the platform secret store; migrations are applied; the roster contains at least one verified channel."
+   ],
+   [
+    "Main flow",
+    "1. The scheduler starts one of four daily runs and the orchestrator opens a run-log record.​ 2. On a full run, channel statistics are refreshed and channel snapshots written. On a discovery-only run this step is skipped to conserve quota.​ 3. For each rostered channel, the uploads playlist is walked newest-first and traversal stops at the 26-hour cutoff.​ 4. Newly discovered video identities are upserted with their publication timestamps (FR-53).​ 5. Every video still inside its tracking window is batched fifty at a time and its view, like and comment counts retrieved.​ 6. For each observation the video's age is computed from its own publication timestamp and the snapshot is upserted on (video id, age days) (FR-57, FR-58).​ _ _ 7. The deviation between the observation and the exact horizon boundary is recorded and the label marked usable or not (FR-61).​ 8. Videos past the end of their tracking window are marked complete and excluded from further polling (FR-59).​ 9. Exactly one run-summary record is written from a top-level handler (FR-66)."
+   ],
+   [
+    "Successful end / post-condition",
+    "New uploads and current snapshots are stored with no duplicate observations, and the run is visible in the run log."
+   ],
+   [
+    "Fail end / post-condition",
+    "The run fails, the failure is recorded in the run log, and stored data remains consistent. The next scheduled run resumes without manual intervention; the look-back covers the gap."
+   ],
+   [
+    "Extensions",
+    "Quota exhaustion halts the run cleanly and records the condition (FR-64). A video that is private, deleted, scheduled or returns an incomplete response is recorded as unavailable and the run continues (FR-60, REL-08). Calls failing with quota or transient server errors are retried with increasing delay (FR-65)."
+   ]
+  ]
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Field",
+    "Detail"
+   ],
+   [
+    "Requirements realised",
+    "FR-51, FR-53, FR-55 to FR-66, REL-02, REL-05, REL-06, REL-08, REL-12 to REL-14, DB-04, DB-05, DB-11, DB-12, DC-10 to DC-12"
+   ]
+  ]
+ ],
+ [
+  "h",
+  3,
+  "4.3.6 UC-09 Maintain verified channel roster"
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Field",
+    "Detail"
+   ],
+   [
+    "Use case name",
+    "UC-09 Maintain verified channel roster"
+   ],
+   [
+    "Actor(s)",
+    "Maintainer (primary); YouTube Data API (supporting)"
+   ],
+   [
+    "Description",
+    "Maintain the curated set of country-verified Sri Lankan channels that defines the population the model is trained on and generalises over."
+   ],
+   [
+    "Preconditions",
+    "The maintainer has repository access and one or more candidate handles or channel identifiers."
+   ],
+   [
+    "Main flow",
+    "1. Candidates are added to the roster file, occasionally sourced from broad keyword searches across categories.​ 2. Each candidate is queried via channels.list and retained only if its declared country is LK.​ 3. Each retained channel is assigned a size tier computed relative to other channels in the same category, automatically at ingest (FR-50).​ 4. The roster change is reviewed and committed.​ 5. The next scheduled run includes the newly verified channels."
+   ],
+   [
+    "Successful end / post-condition",
+    "The tracked roster contains only country-verified LK channels, each carrying a category-relative size tier."
+   ],
+   [
+    "Fail end / post-condition",
+    "Candidates with a missing or non-LK declared country are not admitted. Ingestion is safely repeatable and updates existing records rather than duplicating or failing on them (FR-54)."
+   ],
+   [
+    "Extensions",
+    "A channel's declared country is frequently absent. The verification rule is therefore high-precision and incomplete in recall; this is a documented scoping property of the dataset, not a defect."
+   ],
+   [
+    "Requirements realised",
+    "FR-49, FR-50, FR-54, FR-63"
+   ]
+  ]
+ ],
+ [
+  "h",
+  3,
+  "4.3.7 UC-10 Train, calibrate and release model"
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Field",
+    "Detail"
+   ],
+   [
+    "Use case name",
+    "UC-10 Train, calibrate and release model"
+   ],
+   [
+    "Actor(s)",
+    "Maintainer"
+   ],
+   [
+    "Description",
+    "Produce the frozen artefact that the serving tier depends on, and establish what may honestly be claimed about it."
+   ],
+   [
+    "Preconditions",
+    "The derived feature view is populated; sufficient labels have matured at one or more horizons."
+   ],
+   [
+    "Main flow",
+    "1. Rows are selected from the derived feature view and the count removed at each selection stage is recorded (FR-72).​ 2. The data is split by publication date into training, validation and test portions. Random cross-validation is not used (FR-75).​"
+   ]
+  ]
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Field",
+    "Detail"
+   ],
+   [
+    "",
+    "3. The categorical encoding is fitted inside the training portion only, after the split (FR-76).​ 4. The naive category baseline, and a category-by-size-tier variant, are built and measured first (FR-77).​ 5. The candidate model is fitted on log-transformed targets and evaluated per horizon and combined (FR-78).​ 6. Interval bounds are calibrated per horizon and empirical coverage and relative width are measured (FR-82a, FR-82b).​ 7. An ablation study retrains with each feature group removed in turn and records the change in accuracy (FR-80).​ 8. The artefact is published: model, encoding map, ordered feature list, calibration, shared preprocessing implementation, metrics report and full training configuration including split boundary and seed (FR-81, SUP-07)."
+   ],
+   [
+    "Successful end / post-condition",
+    "A versioned artefact and its metrics report are published, and the serving tier can load them without further transformation."
+   ],
+   [
+    "Fail end / post-condition",
+    "A model whose measured interval coverage departs materially from nominal is recalibrated and is not released until the two agree (FR-82c)."
+   ],
+   [
+    "Extensions",
+    "Retraining recurs as further labels mature; each release is versioned (FR-82). Videos with fewer than thirty days of history are retained with their unavailable horizons left absent rather than excluded (FR-70)."
+   ],
+   [
+    "Requirements realised",
+    "FR-68 to FR-82c, SUP-07, SUP-08, REL-15, REL-16, PERF-08"
+   ]
+  ]
+ ],
+ [
+  "h",
+  3,
+  "4.3.8 UC-12 Back up and verify warehouse"
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Field",
+    "Detail"
+   ],
+   [
+    "Use case name",
+    "UC-12 Back up and verify warehouse"
+   ],
+   [
+    "Actor(s)",
+    "Scheduler (primary); Maintainer (manual dispatch)"
+   ],
+   [
+    "Description",
+    "Create a recoverable logical backup outside the primary platform, and prove that what arrived is what was sent."
+   ],
+   [
+    "Preconditions",
+    "Backup credentials and remote configuration are present in the platform secret store; the workflow is on the default branch."
+   ],
+   [
+    "Main flow",
+    "1. The workflow starts nightly at 19:30 UTC, approximately 01:00 Sri Lanka time.​ 2. Roles, schema and data are exported over the session-pooler connection.​ 3. A run manifest and per-file SHA-256 checksums are generated.​ 4. The files are compressed into a timestamped archive.​ 5. The archive and checksum are uploaded to the off-site remote.​ 6. Local and remote copies are compared and the transfer verified.​ 7. Temporary runner files are removed and the outcome recorded."
+   ],
+   [
+    "Successful end / post-condition",
+    "A verified archive and its checksum are available off-site under a dated path, and the run is recorded as successful."
+   ],
+   [
+    "Fail end / post-condition",
+    "Any failure of dump, checksum, upload or verification fails the run and preserves the logs. A partial archive is never recorded as a successful backup."
+   ],
+   [
+    "Extensions",
+    "Restore testing targets a separate temporary project and never the production collection database (REL-07). Existing off-site copies are retained until a retention policy is approved (Appendix A, OD-4)."
+   ]
+  ]
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Field",
+    "Detail"
+   ],
+   [
+    "Requirements realised",
+    "REL-07, DB-09, SEC-01, SEC-02"
+   ]
+  ]
+ ],
+ [
+  "h",
+  1,
+  "5 Logical View"
+ ],
+ [
+  "h",
+  2,
+  "5.1 Overview"
+ ],
+ [
+  "p",
+  "The design model is decomposed into eleven packages arranged in seven layers. The decomposition is driven by two forces. The first is the need to keep the three run-time tiers independently buildable and testable, so that collection, modelling and serving can progress in parallel. The second is the need to make one module — feature preparation — genuinely shared between the serving tier and the model tier, rather than duplicated with the intention of keeping the copies in step."
+ ],
+ [
+  "fig",
+  5,
+  "Logical decomposition into subsystems and packages. Arrows show permitted dependency direction."
+ ],
+ [
+  "p",
+  "Figure 5 shows the package hierarchy. Three properties are worth reading off it. The domain package depends on nothing, which is what allows the forecast objects to be exercised in tests without a database, a network or a model file. The feature pipeline is reached from both the prediction API and the training pipeline, and is the only package with that property. The collector and backup packages sit outside the serving path entirely — they reach the repositories and the gateways but never the dashboard, the API or the domain, which is why they can be deployed, run and fail independently."
+ ],
+ [
+  "h",
+  2,
+  "5.2 Architecturally Significant Design Packages"
+ ],
+ [
+  "p",
+  "Each package below is named with its brief description and its architecturally significant classes. Figures 6 and 7 give the class-level detail: Figure 6 covers the serving path, Figure 7 the collection and training paths. Between them they contain every class whose responsibilities or relationships constrain the rest of the design."
+ ],
+ [
+  "fig",
+  6,
+  "Architecturally significant classes on the serving path, with their principal attributes, operations and"
+ ],
+ [
+  "p",
+  "relationships. Figure 6 shows the serving path. ForecastResult composes exactly four HorizonForecast instances and zero or more Recommendation instances; the fixed multiplicity of four is architectural, because the four horizons are produced by a single inference from one multi-output model rather than by four independent predictors (FR-28). PredictionService is the only class that orchestrates; every other class in the serving package performs one task and returns. FeatureAssembler, MultiHorizonPredictor and IntervalEstimator all read the same ModelArtefact, which is what guarantees that the encoding, the feature order and the calibration used at serving time came from the same release as the model itself. IntervalEstimator is deliberately an interface with two implementations. The SRS specifies bounds derived from the distribution of model errors on held-out data, with native quantile regression recorded as the documented alternative; the team briefing records quantile regression as decided. The architecture does not resolve that disagreement — it is a modelling decision, not a structural one — but it does contain it, so that whichever is chosen the serving contract and the dashboard are unaffected. The conflict is recorded as OD-1 in Appendix A."
+ ],
+ [
+  "fig",
+  7,
+  "Architecturally significant classes on the collection and training paths."
+ ],
+ [
+  "p",
+  "Figure 7 shows the collection and training paths. CollectionOrchestrator is the single entry point for a scheduled run and holds the run mode that determines whether channel statistics are refreshed. Every gateway routes through QuotaGuard, so there is exactly one place in the system where the daily allowance is accounted for and exactly one place that can refuse a call. On the training side, TrainingPipeline reaches the warehouse only through FeatureViewRepository, which enforces the rule that the model tier consumes the derived view and nothing else (IF-10). 5.2.1 dashboard Presents the planned-metadata form with required and optional inputs visually distinguished, the forecast trajectory with its band, the recommendations with their supporting patterns, the accuracy view and the methodology and limitations view. Significant components: ForecastForm, ForecastChart, RecommendationPanel, AccuracyPanel. The package holds no business logic and reaches no store; it consumes the prediction API through a documented request and response contract, which is what allows the dashboard to be served as static assets from an edge network with no server behind it. 5.2.2 prediction_api Validates incoming requests against the published schema, exposes the forecast, accuracy and health endpoints, maps internal failures onto messages that disclose no implementation detail (SEC-10), and coordinates the forecasting operation. Significant classes: ForecastRequestSchema, ForecastResponseSchema, PredictionService, ErrorMapper. PredictionService is architecturally the most important class in the system: it is the only place where channel lookup, tone scoring, feature assembly, inference, interval estimation and recommendation generation are sequenced, and therefore the only place where the degradation policy is expressed. 5.2.3 forecast_domain Defines the framework-independent objects and rules of forecasting. Significant classes: ForecastRequest, ForecastResult, HorizonForecast, Recommendation, ChannelState, ToneScores. This package depends on nothing outside itself — no web framework, no database driver, no model library — which is a deliberate constraint rather than an accident. It is what makes the forecast objects testable in isolation and what allows the serving tier to be ported to a different runtime without touching the definition of what a forecast is. 5.2.4 feature_pipeline Converts planned video information, retrieved channel statistics and title tone scores into the model-ready feature vector. Significant classes: FeatureAssembler, TimeEncoder, TitleFeatureBuilder, ChannelHistoryFeatureBuilder, LaggedAggregateBuilder. This is the package that carries the single-source mechanism: it is imported unchanged by both the prediction service and the training pipeline, and an automated test asserts that a known training row passed through the serving path reproduces its training feature vector exactly (SUP-04, SUP-05). It is also the package that enforces the pre-publication restriction, because every builder in it is written to accept only values computable before a publication timestamp (DC-07). 5.2.5 model_inference Loads a compatible artefact and produces the four horizon predictions and their bounds. Significant classes: ModelLoader, ModelArtefact, MultiHorizonPredictor, IntervalEstimator with its two implementations, ModelVersionMetadata. The package hides the model technology behind an adapter, so that substituting one gradient-boosting library for another, or an ensemble for a single model, changes nothing outside this package (DC-06). Version metadata is returned with every forecast so that a response can always be attributed to the release that produced it. 5.2.6 recommendations Converts lagged historical patterns and the forecast into plain-language guidance. Significant classes: RecommendationEngine, Recommendation, AblationGate. AblationGate is the architecturally interesting element: it reads the ablation report published with the artefact and refuses to emit a recommendation whose underlying feature group did not measurably contribute (FR-42). Without it the system would be free to advise a creator to publish on a particular evening even if publishing time carried no signal in this market. 5.2.7 repositories Isolates all database access behind interfaces. Significant interfaces: ChannelRepository, VideoRepository, SnapshotRepository, RunLogRepository, QuotaLedgerRepository, FeatureViewRepository, MetricsRepository. No SQL exists outside this package. FeatureViewRepository is the declared interface between the collection tier and the model tier: the model layer consumes warehouse data exclusively through the derived view, so a new model input is added to the view rather than computed ad hoc in analysis code (IF-10, SUP-06). 5.2.8 gateways Wraps every external service and the quota accounting that governs it. Significant classes: YouTubeGateway, GeminiGateway, QuotaGuard, RetryPolicy. All external calls are made from server-side code so that no external-service credential is ever present in the browser (SEC-03). QuotaGuard maintains the persisted daily ledger by call class, permits expensive search-class calls only above a configured safety margin, and is the component that halts collection cleanly when the allowance is exhausted (FR-62 to FR-64). 5.2.9 collector Discovers uploads, retrieves statistics and writes identity and snapshot records. Significant classes: CollectionOrchestrator, ChannelRosterLoader, UploadWalker, SnapshotWriter, RunMode. UploadWalker implements the incremental traversal that makes discovery cheap: uploads playlists are newest-first, so traversal stops at the look-back cutoff rather than paginating the whole playlist. SnapshotWriter is where the publication-anchored age invariant is enforced at the point of writing rather than left to downstream correction (DC-11). 5.2.10 training Prepares data, fits, evaluates, calibrates and publishes. Significant classes: TrainingPipeline, BaselineModel, Evaluator, IntervalCalibrator, AblationRunner, ArtefactPublisher. Evaluator is treated as architecturally significant, not as a utility, because SRS FR-82c makes a release conditional on its output: a model whose measured interval coverage departs materially from nominal cannot be published. That makes evaluation part of the release path rather than a report produced alongside it. 5.2.11 ops Operational entry points that are not part of any tier: the backup job, the migration runner and the bulk historical tone-scoring job. Significant classes: BackupJob, MigrationRunner, BulkToneScorer. BulkToneScorer is separated from the collection run deliberately: historical scoring is rate-limited and must not be allowed to slow or fail a collection run that has a fixed schedule to keep."
+ ],
+ [
+  "h",
+  2,
+  "5.3 Key relationships"
+ ],
+ [
+  "p",
+  "The relationships below are the ones a reviewer should check, because breaking any of them would break an architectural guarantee rather than merely a feature."
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Relationship",
+    "Multiplicity / kind",
+    "Why it is architecturally significant"
+   ],
+   [
+    "ForecastResult composes HorizonForecast",
+    "1 to exactly 4",
+    "Fixes the single-inference, multi-output design. Four independent predictors would satisfy the same interface but would permit the day-7 and day-30 paths to drift apart in their handling of the same input."
+   ],
+   [
+    "HorizonForecast holds optional bounds",
+    "0..1 lower, 0..1 upper",
+    "Permits the point forecast to be returned when bounds cannot be produced, with the absence stated rather than silently hidden (FR-36b)."
+   ],
+   [
+    "FeatureAssembler reads ModelArtefact",
+    "unidirectional",
+    "The encoding map and feature order are read, never recomputed. Reversing this dependency would reintroduce training-serving skew."
+   ],
+   [
+    "prediction api depends on _ feature pipeline; training _ depends on feature pipeline _",
+    "shared",
+    "The only package with two dependents by design. It is the structural expression of SUP-04."
+   ],
+   [
+    "Every gateway depends on QuotaGuard",
+    "many to one",
+    "Ensures exactly one accounting point. A gateway added later that bypassed the guard would silently break FR-62."
+   ],
+   [
+    "training depends on FeatureViewRepository only",
+    "unidirectional, narrow",
+    "Enforces IF-10. The model tier cannot reach raw tables, so a new feature must be added to the view where both tiers can see it."
+   ],
+   [
+    "collector depends on repositories and gateways; on nothing else",
+    "unidirectional",
+    "Keeps the collection tier deployable and failable independently of the serving tier."
+   ],
+   [
+    "forecast domain depends on _ nothing",
+    "zero outbound",
+    "Makes the domain testable without infrastructure and portable across runtimes."
+   ]
+  ]
+ ],
+ [
+  "h",
+  1,
+  "6 Process View"
+ ],
+ [
+  "p",
+  "This section describes the decomposition of the system into processes and threads, organised by groups of processes that communicate or interact, and describes the main modes of communication between them."
+ ],
+ [
+  "h",
+  2,
+  "6.1 Process and thread model"
+ ],
+ [
+  "p",
+  "ViewCastLK contains four heavyweight processes. They do not share memory, they are not co-located, and none of them calls another synchronously; all inter-process communication is mediated by the warehouse, by the published artefact, or by the scheduler."
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Process",
+    "Weight",
+    "Lifetime",
+    "Concurrency within it",
+    "Trigger"
+   ],
+   [
+    "Prediction service",
+    "Heavyweight , stateless",
+    "One short-lived invocation per request; the runtime may reuse an instance and its loaded artefact across requests where the platform permits it.",
+    "Two lightweight threads run concurrently per request: the channel-statistics lookup and the title-scoring call. They are independent, each independently timed out, and are joined before feature assembly. All remaining work is sequential.",
+    "Creator action (HTTPS)"
+   ],
+   [
+    "Collection worker",
+    "Heavyweight , ephemeral",
+    "One process per scheduled run; terminates when the run completes or halts.",
+    "Sequential by design. Batching, not threading, is the concurrency mechanism: videos.list retrieves fifty videos per call. Parallel channel traversal is deliberately not used, because it would make quota accounting racy and the ledger is the binding constraint.",
+    "Scheduler cron, four times daily at six-hourly intervals"
+   ],
+   [
+    "Training pipeline",
+    "Heavyweight , operator-init iated",
+    "One process per training run on commodity hardware; may run for minutes.",
+    "Library-level parallelism within model fitting only. The pipeline itself is strictly sequential so that a run is reproducible from its recorded seed and configuration.",
+    "Maintainer, manually"
+   ],
+   [
+    "Backup job",
+    "Heavyweight , ephemeral",
+    "One process per nightly run.",
+    "Sequential. Export, checksum, compress, upload and verify are ordered steps with no overlap, because verification is meaningless if it can race the upload.",
+    "Scheduler cron, nightly at 19:30 UTC"
+   ]
+  ]
+ ],
+ [
+  "p",
+  "Two design decisions in that table are worth stating explicitly because they were choices rather than defaults. Concurrency in the forecast path is limited to the two external calls because those are the only genuinely independent, latency-dominated operations; parallelising anything else would add failure modes without reducing perceived latency. Concurrency in the collection path is refused altogether because the daily quota ledger must be exact — a racy ledger would either over-report and starve routine collection, or under-report and allow the allowance to be exceeded."
+ ],
+ [
+  "h",
+  2,
+  "6.2 Process group: forecast request"
+ ],
+ [
+  "p",
+  "This group is synchronous and user-facing. Correctness and completeness take precedence over latency; the system is required to acknowledge the request immediately and show that work is in progress, but no fixed maximum response time is imposed (PERF-01, PERF-02)."
+ ],
+ [
+  "fig",
+  8,
+  "Activity view of a forecast request, with swimlanes for the creator, the dashboard and the prediction service."
+ ],
+ [
+  "p",
+  "Figure 8 shows the control flow. Three features of it are architectural rather than incidental. The fork after submission is the concurrency described in Section 6.1, and each branch has its own failure handling that marks inputs missing rather than aborting. The two failure branches rejoin the main flow, so a degraded forecast follows exactly the same path as a complete one — there is no separate degraded code path to keep in step. The only condition that terminates the flow without a forecast is the absence of a loadable model artefact, which is the one case in which the system is required to say plainly that no forecast can be produced (REL-11)."
+ ],
+ [
+  "fig",
+  9,
+  "Sequence view of a forecast request, showing the internal objects rather than treating the system as a black"
+ ],
+ [
+  "p",
+  "box. Figure 9 shows the same scenario as an object interaction. The alternative fragments make the degradation contract explicit at the message level: a channel that cannot be resolved and a tone score that fails validation both return an absent value to PredictionService rather than raising, and PredictionService is the only object that knows a degradation has occurred. The loop fragment over the four horizons shows that interval estimation is per-horizon by construction, because uncertainty grows with distance from the publication date and a single calibration would misstate at least three of the four."
+ ],
+ [
+  "h",
+  2,
+  "6.3 Process group: scheduled collection"
+ ],
+ [
+  "p",
+  "This group is asynchronous and unattended. It has no interactive client, no acceptable manual step, and a fixed schedule it must keep, because a run that does not happen leaves a gap in the engagement history that cannot be recovered afterwards."
+ ],
+ [
+  "fig",
+  10,
+  "Activity view of one scheduled collection run, with swimlanes for the scheduler, the collector and the quota"
+ ],
+ [
+  "p",
+  "guard. Figure 10 shows where the quota guard sits in the control flow — inside the per-channel loop, with the authority to break it. That placement is the whole of the quota strategy: the guard is consulted before work is committed rather than after it has been spent, so exhaustion produces a clean halt with a recorded condition rather than a sequence of failing calls. The run-summary write sits outside every loop and every failure branch, which is how it is guaranteed to happen whether the run succeeded, partially succeeded or crashed (FR-66)."
+ ],
+ [
+  "fig",
+  11,
+  "Sequence view of a six-hourly collection run, including the quota-exhaustion alternative."
+ ],
+ [
+  "p",
+  "Figure 11 shows the message-level detail. The optional fragment at the top is the difference between a full run and a discovery-only run: two of the four daily runs skip the channel-statistics refresh to conserve quota. The age computation is shown as an explicit self-message immediately before the snapshot write, because that ordering is the invariant — the age is computed from the video's own publication timestamp and then used as part of the write key, so an incorrectly anchored age cannot be written at all (DC-10, DC-11)."
+ ],
+ [
+  "h",
+  2,
+  "6.4 Communication and consistency"
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Process group",
+    "Trigger",
+    "Communication mode",
+    "Consistency strategy"
+   ],
+   [
+    "Forecast request",
+    "Creator action",
+    "HTTPS/JSON between browser and prediction service; HTTPS/REST to both external APIs; PostgreSQL over TLS through a transaction-mode pooler for lagged aggregates.",
+    "Stateless. No creator input is persisted. Consistency is contractual: a versioned artefact and a versioned response schema. The model version is returned with every response so a forecast can always be attributed."
+   ]
+  ]
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Process group",
+    "Trigger",
+    "Communication mode",
+    "Consistency strategy"
+   ],
+   [
+    "Full collection run",
+    "Two of four daily runs",
+    "HTTPS/REST to the data API; PostgreSQL over TLS through a transaction-mode pooler.",
+    "Idempotent upsert on natural keys. A retried or duplicated run converges on the same state. A partially failed run leaves the store consistent and is safely repeatable."
+   ],
+   [
+    "Discovery-only run",
+    "Two of four daily runs",
+    "As above, with the channel-statistics refresh omitted.",
+    "As above, plus a 26-hour look-back that absorbs a delayed or missed run without creating a gap in newly discovered uploads."
+   ],
+   [
+    "Bulk tone scoring",
+    "Maintainer, rate-aware batch",
+    "HTTPS/REST to the language-model service, one title per request.",
+    "One score set per video, written once as a static property of the video rather than repeated across its observations (FR-18, DB-06)."
+   ],
+   [
+    "Training run",
+    "Maintainer",
+    "PostgreSQL over TLS reading the derived feature view; file output to the artefact store.",
+    "Reproducible from a recorded seed, split boundary, row-filter counts and hyperparameters. Artefacts are immutable once published; a change means a new version."
+   ],
+   [
+    "Backup",
+    "Nightly cron or manual dispatch",
+    "pg dump over TLS through a _ session-mode pooler; file transfer to off-site storage.",
+    "Per-file SHA-256 checksums and a post-upload comparison. A transfer that cannot be verified fails the run."
+   ],
+   [
+    "Migration deployment",
+    "Maintainer, controlled",
+    "Migration CLI to the remote database.",
+    "Versioned migration history, reviewed before application. All schema change occurs this way; no ad hoc DDL."
+   ]
+  ]
+ ],
+ [
+  "h",
+  1,
+  "7 Deployment View"
+ ],
+ [
+  "p",
+  "This section describes the physical configuration on which the software is deployed and run, the nodes that execute it, their interconnections, and the mapping of the processes of Section 6 onto those nodes. A single configuration is described; the project has no separate staging topology, and the differences between a developer's local environment and the deployed system are limited to credentials and endpoints."
+ ],
+ [
+  "fig",
+  12,
+  "Deployment view. Nodes, deployed artefacts and communication paths annotated with protocol."
+ ],
+ [
+  "p",
+  "Figure 12 shows six nodes. The property that matters most is that no node is owned by the project: every one is a managed platform operated under a free tier, and the architecture is therefore obliged to treat each as something that can become slow or unavailable without notice. That obligation is discharged by the degradation policy in Section 6.2 and the graceful-halt behaviour in Section 6.3."
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Node",
+    "Kind",
+    "Deployed artefacts",
+    "Notes"
+   ],
+   [
+    "Client device",
+    "User-owned, unmanaged",
+    "Dashboard bundle executing in a browser",
+    "The only requirement placed on it is a current browser with JavaScript enabled and a network connection (IF-06). No installation, no account, no local storage of personal data."
+   ],
+   [
+    "Edge network",
+    "Managed, free tier",
+    "Static dashboard bundle; serverless prediction service with the loaded model artefact",
+    "Static assets and the prediction endpoint are served from the same edge platform, which removes a cross-origin hop. The prediction runtime is memory- and time-constrained, which is why the artefact must be exportable to a form it can evaluate (PERF-09)."
+   ],
+   [
+    "CI runner",
+    "Managed, ephemeral",
+    "Collection workflow; backup workflow",
+    "Created per run and destroyed afterwards. Nothing may be assumed to persist between runs, which is why all state lives in the warehouse and all"
+   ]
+  ]
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Node",
+    "Kind",
+    "Deployed artefacts",
+    "Notes"
+   ],
+   [
+    "",
+    "",
+    "",
+    "credentials are injected from the platform secret store."
+   ],
+   [
+    "Managed PostgreSQL (ap-south-1)",
+    "Managed, free tier",
+    "Warehouse; transaction-mode pooler; session-mode pooler",
+    "Two pooling modes are used deliberately: the transaction pooler for the numerous short-lived connections made by ephemeral runners and the serverless runtime, and the session pooler for the long-running dump the backup job performs (IF-13, DB-10)."
+   ],
+   [
+    "Developer workstation",
+    "Unmanaged, project-own ed",
+    "Training pipeline",
+    "Training runs on ordinary personal computing hardware with no specialised acceleration (PERF-08). It is deliberately not deployed to any managed node, because reproducibility matters more than automation for a step that runs a handful of times."
+   ],
+   [
+    "External service endpoints",
+    "Third-party",
+    "None — accessed only",
+    "The data API and the language-model service. Shown as nodes because the deployment view must record what the system talks to and over what protocol, not because any project software runs there."
+   ]
+  ]
+ ],
+ [
+  "h",
+  2,
+  "7.1 Mapping of processes to nodes"
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Process (Section 6.1)",
+    "Node",
+    "Execution model"
+   ],
+   [
+    "Prediction service",
+    "Edge network",
+    "Serverless invocation; artefact loaded once per instance and reused where the platform permits"
+   ],
+   [
+    "Collection worker",
+    "CI runner",
+    "Ephemeral container per scheduled run; four runs daily"
+   ],
+   [
+    "Backup job",
+    "CI runner",
+    "Ephemeral container per nightly run"
+   ],
+   [
+    "Training pipeline",
+    "Developer workstation",
+    "Manually initiated local process"
+   ],
+   [
+    "Dashboard",
+    "Client device",
+    "Static bundle executing in the browser; no server-side rendering"
+   ],
+   [
+    "Migration runner",
+    "Developer workstation",
+    "Manually initiated, reviewed before application"
+   ]
+  ]
+ ],
+ [
+  "p",
+  "Secrets. API keys, database URLs and remote-storage configuration are supplied through each platform's secret mechanism and read from the environment at run time. No secret appears in source control, in client-side code, in a log or in any response returned to a browser (SEC-01, SEC-02). Because every external call is made from the edge runtime or the CI runner rather than from the browser, no external-service credential is ever present on a client device (SEC-03)."
+ ],
+ [
+  "h",
+  1,
+  "8 Implementation View"
+ ],
+ [
+  "h",
+  2,
+  "8.1 Overview"
+ ],
+ [
+  "p",
+  "The implementation model is organised into seven layers with a strict inward dependency rule: a layer may depend on the layer beneath it and on the domain layer, and on nothing else. Dependencies never point outward, and never skip upward. The rule is not merely a convention — it is what makes the domain package testable without infrastructure and what prevents the dashboard from acquiring a hidden dependency on the database schema."
+ ],
+ [
+  "fig",
+  13,
+  "Component view. Principal run-time components grouped by layer, with permitted dependencies."
+ ],
+ [
+  "p",
+  "Figure 13 shows the components and the layers they belong to. The automation components — collection orchestrator, training pipeline and backup job — are drawn as separate entry points rather than as part of the serving stack, because that is what they are: each has its own process, its own trigger and its own failure domain, and none of them is reachable from the dashboard. They reuse the gateway and data-access layers and, in the case of training, the feature layer; they reuse nothing above that."
+ ],
+ [
+  "h",
+  2,
+  "8.2 Layers"
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Layer",
+    "Contents",
+    "Rules governing inclusion",
+    "May depend on"
+   ],
+   [
+    "Presentation",
+    "Dashboard views, forms, charts, in-context help, plain-language rendering.",
+    "No business logic, no data access, no knowledge of the model. A file belongs here",
+    "The published API contract only"
+   ]
+  ]
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Layer",
+    "Contents",
+    "Rules governing inclusion",
+    "May depend on"
+   ],
+   [
+    "",
+    "",
+    "only if removing the prediction service would leave it with nothing to display.",
+    ""
+   ],
+   [
+    "Application / API",
+    "Endpoint definitions, request and response schemas, orchestration, error mapping, health checks.",
+    "Coordinates domain services; contains no model-specific and no SQL code. This is the only layer permitted to express the degradation policy.",
+    "Domain, feature, inference, recommendation, gateway"
+   ],
+   [
+    "Domain",
+    "Forecast request and result objects, horizon and interval types, recommendation types, channel state, tone scores.",
+    "Framework-independent. A dependency on a web framework, a database driver or a model library is a defect, not a shortcut.",
+    "Nothing"
+   ],
+   [
+    "Feature",
+    "Feature assembly, time encoding, title features, channel-history features, lagged aggregates.",
+    "Only values computable before a publication timestamp may be produced here (DC-07). This layer is imported unchanged by both the API and the training pipeline; a change made for one is a change made for both.",
+    "Domain, data access"
+   ],
+   [
+    "Inference",
+    "Model loading, artefact representation, multi-horizon prediction, interval estimation, version metadata.",
+    "The model technology appears nowhere else. Substituting the library or moving to an ensemble changes this layer only (DC-06).",
+    "Domain"
+   ],
+   [
+    "Recommend ation",
+    "Pattern comparison, ablation gating, plain-language composition.",
+    "Every recommendation must be expressed as a historical association with its supporting pattern, never as a causal claim or a bare instruction (UR-07). No feature prohibited by DC-13 may be referenced.",
+    "Domain, data access"
+   ],
+   [
+    "Data access",
+    "Repository interfaces and their implementations; the derived feature view; migrations.",
+    "All SQL lives here and nowhere else. All schema change is a versioned migration; no ad hoc DDL. The model tier reaches the warehouse only through the feature-view repository (IF-10).",
+    "Domain"
+   ],
+   [
+    "Gateways",
+    "External service clients, quota guard, retry policy.",
+    "Every external call passes through the quota guard. All calls are server-side so no credential reaches a browser (SEC-03).",
+    "Domain"
+   ],
+   [
+    "Automation",
+    "Collector, training pipeline, backup job, migration runner, bulk tone scorer.",
+    "Separate entry points. Independently retryable. Secrets remain outside source control. No automation component may be imported by the serving path.",
+    "Feature, data access, gateways"
+   ]
+  ]
+ ],
+ [
+  "fig",
+  14,
+  "Source package dependencies as they appear in the repository."
+ ],
+ [
+  "p",
+  "Figure 14 maps the layers onto the actual repository structure, which is the form in which the dependency rule is enforceable. The features package is the one with two inbound arrows from different tiers, and it is the package a reviewer should watch: a change made there for the benefit of the serving path silently changes training, which is precisely the coupling the architecture intends, and precisely the coupling that must be verified by the round-trip test rather than assumed (SUP-05). The domain package has no outbound arrows at all. Conventions. Python code follows the language's standard style guide with a consistent naming convention across scripts, modules and database objects (SUP-01). The repository structure separates collection, database definitions, model code and the dashboard application (SUP-02). Dependencies are declared with pinned versions so that an environment can be reconstructed exactly (SUP-03). Configuration and credentials are externalised from code so the system can be redeployed to a new environment without modifying source (SUP-10)."
+ ],
+ [
+  "h",
+  1,
+  "9 Data View"
+ ],
+ [
+  "p",
+  "The RUP template marks this section optional where persistent data is trivial or maps directly onto the design model. For ViewCastLK it is neither, and the section is treated as architecturally significant. The composition of the snapshot key is what gives a training label its meaning; the identity-versus-snapshot split is what makes point-in-time channel state reconstructable; and the derived feature view is the declared interface between two tiers. None of that is visible from the logical view."
+ ],
+ [
+  "fig",
+  15,
+  "Warehouse schema: eight tables and one derived view, with keys and relationships."
+ ],
+ [
+  "p",
+  "Figure 15 shows the schema. The structural decision that shapes everything else is the split between identity tables and snapshot tables. An identity table holds what does not change about an entity and is written once; a snapshot table holds what does change and holds one row per observation. Reading the diagram, channels and videos are identity tables, channel_snapshots and video_snapshots are their snapshot counterparts, and the snapshot tables are the time series from which every training label is derived. The alternative — storing current statistics on the identity row and overwriting them — would have been simpler to write and would have destroyed the project, because the data source reports only present values and an overwritten history cannot be recovered. Note the composition of the video_snapshots key. It is (video_id, age_days) rather than (video_id, captured_at), which is a deliberate and consequential choice: it makes the publication-anchored age a structural property of the store rather than a convention observed by the collector, and it makes at most one authoritative observation per publication-anchored day per video (DB-04). The captured_at value is retained alongside as the authoritative observation time, together with the deviation between that observation and the exact horizon boundary. Change from version 1.1. The previous revision of this document described five tables. That was an accurate description of what had been built at the time, but it did not satisfy the requirements: SRS DB-02 requires the warehouse to hold title tone scores, a quota ledger and a run-summary record in addition to the roster, video records and engagement observations, and DB-03 requires a derived view exposing one row per video with its features, targets and quality flags. Three tables and one view are therefore specified here that do not yet exist in the deployed schema. They are architectural requirements on the implementation, not descriptions of it, and are marked accordingly in the table below."
+ ],
+ [
+  "h",
+  2,
+  "9.1 Stores"
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Store",
+    "Kind",
+    "Purpose",
+    "Key and integrity rules",
+    "Status"
+   ],
+   [
+    "video categorie _ s",
+    "Referenc e",
+    "The standard YouTube content categories.",
+    "Primary key category id. Referenced by channels _ and videos.",
+    "Built"
+   ],
+   [
+    "channels",
+    "Identity",
+    "Stable channel identity, declared country, category and assigned size tier.",
+    "Primary key channel id. Admitted only after _ declared country verifies as LK. Size tier assigned relative to other channels in the same category at ingest (FR-50).",
+    "Built"
+   ],
+   [
+    "channel snapsh _ ots",
+    "Snapshot",
+    "Point-in-time subscriber, view and video counts.",
+    "Composite key (channel id, captured at); foreign _ _ key to channels. Idempotent on that key.",
+    "Built"
+   ],
+   [
+    "videos",
+    "Identity",
+    "Stable video metadata, and centrally the publication timestamp.",
+    "Primary key video id; foreign keys to channels _ and video categories. published at is the source _ _ of truth for every age calculation (DB-05).",
+    "Built"
+   ],
+   [
+    "video snapshot _ s",
+    "Snapshot",
+    "Point-in-time engagement statistics; this table is the time series.",
+    "Composite key (video id, age days) so that _ _ publication-anchored age is structurally enforced (DB-04, DC-11). Records boundary deviation and a per-observation usability flag (FR-61, REL-14), and the observation source, distinguishing automated collection from manual backfill (DB-11).",
+    "Built; key and flags to be confirmed"
+   ],
+   [
+    "title tone score _ _ s",
+    "Identity",
+    "The four tone dimensions per video.",
+    "Primary key video id. Exactly one row per video, _ never repeated across that video's observations (FR-18, DB-06).",
+    "Required by DB-02 — to build"
+   ],
+   [
+    "quota ledger _",
+    "Operatio nal",
+    "Units consumed per day per call class.",
+    "Composite key (ledger date, call class). Written _ _ by the quota guard on every external call (FR-62).",
+    "Required by DB-02 — to build"
+   ]
+  ]
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Store",
+    "Kind",
+    "Purpose",
+    "Key and integrity rules",
+    "Status"
+   ],
+   [
+    "run log _",
+    "Operatio nal",
+    "One summary record per pipeline run.",
+    "Primary key run id. Written from a top-level _ handler so that a crashed run still produces a record (FR-66, SUP-09).",
+    "Required by DB-02 — to build"
+   ],
+   [
+    "v video feature _ _ s",
+    "Derived view",
+    "One row per video with its pre-publication features, four horizon targets and per-horizon usability flags.",
+    "The declared interface between the collection tier and the model tier (IF-10). New model inputs are added here, not computed ad hoc (SUP-06). Tolerates partial horizon coverage as a normal state (DB-08).",
+    "Required by DB-03 — to build"
+   ]
+  ]
+ ],
+ [
+  "h",
+  2,
+  "9.2 Invariants the store must enforce"
+ ],
+ [
+  "b",
+  "​ A video's age is computed from its own published_at value and never from a tracking-start time or a"
+ ],
+ [
+  "p",
+  "run sequence number. Because age forms part of the snapshot primary key, an incorrectly anchored observation cannot be written at all (FR-57, DC-10, DC-11)."
+ ],
+ [
+  "b",
+  "​ Every write to the engagement history is idempotent on its natural key, so a repeated, retried or"
+ ],
+ [
+  "p",
+  "overlapping run converges on the same state rather than duplicating or failing (FR-58, REL-05)."
+ ],
+ [
+  "b",
+  "​ All timestamps are stored in UTC. Conversion to Sri Lanka Time occurs only in the"
+ ],
+ [
+  "p",
+  "feature-engineering and presentation layers, never in the store (DC-12, DB-07, STD-04)."
+ ],
+ [
+  "b",
+  "​ A video with fewer than thirty days of history is a normal row, not an error: the unmatured horizons"
+ ],
+ [
+  "p",
+  "are simply absent. Excluding such rows would bias training toward older videos, which is the wrong bias for a tool intended to work on new content (FR-70, DB-08)."
+ ],
+ [
+  "b",
+  "​ Records for videos that become unavailable are marked rather than silently retained as current, and"
+ ],
+ [
+  "p",
+  "retention complies with the data source's developer policies (DB-12, LEG-01)."
+ ],
+ [
+  "b",
+  "​ The observation source is recorded, so that automatically collected observations can be"
+ ],
+ [
+  "p",
+  "distinguished from any manually imported backfill (DB-11). Indexing. The access patterns that must be supported are: latest snapshot per video; all snapshots for a video within an age window; latest snapshot per channel; videos by publication date for the time-based training split; and videos by category for baseline construction. Indexes on (video_id, age_days), (channel_id, captured_at), published_at and category_id follow directly from that list. Storage growth is monitored against the free-tier allocation and made visible to maintainers (PERF-07, DB-09)."
+ ],
+ [
+  "h",
+  2,
+  "9.3 Backup and recovery"
+ ],
+ [
+  "fig",
+  16,
+  "Nightly logical backup with integrity verification."
+ ],
+ [
+  "p",
+  "Figure 16 shows the backup path. Two properties make it a recovery mechanism rather than a copy operation. The first is that verification is a distinct step whose failure fails the run: an archive that reached the remote but does not match the local checksum is treated as a failed backup, not a successful one. The second is that restore testing targets a separate temporary project and never the production collection database, so that the act of verifying recoverability cannot itself destroy the history it protects (REL-07). The backup connects through the session-mode pooler rather than the transaction pooler, because a logical dump is a single long-lived session and the transaction pooler is optimised for the opposite pattern. This is the only process in the system that uses that connection mode."
+ ],
+ [
+  "h",
+  1,
+  "10 Size and Performance"
+ ],
+ [
+  "p",
+  "The figures below are measured observations from the deployed collection pipeline as at 27 July 2026, ten days after continuous collection began. They are recorded here because they are the dimensioning characteristics that shaped the architecture, not because they are capacity targets. Where a target is stated rather than measured, it is identified as such."
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Dimension",
+    "Measured or target value",
+    "Architectural implication"
+   ],
+   [
+    "Channels tracked",
+    "1,282, all country-verified LK",
+    "Roster iteration is the outer loop of every run and must remain quota-aware. Growth in the roster is the primary driver of quota consumption."
+   ],
+   [
+    "Videos captured",
+    "8,115",
+    "Video identity writes are idempotent because the same video is rediscovered on every traversal until it leaves the look-back window."
+   ],
+   [
+    "Video snapshots",
+    "141,074",
+    "This table dominates storage and query cost. It is the reason the index set in Section 9.2 is specified rather than left to implementation."
+   ],
+   [
+    "Channel snapshots",
+    "29,055",
+    "Point-in-time channel features require a snapshot-at-or-before join, which is why channel state is not stored on the video row."
+   ],
+   [
+    "Mature day-7 labels",
+    "2,265",
+    "Short-horizon modelling is viable now; day-14 labels begin maturing in early August, day-21 mid-August, day-30 mid-to-late August. This is why training is a repeated operation rather than a single event (FR-82)."
+   ],
+   [
+    "Storage consumed",
+    "Approximately 50 MB of a 500 MB allocation, growing at roughly 4.7 MB per day",
+    "At the observed rate the allocation is adequate for the project timeline, but growth is monitored and the bounded tracking window is what keeps it linear rather than compounding."
+   ],
+   [
+    "Daily quota consumption",
+    "Approximately 8,000 of 10,000 units",
+    "A 20% margin. This is the number that justifies reserving the hundred-unit search endpoint for occasional roster expansion and running two of the four daily runs in discovery-only mode."
+   ],
+   [
+    "Collection resolution",
+    "Four runs daily at six-hourly intervals",
+    "Determines the worst-case deviation between an observation and an exact horizon boundary, which is why that deviation is recorded per observation and gates label usability (FR-61)."
+   ],
+   [
+    "Batch size",
+    "Fifty videos per statistics call",
+    "Batching, rather than threading, is the concurrency mechanism in the collection tier (Section 6.1)."
+   ],
+   [
+    "Forecast latency",
+    "Target: perceptibly responsive; no fixed maximum (PERF-01, PERF-02)",
+    "Two external calls dominate the critical path and their latency is not controlled by the system. The architecture answers with immediate acknowledgement, a progress indication, and per-call timeouts that degrade rather than wait (PERF-03)."
+   ],
+   [
+    "Concurrent users",
+    "Design point: a small number, occasional and deliberate use",
+    "The system is not throughput-constrained. The genuinely constrained resources are quota and storage, and both are consumed by background collection rather than by user requests (PERF-05, PERF-06)."
+   ],
+   [
+    "Training hardware",
+    "Commodity CPU, no acceleration (PERF-08)",
+    "Confirms the compact tabular model family and excludes deep architectures on hardware grounds as well as data-regime grounds."
+   ]
+  ]
+ ],
+ [
+  "p",
+  "Rate limiting. The principal abuse risk is not to creator data — the system holds none — but to the daily allowance that the collection pipeline depends on. Forecast requests are therefore rate-limited so that automated or repeated use cannot exhaust the quota that background collection relies on (SEC-08). This is a capacity control expressed as a security requirement, and it is the reason live channel lookup is permitted at all: at the expected request volume its quota cost is negligible against the daily allowance (PERF-06)."
+ ],
+ [
+  "h",
+  1,
+  "11 Quality"
+ ],
+ [
+  "p",
+  "This section describes how the software architecture contributes to the capabilities of the system other than functionality. For each attribute the table names the architectural contribution and the means by which it can be verified, because a quality claim that cannot be checked is an assertion rather than a property."
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Attribute",
+    "Architectural contribution",
+    "How it is verified"
+   ],
+   [
+    "Reliability",
+    "Continuity of collection is prioritised over dashboard availability, because a missed run is unrecoverable and a missed page view is not. Idempotent writes, a 26-hour look-back, defensive handling of unavailable videos, and a run-summary record written from a top-level handler.",
+    "Proportion of scheduled runs completing successfully and the resulting rate of missing observations, both recorded and reported (REL-03)."
+   ],
+   [
+    "Recoverability",
+    "Nightly logical export of roles, schema and data to off-site storage with per-file checksums and post-upload verification; restore testing isolated to a temporary project.",
+    "A restore test against a separate project, confirming the backup is not merely present but usable (REL-07)."
+   ],
+   [
+    "Availability",
+    "Deliberately asymmetric. The dashboard offers no continuous-availability guarantee; interruptions are not treated as failures. The collection pipeline is required to keep its schedule without manual intervention.",
+    "Run log completeness; absence of unexplained gaps in the engagement history (REL-01, REL-02)."
+   ],
+   [
+    "Graceful degradation",
+    "Failure of a supporting service reduces the information content of the answer, never removes it. Only the absence of a loadable artefact prevents a forecast, and that case is stated plainly rather than filled with a placeholder.",
+    "Fault injection against each external dependency in turn, checking that a forecast is still returned and correctly labelled degraded (REL-09 to REL-11)."
+   ],
+   [
+    "Correctness of labels",
+    "Publication-anchored age is part of the snapshot key, so the invariant is enforced by the store. Boundary deviation is recorded per observation and gates label usability.",
+    "Schema inspection plus a check that no snapshot exists whose age disagrees with its video's published at (REL-14, DC-11). _"
+   ],
+   [
+    "Model integrity",
+    "One shared feature-preparation module; a frozen encoding map and published feature order; interval calibration measured before release and a release blocked when coverage departs from nominal.",
+    "The automated round-trip test on a known training row (SUP-05); the coverage and width figures in the metrics report (FR-82a to FR-82c)."
+   ],
+   [
+    "Security",
+    "All external calls are server-side, so no credential reaches a browser. Secrets are injected from platform secret stores and never committed, logged or returned. Error messages disclose no implementation detail.",
+    "Repository and log inspection for secret material; review of returned error payloads (SEC-01 to SEC-04, SEC-10)."
+   ],
+   [
+    "Privacy",
+    "The system requires no account and collects no personal data from creators. It stores only publicly available channel and video information. This is a structural property, not a policy: there is no store in which creator data could be placed.",
+    "Schema inspection: no table holds creator-identifying data (SEC-06, SEC-07, LEG-06)."
+   ],
+   [
+    "Ethical constraint",
+    "No feature quantifying divisiveness, communal provocation, controversy potential or misleading-claim strength is computed, stored or exposed anywhere, so no layer is in a position to optimise for it.",
+    "Inspection of the feature list published with the artefact, and of the recommendation engine's permitted output set (DC-13, FR-19, FR-43)."
+   ]
+  ]
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Attribute",
+    "Architectural contribution",
+    "How it is verified"
+   ],
+   [
+    "Maintainability",
+    "Strict inward dependency rule; all SQL confined to one layer; all schema change through versioned migrations; a domain layer with no outbound dependencies.",
+    "Static dependency check against the rules in Section 8.2; migration history review (SUP-01 to SUP-03, SUP-10)."
+   ],
+   [
+    "Extensibility",
+    "The model technology sits behind an adapter and interval estimation behind an interface with two implementations, so the open modelling decisions can be resolved without touching the dashboard contract or the feature layer.",
+    "Substituting the model library and confirming that no file outside the inference layer changes (DC-06)."
+   ],
+   [
+    "Testability",
+    "A domain layer with no infrastructure dependencies; repositories behind interfaces; a reproducible training run recorded with its seed, split boundary and row-filter counts.",
+    "Domain tests running without a database or network; reproduction of a prior training run from its recorded configuration (SUP-07)."
+   ],
+   [
+    "Observability",
+    "Exactly one run-summary record per run, sufficient to diagnose a failure without direct database inspection; a persisted quota ledger by call class; the model version returned with every forecast.",
+    "Diagnosing a deliberately failed run from the run log alone (SUP-09, FR-66)."
+   ],
+   [
+    "Usability",
+    "Plain-language output throughout, with model terminology and statistical notation confined to internal reporting; a forecast obtainable from a single screen with no account; entered values preserved across errors and results.",
+    "An informal usability check with a small group of representative users, in which reaching an actionable forecast unaided is the pass condition (UR-01, UR-04)."
+   ]
+  ]
+ ],
+ [
+  "h",
+  1,
+  "12 References"
+ ],
+ [
+  "p",
+  "References are given in IEEE style. Web resources carry the date on which they were accessed. [1] Group 2, \"ViewCastLK — Software Requirements Specification, Version 1.1,\" Department of Computer Science and Engineering, University of Moratuwa, 30 July 2026. [2] Group 2, \"ViewCastLK — Team Briefing,\" Department of Computer Science and Engineering, University of Moratuwa, 27 July 2026. [3] Group 2, \"ViewCastLK — Feasibility Study,\" Department of Computer Science and Engineering, University of Moratuwa, 2026. [4] Group 2, \"ViewCastLK — Project Proposal,\" Department of Computer Science and Engineering, University of Moratuwa, 2026. [5] P. Kruchten, \"Architectural Blueprints — The \"4+1\" View Model of Software Architecture,\" IEEE Software, vol. 12, no. 6, pp. 42–50, Nov. 1995. [6] IBM Rational, \"Rational Unified Process — Software Architecture Document Template,\" Rational Software Corporation, 2001. [7] ISO/IEC/IEEE, Systems and Software Engineering — Architecture Description, ISO/IEC/IEEE 42010:2011, International Organization for Standardization, Geneva, 2011. [8] IEEE, IEEE Recommended Practice for Software Requirements Specifications, IEEE Std 830-1998, Institute of Electrical and Electronics Engineers, New York, 1998. [9] Object Management Group, \"Unified Modeling Language Specification, Version 2.5.1,\" OMG Document formal/2017-12-05, Dec. 2017. [10] Google Developers, \"YouTube Data API v3 — Getting Started.\" [Online]. Available: https://developers.google.com/youtube/v3/getting-started (Accessed on 30 July 2026). [11] Google Developers, \"YouTube Data API — Quota and Compliance Audits.\" [Online]. Available: https://developers.google.com/youtube/v3/guides/quota_and_compliance_audits (Accessed on 30 July 2026). [12] Google, \"YouTube API Services — Terms of Service.\" [Online]. Available: https://developers.google.com/youtube/terms/api-services-terms-of-service (Accessed on 30 July 2026). [13] Google AI for Developers, \"Gemini API Documentation.\" [Online]. Available: https://ai.google.dev/gemini-api/docs (Accessed on 30 July 2026). [14] Supabase, \"Supabase Documentation — Database and Connection Pooling.\" [Online]. Available: https://supabase.com/docs (Accessed on 30 July 2026). [15] The PostgreSQL Global Development Group, \"PostgreSQL 16 Documentation.\" [Online]. Available: https://www.postgresql.org/docs/ (Accessed on 30 July 2026). [16] GitHub, \"GitHub Actions Documentation — Events that Trigger Workflows.\" [Online]. Available: https://docs.github.com/actions (Accessed on 30 July 2026). [17] Cloudflare, \"Cloudflare Pages Documentation.\" [Online]. Available: https://developers.cloudflare.com/pages/ (Accessed on 30 July 2026). [18] Cloudflare, \"Cloudflare Workers Documentation.\" [Online]. Available: https://developers.cloudflare.com/workers/ (Accessed on 30 July 2026). [19] T. Chen and C. Guestrin, \"XGBoost: A Scalable Tree Boosting System,\" in Proc. 22nd ACM SIGKDD Int. Conf. Knowledge Discovery and Data Mining, San Francisco, CA, 2016, pp. 785–794, doi: 10.1145/2939672.2939785."
+ ],
+ [
+  "p",
+  "[20] G. Ke et al., \"LightGBM: A Highly Efficient Gradient Boosting Decision Tree,\" in Advances in Neural Information Processing Systems 30, 2017, pp. 3146–3154. [21] R. Koenker and G. Bassett, Jr., \"Regression Quantiles,\" Econometrica, vol. 46, no. 1, pp. 33–50, Jan. 1978. [22] J. Lei, M. G'Sell, A. Rinaldo, R. J. Tibshirani and L. Wasserman, \"Distribution-Free Predictive Inference for Regression,\" Journal of the American Statistical Association, vol. 113, no. 523, pp. 1094–1111, 2018. [23] Y. Xu et al., \"SMTPD: A New Benchmark for Temporal Prediction of Social Media Popularity,\" arXiv:2503.04446, 2025. [Online]. Available: https://arxiv.org/abs/2503.04446 (Accessed on 30 July 2026). [24] World Wide Web Consortium, \"Web Content Accessibility Guidelines (WCAG) 2.1.\" [Online]. Available: https://www.w3.org/TR/WCAG21/ (Accessed on 30 July 2026). [25] PlantUML, \"PlantUML Language Reference Guide.\" [Online]. Available: https://plantuml.com/guide (Accessed on 30 July 2026). — Tool used to draw all figures in this document. [26] Graphviz Authors, \"Graphviz Documentation.\" [Online]. Available: https://graphviz.org/documentation/ (Accessed on 30 July 2026). — Layout engine used by PlantUML for all figures in this document."
+ ],
+ [
+  "h",
+  1,
+  "Appendix A. Open Decisions and Conflicts"
+ ],
+ [
+  "p",
+  "This appendix records decisions that are deliberately unresolved, and two points on which this document and the Software Requirements Specification currently disagree. They are recorded rather than silently resolved, because an architecture document that quietly picks a side conceals a disagreement that the team still has to settle."
+ ],
+ [
+  "tbl",
+  [
+   [
+    "Ref",
+    "Issue",
+    "Current position in this document",
+    "Action required"
+   ],
+   [
+    "OD-1",
+    "Prediction interval method. SRS §3.1.5 specifies bounds derived from the distribution of model errors on held-out data, with native quantile regression recorded as the documented alternative. The team briefing §7 records quantile regression, with separate lower, median and upper models, as decided. These are different designs.",
+    "Neither is adopted. IntervalEstimator is an interface with two implementations (Figure 6), so the serving contract, the dashboard and the feature layer are unaffected by the outcome.",
+    "The modelling owner should settle this and one of the two documents must be amended so they agree. The SRS governs until it is."
+   ],
+   [
+    "OD-2",
+    "Social Blade. The team briefing records it as dropped and states it should not appear in the SRS or the design document. SRS v1.1 still references it in §1.3, reference [14], the §2.5 dependency table, §3.8, §3.9.3, §3.11 and DB-11.",
+    "Excluded from this document entirely. No component, interface, node or store references it.",
+    "The SRS should be amended to remove the eight remaining references, or the decision to drop it should be reversed explicitly."
+   ],
+   [
+    "OD-3",
+    "Made-for-kids as a required input. SRS FR-01 makes it a required field on the forecast form. The team briefing records that only 0.27% of collected videos are true and calls it near-useless as a feature and odd as a prominent form field.",
+    "Carried as a required input because FR-01 is a governing requirement. It is collected and passed to the model; the ablation study will determine whether it survives.",
+    "If the ablation study shows no contribution, FR-01 should be amended to make the field optional or remove it."
+   ],
+   [
+    "OD-4",
+    "Prediction runtime. Whether the prediction service is deployed as an edge worker executing an exported artefact, or as a small service on an equivalent free-tier platform.",
+    "Shown as an edge worker in Figure 12, with the alternative noted. The architecture is indifferent: the constraint that matters is that the artefact be exportable to a form the runtime can evaluate within its memory and time limits.",
+    "Resolve before the mid-evaluation deployment on 21 August 2026."
+   ],
+   [
+    "OD-5",
+    "Dashboard framework. SRS DC-02 and §3.6.2 mandate a React-based web front end. SAD v1.1 §8.2 described the presentation layer as Next.js/React and cited the Next.js documentation.",
+    "Described as a React single-page application served as static assets, which satisfies DC-02 and matches the static-hosting deployment in Figure 12.",
+    "If Next.js is in fact used, it must be in static-export mode, and the SRS wording should be made explicit either way."
+   ],
+   [
+    "OD-6",
+    "Backup retention policy. No retention period has been approved; existing off-site archives are retained indefinitely.",
+    "Recorded as unbounded retention. Storage cost is currently zero, so the decision is not yet forced.",
+    "Agree a retention period before the archive size becomes material."
+   ],
+   [
+    "OD-7",
+    "Three stores and one derived view required by SRS DB-02 and DB-03 are not yet present in the deployed schema (Section 9.1).",
+    "Specified as architectural requirements on the implementation and marked as not built.",
+    "Add title tone scores, _ _ quota ledger, run log and _ _ v video features as versioned _ _ migrations before the mid-evaluation."
+   ]
+  ]
+ ],
+ [
+  "h",
+  1,
+  "Appendix B. Requirements Traceability"
+ ],
+ [
+  "p",
+  "The matrix below maps architecturally significant requirements from the Software Requirements Specification onto the elements of this document that realise them. It is intended to let a reviewer confirm coverage without reading the document linearly, and to let a tester derive integration cases from the architecture rather than from the requirements alone. Requirements that are not architecturally significant are deliberately absent. These are principally the presentation and wording requirements (FR-32 to FR-36a, UR-05 to UR-07), the in-context help and documentation requirements (DOC-01 to DOC-05), and the standards-conformance requirements (STD-01 to STD-05), none of which constrains the decomposition, the process model, the topology or the data model. Their absence here is a scoping statement, not an omission: they are verified against the SRS and the delivered interface, not against the architecture."
+ ],
+ [
+  "tbl",
+  [
+   [
+    "SRS requirement",
+    "Realising architectural element",
+    "Section / Figure"
+   ],
+   [
+    "FR-01 to FR-07",
+    "ForecastRequest with optional planned day and hour; dashboard form; no imputation anywhere in the feature layer",
+    "5.2.1, 5.2.3; Fig. 6"
+   ],
+   [
+    "FR-08 to FR-12",
+    "ChannelStatsService over YouTubeGateway; failure classification returned as absent rather than raised",
+    "5.2.8, 6.2; Fig. 9"
+   ],
+   [
+    "FR-13 to FR-19",
+    "TitleToneService over GeminiGateway; single request per title; one score row per video; no prohibited dimension exists",
+    "5.2.8, 9.1; Fig. 7"
+   ],
+   [
+    "FR-20 to FR-25",
+    "FeatureAssembler with frozen encoding map and published feature order; no derived value exposed",
+    "5.2.4, 8.2; Fig. 6"
+   ],
+   [
+    "FR-26 to FR-31b",
+    "MultiHorizonPredictor single inference; IntervalEstimator per horizon; inverse transform before return",
+    "5.2.5, 6.2; Figs. 6, 9"
+   ],
+   [
+    "FR-37 to FR-43",
+    "RecommendationEngine with AblationGate; no prohibited feature exists to optimise against",
+    "5.2.6; Fig. 6"
+   ],
+   [
+    "FR-44 to FR-48",
+    "MetricsRepository; metrics report published with the artefact",
+    "5.2.7, 4.3.3"
+   ],
+   [
+    "FR-49 to FR-54",
+    "ChannelRosterLoader with country verification; UploadWalker incremental traversal; idempotent roster ingest",
+    "5.2.9, 4.3.6; Fig. 7"
+   ],
+   [
+    "FR-55 to FR-61",
+    "CollectionOrchestrator and SnapshotWriter; publication-anchored age in the snapshot key; boundary deviation and usability flag",
+    "5.2.9, 6.3, 9.2; Figs. 10, 11, 15"
+   ],
+   [
+    "FR-62 to FR-67",
+    "QuotaGuard with persisted daily ledger; clean halt on exhaustion; one run-summary record per run",
+    "5.2.8, 6.3, 9.1; Figs. 10, 11"
+   ],
+   [
+    "FR-68 to FR-74",
+    "v video features derived view; row-filter counts recorded; _ _ partial horizon coverage tolerated",
+    "9.1, 9.2; Fig. 15"
+   ],
+   [
+    "FR-75 to FR-82c",
+    "TrainingPipeline, BaselineModel, Evaluator, IntervalCalibrator, AblationRunner, ArtefactPublisher",
+    "5.2.10, 4.3.7; Fig. 7"
+   ],
+   [
+    "UR-01 to UR-04, UR-08 to UR-14",
+    "Static single-page dashboard; no account or installation; single-screen request; UTF-8 end to end",
+    "5.2.1, 7; Fig. 12"
+   ],
+   [
+    "REL-01 to REL-08",
+    "Asymmetric availability policy; idempotent writes; look-back; defensive handling; verified backup",
+    "6.3, 9.2, 9.3, 11; Figs. 10, 16"
+   ]
+  ]
+ ],
+ [
+  "tbl",
+  [
+   [
+    "SRS requirement",
+    "Realising architectural element",
+    "Section / Figure"
+   ],
+   [
+    "REL-09 to REL-12",
+    "Degradation policy expressed solely in PredictionService; clean quota halt",
+    "6.2, 6.3, 11; Figs. 8, 9"
+   ],
+   [
+    "REL-13 to REL-18",
+    "No interpolation at ingest; deviation recorded; evaluation on held-out data gates release",
+    "9.2, 5.2.10, 11"
+   ],
+   [
+    "PERF-01 to PERF-09",
+    "Immediate acknowledgement and progress indication; per-call timeouts; batching; artefact loaded once per instance",
+    "6.1, 6.2, 7, 10"
+   ],
+   [
+    "SEC-01 to SEC-10",
+    "Server-side-only external calls; platform secret stores; rate limiting; non-disclosing error mapper",
+    "5.2.2, 5.2.8, 7, 10, 11"
+   ],
+   [
+    "SUP-01 to SUP-13",
+    "Layer rules; shared feature module and round-trip test; versioned artefacts; run log; externalised configuration",
+    "8.2, 5.2.4, 5.2.10, 11; Fig. 14"
+   ],
+   [
+    "DC-01 to DC-14",
+    "Free-tier node set; mandated stack; pre-publication feature restriction; age invariant in the key; no prohibited feature computed",
+    "3.2, 7, 8.2, 9.2; Figs. 12, 15"
+   ],
+   [
+    "IF-01 to IF-14",
+    "Four dashboard views; no administrative interface; gateway contracts; pooled TLS connections; no inbound pipeline interface",
+    "5.2.1, 5.2.8, 7; Figs. 3, 12"
+   ],
+   [
+    "DB-01 to DB-12",
+    "Eight stores and one derived view; composite snapshot keys; UTC storage; partial coverage tolerated; availability marking",
+    "9.1, 9.2; Fig. 15"
+   ],
+   [
+    "LEG-01 to LEG-07",
+    "Retention and attribution enforced in the data layer; no personal data store exists",
+    "9.2, 11"
+   ]
+  ]
+ ]
+]

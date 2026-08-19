@@ -12,6 +12,7 @@ from .preprocessing import (
     engineer_prepublication_features,
 )
 from .modeling import (
+    MVP_LIGHTGBM_PARAMS,
     MVP_XGB_PARAMS,
     CategoryMedianBaseline,
     CategoryTierMedianBaseline,
@@ -19,6 +20,7 @@ from .modeling import (
     GlobalMedianBaseline,
     HorizonModelBundle,
     ScaleAwareHorizonModelBundle,
+    build_lgbm_regressor,
     build_xgb_regressor,
     log_target_inlier_mask,
     regression_metrics,
@@ -40,6 +42,7 @@ __all__ = [
     "HorizonPreprocessor",
     "SmoothedTargetEncoder",
     "engineer_prepublication_features",
+    "MVP_LIGHTGBM_PARAMS",
     "MVP_XGB_PARAMS",
     "CategoryMedianBaseline",
     "CategoryTierMedianBaseline",
@@ -47,6 +50,7 @@ __all__ = [
     "GlobalMedianBaseline",
     "HorizonModelBundle",
     "ScaleAwareHorizonModelBundle",
+    "build_lgbm_regressor",
     "build_xgb_regressor",
     "log_target_inlier_mask",
     "regression_metrics",

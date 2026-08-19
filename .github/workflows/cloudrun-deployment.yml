@@ -1,0 +1,60 @@
+name: Deploy Prediction API to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "prediction_api/**"
+      - ".github/workflows/cloudrun-deployment.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: viewcastlk
+          workload_identity_provider: projects/932754937666/locations/global/workloadIdentityPools/github-actions-pool/providers/github-provider
+          service_account: viewcastlk-github-deployer@viewcastlk.iam.gserviceaccount.com
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v3
+        with:
+          project_id: viewcastlk
+
+      - name: Deploy prediction API
+        run: |
+          gcloud run deploy viewcastlk-api \
+            --project=viewcastlk \
+            --source=prediction_api \
+            --region=asia-south1 \
+            --service-account=viewcastlk-api-runtime@viewcastlk.iam.gserviceaccount.com \
+            --memory=1Gi \
+            --cpu=1 \
+            --min=0 \
+            --max=1 \
+            --port=8000 \
+            --set-env-vars="GEMINI_MODEL=gemini-3.5-flash-lite,DASHBOARD_ORIGIN=https://viewcastlk.pages.dev" \
+            --set-secrets="YOUTUBE_API_KEY=viewcastlk-youtube-api-key:latest,GEMINI_API_KEY=viewcastlk-gemini-api-key:latest" \
+            --quiet
+
+      - name: Verify deployment health
+        run: |
+          SERVICE_URL="$(gcloud run services describe viewcastlk-api \
+            --project=viewcastlk \
+            --region=asia-south1 \
+            --format='value(status.url)')"
+
+          echo "Testing $SERVICE_URL/health"
+          curl --fail --silent --show-error "$SERVICE_URL/health"

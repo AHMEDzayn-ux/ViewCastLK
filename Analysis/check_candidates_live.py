@@ -4,8 +4,8 @@ Criteria, as specified:
   1. the channel declares LK          -- already established by querying
      channels.list over all 41,127 prior-batch channels; 8,599 verified-LK
      channels are untracked
-  2. it is NOT in our top three categories (News & Politics, Entertainment,
-     People & Blogs), which already hold 87% of what we collect
+  2. it is NOT in the top three categories (News & Politics, Entertainment,
+     People & Blogs), which already hold 87% of the corpus
   3. it is not dead -- proven by a real upload in the last 60 days, from the
      API right now, not from the previous batch's Sept-Oct 2025 snapshot
 

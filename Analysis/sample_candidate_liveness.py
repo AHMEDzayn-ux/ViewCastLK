@@ -1,9 +1,9 @@
 """Estimate how many prior-batch LK channels are still uploading.
 
 The previous batch's dataset holds 8,888 channels the API confirms declare LK,
-of which 8,599 are not on our roster. Their posting rates come from a snapshot
+of which 8,599 are not on the roster. Their posting rates come from a snapshot
 taken around September-October 2025, so a channel that looked busy then may
-have stopped since -- our own roster turned out to be 53 per cent dead when
+have stopped since -- this project's roster turned out to be 53 per cent dead when
 actually asked.
 
 Checking all 8,599 costs 8,599 units, more than a day's remaining headroom, so

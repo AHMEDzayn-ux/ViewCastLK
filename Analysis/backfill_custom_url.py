@@ -4,7 +4,7 @@ Batched channel refresh needs a link from a channel_handles.txt entry to a
 stored channel_id, and until that link exists every handle looks new and takes
 the one-unit-per-channel path -- the exact cost the batching removes.
 
-snippet.customUrl carries it and arrives in the same response we already pay
+snippet.customUrl carries it and arrives in the same response already paid
 for, so filling it in costs one call per fifty channels: about 26 units for the
 whole roster, against the 1,282 a single unbatched refresh costs.
 

@@ -2,7 +2,7 @@
 
 Answers three things:
   1. how many channels are genuinely dead, and what pruning them frees
-  2. whether pruning strips a topic area we are already short of
+  2. whether pruning strips a topic area already under-represented
   3. how many channels the quota supports afterwards, per discovery cadence
 
 Quota model, all figures per day:
@@ -12,7 +12,7 @@ Quota model, all figures per day:
     active_videos    = videos_per_day x TRACKING_WINDOW_DAYS
 
 Snapshots stay at four runs a day in every scenario: that cadence is what puts
-every horizon within three hours of its mark, and it is not what costs us.
+every horizon within three hours of its mark, and it is not the cost driver.
 Discovery is the lever, and lowering it costs nothing but tolerance for a
 missed run, because the 26-hour look-back still finds every upload.
 """
@@ -64,7 +64,7 @@ def main():
         print(f"dead channels' silence: median {q.iloc[0]:.0f} d, "
               f"90th pct {q.iloc[1]:.0f} d")
 
-    # --- does pruning strip a topic area we are already thin in?
+    # --- does pruning strip a topic area already thin?
     from storage import connect
     conn = connect()
     topics = pd.read_sql_query(

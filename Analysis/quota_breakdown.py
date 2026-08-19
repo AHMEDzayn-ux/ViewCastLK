@@ -4,7 +4,7 @@ Every YouTube Data API endpoint the collector calls, what it costs, how often a
 run makes the call, and what that totals per day. Figures come from the actual
 roster and video counts rather than from estimates.
 
-Endpoint costs are fixed by the API, not by us:
+Endpoint costs are fixed by the API, not by the caller:
     channels.list        1 unit per call, up to 50 ids per call
     playlistItems.list   1 unit per call, up to 50 items per page, ONE playlist
     videos.list          1 unit per call, up to 50 ids per call

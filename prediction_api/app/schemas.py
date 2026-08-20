@@ -121,11 +121,17 @@ class DataCompleteness(BaseModel):
 
 
 class ModelMetadata(BaseModel):
-    artifactVersion: str = Field("viewcastlk_mvp_candidate_v1", description="Artifact version")
-    modelVersion: str = Field("viewcastlk_mvp_candidate_v1", description="Model version")
+    artifactVersion: str = Field(
+        "viewcastlk_monotonic_trajectory_experimental_v1",
+        description="Artifact version",
+    )
+    modelVersion: str = Field(
+        "viewcastlk_monotonic_trajectory_experimental_v1",
+        description="Model version",
+    )
     generatedAt: str = Field(..., description="Timestamp in ISO format")
     dataSource: str = Field("prediction_api", description="Data source identifier")
-    status: str = Field("candidate", description="Model deployment status")
+    status: str = Field("experimental", description="Model deployment status")
     trajectoryMonotonic: bool = Field(True, description="Whether horizon sequence is non-decreasing")
 
 

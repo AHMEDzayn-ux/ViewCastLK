@@ -1,0 +1,5 @@
+test,status
+saved bundle reload,PASS
+all same-input trajectories nondecreasing,PASS
+all predictions finite and nonnegative,PASS
+complete four-horizon label count recorded as zero,PASS

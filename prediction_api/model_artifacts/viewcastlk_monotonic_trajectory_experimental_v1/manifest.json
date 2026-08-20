@@ -1,0 +1,404 @@
+{
+  "format_version": 1,
+  "artifact_version": "viewcastlk_monotonic_trajectory_experimental_v1",
+  "created_at_utc": "2026-08-19T19:41:30.363916+00:00",
+  "status": "experimental_test_evaluated_no_complete_four_horizon_labels",
+  "supported_horizons_days": [
+    7,
+    14,
+    21,
+    30
+  ],
+  "prediction_interface": "predict.py CSV CLI or trajectory_bundle.predict_views(DataFrame)",
+  "trajectory_guarantee": "day_7 <= day_14 <= day_21 <= day_30",
+  "source_checkpoint": "checkpoint12_monotonic_trajectory",
+  "source_checkpoint_manifest_sha256": "e6d320914b4013b3681c1806f1b943c6d32811db68bf59bbf11068cbf5b670e5",
+  "source_git_commit": "0870f25e27bd521fcb89eb87adc0b630dfc92311",
+  "runtime_versions_used_for_export": {
+    "python": "3.11.9",
+    "numpy": "2.4.4",
+    "pandas": "3.0.2",
+    "scikit-learn": "1.8.0",
+    "xgboost": "3.2.0",
+    "joblib": "1.5.3"
+  },
+  "input_schema": {
+    "expected_columns": [
+      "category_name",
+      "duration_seconds",
+      "ch_subs_at_publish",
+      "ch_avg_views_per_video_at_publish",
+      "ch_videos_at_publish",
+      "channel_age_days_at_publish",
+      "is_short",
+      "publish_is_weekend",
+      "topic_entertainment",
+      "topic_fashion",
+      "topic_food",
+      "topic_gaming",
+      "topic_health",
+      "topic_hobby",
+      "topic_humour",
+      "topic_knowledge",
+      "topic_lifestyle",
+      "topic_music",
+      "topic_pet",
+      "topic_politics",
+      "topic_religion",
+      "topic_society",
+      "topic_sports",
+      "topic_technology",
+      "topic_tourism",
+      "topic_vehicle",
+      "topic_missing",
+      "default_language",
+      "publish_time_bucket",
+      "subscriber_tier"
+    ],
+    "numeric_columns": [
+      "duration_seconds",
+      "ch_subs_at_publish",
+      "ch_avg_views_per_video_at_publish",
+      "ch_videos_at_publish",
+      "channel_age_days_at_publish"
+    ],
+    "boolean_columns": [
+      "is_short",
+      "publish_is_weekend",
+      "topic_entertainment",
+      "topic_fashion",
+      "topic_food",
+      "topic_gaming",
+      "topic_health",
+      "topic_hobby",
+      "topic_humour",
+      "topic_knowledge",
+      "topic_lifestyle",
+      "topic_music",
+      "topic_pet",
+      "topic_politics",
+      "topic_religion",
+      "topic_society",
+      "topic_sports",
+      "topic_technology",
+      "topic_tourism",
+      "topic_vehicle",
+      "topic_missing"
+    ],
+    "categorical_columns": [
+      "category_name",
+      "default_language",
+      "publish_time_bucket",
+      "subscriber_tier"
+    ],
+    "missing_values": "Allowed in values, but every expected column must exist.",
+    "subscriber_tier_note": "Use the exported tier if available. It can also be derived from ch_subs_at_publish with the boundaries documented in the model code.",
+    "future_optional_llm_score_columns": [
+      "title_urgency",
+      "title_emotional_appeal",
+      "title_seriousness",
+      "title_curiosity_gap"
+    ],
+    "llm_scores_enabled_in_this_artifact": false,
+    "explicitly_excluded_columns": [
+      "definition",
+      "caption",
+      "made_for_kids",
+      "publish_hour_slt",
+      "publish_dow_slt",
+      "tag_count",
+      "description_length",
+      "title_length",
+      "title_word_count",
+      "title_has_number",
+      "title_has_question",
+      "title_has_exclaim",
+      "title_upper_ratio",
+      "title_script",
+      "ch_views_at_publish",
+      "video_id",
+      "channel_id",
+      "published_at"
+    ]
+  },
+  "model": {
+    "model_path": "models/monotonic_trajectory.joblib",
+    "sha256": "84f3d3b98bce07b6dbee25cab97eb20914e0fdcb4a9de065e86bc054bc6b293a",
+    "size_bytes": 959393,
+    "construction": "day-7 base plus three predicted nonnegative increments",
+    "components": [
+      {
+        "component": "day_7_independent",
+        "target": "day_7_cumulative_views",
+        "target_scale": "log1p",
+        "training_rows": 16390,
+        "training_channels": 1391,
+        "selected_n_estimators": 93
+      },
+      {
+        "component": "day_14_independent",
+        "target": "day_14_cumulative_views",
+        "target_scale": "log1p",
+        "training_rows": 12478,
+        "training_channels": 1363,
+        "selected_n_estimators": 152
+      },
+      {
+        "component": "day_21_independent",
+        "target": "day_21_cumulative_views",
+        "target_scale": "log1p",
+        "training_rows": 12241,
+        "training_channels": 1331,
+        "selected_n_estimators": 244
+      },
+      {
+        "component": "day_30_independent",
+        "target": "day_30_cumulative_views",
+        "target_scale": "log1p",
+        "training_rows": 12079,
+        "training_channels": 1386,
+        "selected_n_estimators": 143
+      },
+      {
+        "component": "day_7_to_14_increment",
+        "target": "nonnegative_day_7_to_day_14_view_increment",
+        "target_scale": "log1p",
+        "training_rows": 7727,
+        "training_channels": 887,
+        "negative_observed_growth_rows_excluded": 32,
+        "selected_n_estimators": 59
+      },
+      {
+        "component": "day_14_to_21_increment",
+        "target": "nonnegative_day_14_to_day_21_view_increment",
+        "target_scale": "log1p",
+        "training_rows": 4054,
+        "training_channels": 811,
+        "negative_observed_growth_rows_excluded": 3,
+        "selected_n_estimators": 60
+      },
+      {
+        "component": "day_21_to_30_increment",
+        "target": "nonnegative_day_21_to_day_30_view_increment",
+        "target_scale": "log1p",
+        "training_rows": 521,
+        "training_channels": 215,
+        "negative_observed_growth_rows_excluded": 0,
+        "selected_n_estimators": 15
+      }
+    ]
+  },
+  "evaluation": {
+    "common_split": {
+      "type": "channel_grouped_shared_across_all_components",
+      "selection_seed": 241,
+      "test_size_target": 0.2,
+      "test_channels": 372,
+      "test_row_fractions": {
+        "day_7": 0.19872891713517477,
+        "day_7_to_14": 0.20125591929174388,
+        "day_14_to_21": 0.19917094354520332,
+        "day_21_to_30": 0.19846153846153847
+      }
+    },
+    "experimental_test_used": true,
+    "complete_four_horizon_rows": 0,
+    "end_to_end_day_30_testable": false,
+    "transition_test_metrics": [
+      {
+        "scope": "day_7_to_14",
+        "method": "growth_only",
+        "rows": 1948,
+        "wape_pct": 93.9535305056,
+        "total_view_capture_pct": 11.8613273472,
+        "median_absolute_error_views": 15.1510045071,
+        "rmsle": 2.0067733867,
+        "log_r2": 0.2561551951
+      },
+      {
+        "scope": "day_7_to_14",
+        "method": "teacher_forced_actual_previous_plus_growth",
+        "rows": 1948,
+        "wape_pct": 7.1501429873,
+        "total_view_capture_pct": 93.2923849824,
+        "median_absolute_error_views": 15.1510045071,
+        "rmsle": 0.2162864636,
+        "log_r2": 0.9889424251
+      },
+      {
+        "scope": "day_7_to_14",
+        "method": "one_step_predicted_previous_plus_growth",
+        "rows": 1948,
+        "wape_pct": 91.487575889,
+        "total_view_capture_pct": 26.440886487,
+        "median_absolute_error_views": 1117.7029275708,
+        "rmsle": 1.7966423379,
+        "log_r2": 0.2370001177
+      },
+      {
+        "scope": "day_7_to_14",
+        "method": "independent_later_horizon",
+        "rows": 1948,
+        "wape_pct": 87.9316572786,
+        "total_view_capture_pct": 32.8312672056,
+        "median_absolute_error_views": 1463.5954046831,
+        "rmsle": 1.8633820541,
+        "log_r2": 0.1792610792
+      },
+      {
+        "scope": "day_14_to_21",
+        "method": "growth_only",
+        "rows": 1009,
+        "wape_pct": 97.3550367145,
+        "total_view_capture_pct": 6.0240142045,
+        "median_absolute_error_views": 9.2006004347,
+        "rmsle": 2.0173314487,
+        "log_r2": 0.3080337096
+      },
+      {
+        "scope": "day_14_to_21",
+        "method": "teacher_forced_actual_previous_plus_growth",
+        "rows": 1009,
+        "wape_pct": 4.7476375721,
+        "total_view_capture_pct": 95.4171459834,
+        "median_absolute_error_views": 9.2006004347,
+        "rmsle": 0.1428281139,
+        "log_r2": 0.9953248338
+      },
+      {
+        "scope": "day_14_to_21",
+        "method": "one_step_predicted_previous_plus_growth",
+        "rows": 1009,
+        "wape_pct": 89.2575558286,
+        "total_view_capture_pct": 24.7762774046,
+        "median_absolute_error_views": 1528.021644083,
+        "rmsle": 1.9089717418,
+        "log_r2": 0.1648419949
+      },
+      {
+        "scope": "day_14_to_21",
+        "method": "independent_later_horizon",
+        "rows": 1009,
+        "wape_pct": 89.3140126991,
+        "total_view_capture_pct": 27.7776498609,
+        "median_absolute_error_views": 1417.5366337697,
+        "rmsle": 1.8943905632,
+        "log_r2": 0.1775515391
+      },
+      {
+        "scope": "day_21_to_30",
+        "method": "growth_only",
+        "rows": 129,
+        "wape_pct": 98.6242320507,
+        "total_view_capture_pct": 3.4957730466,
+        "median_absolute_error_views": 5.7711526274,
+        "rmsle": 1.8740224661,
+        "log_r2": 0.3248551223
+      },
+      {
+        "scope": "day_21_to_30",
+        "method": "teacher_forced_actual_previous_plus_growth",
+        "rows": 129,
+        "wape_pct": 2.1551792064,
+        "total_view_capture_pct": 97.8911480583,
+        "median_absolute_error_views": 5.7711526274,
+        "rmsle": 0.1151458749,
+        "log_r2": 0.9972939419
+      },
+      {
+        "scope": "day_21_to_30",
+        "method": "one_step_predicted_previous_plus_growth",
+        "rows": 129,
+        "wape_pct": 92.5396759107,
+        "total_view_capture_pct": 25.3074454906,
+        "median_absolute_error_views": 1226.3484766007,
+        "rmsle": 2.0624577206,
+        "log_r2": 0.1318186523
+      },
+      {
+        "scope": "day_21_to_30",
+        "method": "independent_later_horizon",
+        "rows": 129,
+        "wape_pct": 96.912516917,
+        "total_view_capture_pct": 19.184928052,
+        "median_absolute_error_views": 1403.0170774562,
+        "rmsle": 2.0573003337,
+        "log_r2": 0.1361551764
+      }
+    ],
+    "complete_day_7_14_21_test_metrics": [
+      {
+        "scope": "complete_day_7_14_21_day_7",
+        "method": "monotonic_trajectory",
+        "rows": 505,
+        "wape_pct": 92.3562151098,
+        "total_view_capture_pct": 20.1038231132,
+        "median_absolute_error_views": 1248.6881934687,
+        "rmsle": 1.7736292724,
+        "log_r2": 0.1957110395
+      },
+      {
+        "scope": "complete_day_7_14_21_day_7",
+        "method": "independent_horizon",
+        "rows": 505,
+        "wape_pct": 92.3562151098,
+        "total_view_capture_pct": 20.1038231132,
+        "median_absolute_error_views": 1248.6881934687,
+        "rmsle": 1.7736292724,
+        "log_r2": 0.1957110395
+      },
+      {
+        "scope": "complete_day_7_14_21_day_14",
+        "method": "monotonic_trajectory",
+        "rows": 505,
+        "wape_pct": 92.1938804577,
+        "total_view_capture_pct": 19.2937780812,
+        "median_absolute_error_views": 1261.5842197081,
+        "rmsle": 1.7752094871,
+        "log_r2": 0.1984237901
+      },
+      {
+        "scope": "complete_day_7_14_21_day_14",
+        "method": "independent_horizon",
+        "rows": 505,
+        "wape_pct": 89.9219337257,
+        "total_view_capture_pct": 25.1671110738,
+        "median_absolute_error_views": 1785.5996830708,
+        "rmsle": 1.8358879473,
+        "log_r2": 0.1426899
+      },
+      {
+        "scope": "complete_day_7_14_21_day_21",
+        "method": "monotonic_trajectory",
+        "rows": 505,
+        "wape_pct": 92.2841186025,
+        "total_view_capture_pct": 18.6861790452,
+        "median_absolute_error_views": 1244.2492349233,
+        "rmsle": 1.7815354621,
+        "log_r2": 0.2011171704
+      },
+      {
+        "scope": "complete_day_7_14_21_day_21",
+        "method": "independent_horizon",
+        "rows": 505,
+        "wape_pct": 89.9566273799,
+        "total_view_capture_pct": 25.7126653307,
+        "median_absolute_error_views": 1568.7345146571,
+        "rmsle": 1.8396919844,
+        "log_r2": 0.1481083212
+      }
+    ],
+    "limitations": [
+      "No video has all four labels in the frozen dataset.",
+      "Only 650 videos have both day-21 and day-30 labels.",
+      "Day-30 end-to-end chain accuracy is not measurable yet.",
+      "The common experimental test split has now been evaluated."
+    ]
+  },
+  "sample_smoke_prediction": {
+    "day_7_views": 953.7310629211682,
+    "day_14_views": 1099.6384488502647,
+    "day_21_views": 1207.249507086062,
+    "day_30_views": 1249.9912937427496
+  }
+}

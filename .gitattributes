@@ -1,0 +1,2 @@
+# Preserve teammate-provided artifact bytes so SHA256SUMS stays valid on Windows.
+prediction_api/model_artifacts/viewcastlk_monotonic_trajectory_experimental_v1/** -text -whitespace

@@ -19,7 +19,7 @@ from app.feature_builder import (
 MANIFEST_PATH = (
     Path(__file__).resolve().parent.parent
     / "model_artifacts"
-    / "viewcastlk_mvp_candidate_v1"
+    / "viewcastlk_monotonic_trajectory_experimental_v1"
     / "manifest.json"
 )
 

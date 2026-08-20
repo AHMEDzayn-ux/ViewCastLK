@@ -1,4 +1,4 @@
-"""Feature builder for ViewCastLK ML candidate model input generation."""
+"""Feature builder for ViewCastLK trajectory model input generation."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import pandas as pd
 ARTIFACT_DIR = (
     Path(__file__).resolve().parent.parent
     / "model_artifacts"
-    / "viewcastlk_mvp_candidate_v1"
+    / "viewcastlk_monotonic_trajectory_experimental_v1"
 )
 
 if str(ARTIFACT_DIR) not in sys.path:

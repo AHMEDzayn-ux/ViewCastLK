@@ -1,0 +1,8 @@
+component,target,target_scale,training_rows,training_channels,selected_n_estimators,negative_observed_growth_rows_excluded
+day_7_independent,day_7_cumulative_views,log1p,16390,1391,93,
+day_14_independent,day_14_cumulative_views,log1p,12478,1363,152,
+day_21_independent,day_21_cumulative_views,log1p,12241,1331,244,
+day_30_independent,day_30_cumulative_views,log1p,12079,1386,143,
+day_7_to_14_increment,nonnegative_day_7_to_day_14_view_increment,log1p,7727,887,59,32.0
+day_14_to_21_increment,nonnegative_day_14_to_day_21_view_increment,log1p,4054,811,60,3.0
+day_21_to_30_increment,nonnegative_day_21_to_day_30_view_increment,log1p,521,215,15,0.0

@@ -1,0 +1,115 @@
+{
+  "artifact_version": "checkpoint12_monotonic_trajectory",
+  "status": "experimental_test_evaluated_no_complete_four_horizon_labels",
+  "model_path": "models/monotonic_trajectory.joblib",
+  "model_sha256": "84f3d3b98bce07b6dbee25cab97eb20914e0fdcb4a9de065e86bc054bc6b293a",
+  "horizons": [
+    7,
+    14,
+    21,
+    30
+  ],
+  "construction": "day-7 base plus three predicted nonnegative increments",
+  "common_split": {
+    "type": "channel_grouped_shared_across_all_components",
+    "selection_seed": 241,
+    "test_size_target": 0.2,
+    "test_channels": 372,
+    "test_row_fractions": {
+      "day_7": 0.19872891713517477,
+      "day_7_to_14": 0.20125591929174388,
+      "day_14_to_21": 0.19917094354520332,
+      "day_21_to_30": 0.19846153846153847
+    }
+  },
+  "max_estimators_during_selection": 1000,
+  "components": [
+    {
+      "component": "day_7_independent",
+      "target": "day_7_cumulative_views",
+      "target_scale": "log1p",
+      "training_rows": 16390,
+      "training_channels": 1391,
+      "selected_n_estimators": 93
+    },
+    {
+      "component": "day_14_independent",
+      "target": "day_14_cumulative_views",
+      "target_scale": "log1p",
+      "training_rows": 12478,
+      "training_channels": 1363,
+      "selected_n_estimators": 152
+    },
+    {
+      "component": "day_21_independent",
+      "target": "day_21_cumulative_views",
+      "target_scale": "log1p",
+      "training_rows": 12241,
+      "training_channels": 1331,
+      "selected_n_estimators": 244
+    },
+    {
+      "component": "day_30_independent",
+      "target": "day_30_cumulative_views",
+      "target_scale": "log1p",
+      "training_rows": 12079,
+      "training_channels": 1386,
+      "selected_n_estimators": 143
+    },
+    {
+      "component": "day_7_to_14_increment",
+      "target": "nonnegative_day_7_to_day_14_view_increment",
+      "target_scale": "log1p",
+      "training_rows": 7727,
+      "training_channels": 887,
+      "negative_observed_growth_rows_excluded": 32,
+      "selected_n_estimators": 59
+    },
+    {
+      "component": "day_14_to_21_increment",
+      "target": "nonnegative_day_14_to_day_21_view_increment",
+      "target_scale": "log1p",
+      "training_rows": 4054,
+      "training_channels": 811,
+      "negative_observed_growth_rows_excluded": 3,
+      "selected_n_estimators": 60
+    },
+    {
+      "component": "day_21_to_30_increment",
+      "target": "nonnegative_day_21_to_day_30_view_increment",
+      "target_scale": "log1p",
+      "training_rows": 521,
+      "training_channels": 215,
+      "negative_observed_growth_rows_excluded": 0,
+      "selected_n_estimators": 15
+    }
+  ],
+  "complete_four_horizon_rows": 0,
+  "end_to_end_day_30_testable": false,
+  "limitations": [
+    "No video has all four labels in the frozen dataset.",
+    "Only 650 videos have both day-21 and day-30 labels.",
+    "Day-30 end-to-end chain accuracy is not measurable yet.",
+    "The common experimental test split has now been evaluated."
+  ],
+  "explicitly_excluded_model_columns": [
+    "definition",
+    "caption",
+    "made_for_kids",
+    "publish_hour_slt",
+    "publish_dow_slt",
+    "tag_count",
+    "description_length",
+    "title_length",
+    "title_word_count",
+    "title_has_number",
+    "title_has_question",
+    "title_has_exclaim",
+    "title_upper_ratio",
+    "title_script",
+    "ch_views_at_publish",
+    "video_id",
+    "channel_id",
+    "published_at"
+  ]
+}

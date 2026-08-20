@@ -6,8 +6,6 @@ from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import numpy as np
-
 from app.config import ALLOWED_ORIGINS, DASHBOARD_ORIGIN, YOUTUBE_API_KEY
 from app.feature_builder import build_candidate_feature_frame
 from app.model_registry import ModelRegistry
@@ -119,41 +117,34 @@ async def create_forecast(payload: ForecastRequest):
     # 3. Build 30-column model-ready raw feature frame
     try:
         df = build_candidate_feature_frame(payload, channel_stats)
-    except Exception as err:
+    except Exception:
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"message": "Failed to construct candidate model feature frame.", "code": "feature_building_error"},
         )
 
-    # 4. Perform model inference across all 4 horizons using cached ModelRegistry
+    # 4. Perform one trajectory inference across all four horizons.
     try:
-        model_registry.load_models()
-    except Exception as err:
+        trajectory = model_registry.predict_trajectory(df)
+    except Exception:
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            content={"message": "Candidate model artifacts are currently unavailable.", "code": "model_artifacts_unavailable"},
+            content={"message": "Trajectory model inference is currently unavailable.", "code": "inference_error"},
         )
 
+    horizons = (7, 14, 21, 30)
     raw_predictions: dict[int, float] = {}
     estimates: list[ForecastEstimate] = []
 
-    for horizon in (7, 14, 21, 30):
-        try:
-            preds = model_registry.predict_views(horizon, df)
-            raw_val = float(preds[0])
-            if not np.isfinite(raw_val) or np.isnan(raw_val):
-                raise ValueError(f"Non-finite prediction for horizon {horizon}")
-            raw_predictions[horizon] = raw_val
-            # Round raw prediction to non-negative integer for API response
-            rounded_views = max(0, int(round(raw_val)))
-            estimates.append(
-                ForecastEstimate(horizonDays=horizon, cumulativeViews=rounded_views)
+    for position, horizon in enumerate(horizons):
+        raw_val = float(trajectory[0, position])
+        raw_predictions[horizon] = raw_val
+        estimates.append(
+            ForecastEstimate(
+                horizonDays=horizon,
+                cumulativeViews=max(0, int(round(raw_val))),
             )
-        except Exception as err:
-            return JSONResponse(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                content={"message": f"Model inference failed for Day {horizon}.", "code": "inference_error"},
-            )
+        )
 
     # 5. Check trajectory monotonicity (day7 <= day14 <= day21 <= day30)
     is_monotonic = (
@@ -163,33 +154,35 @@ async def create_forecast(payload: ForecastRequest):
     # 6. Build response metadata & documentation fields
     forecast_id = f"fc_{uuid.uuid4().hex[:12]}"
     manifest = model_registry.get_manifest()
-    artifact_ver = manifest.get("artifact_version", "viewcastlk_mvp_candidate_v1")
+    artifact_ver = manifest.get(
+        "artifact_version", "viewcastlk_monotonic_trajectory_experimental_v1"
+    )
 
     model_metadata = ModelMetadata(
         artifactVersion=artifact_ver,
         modelVersion=artifact_ver,
         generatedAt=datetime.now(timezone.utc).isoformat(),
         dataSource="prediction_api",
-        status="candidate",
+        status="experimental",
         trajectoryMonotonic=is_monotonic,
     )
 
     unavailable_recs = [
         UnavailableRecommendation(
             type="timing",
-            reason="Recommendations are unavailable in candidate v1 model.",
+            reason="Recommendations are unavailable in the experimental trajectory model.",
         ),
         UnavailableRecommendation(
             type="duration",
-            reason="Recommendations are unavailable in candidate v1 model.",
+            reason="Recommendations are unavailable in the experimental trajectory model.",
         ),
         UnavailableRecommendation(
             type="format",
-            reason="Recommendations are unavailable in candidate v1 model.",
+            reason="Recommendations are unavailable in the experimental trajectory model.",
         ),
         UnavailableRecommendation(
             type="title",
-            reason="Recommendations are unavailable in candidate v1 model.",
+            reason="Recommendations are unavailable in the experimental trajectory model.",
         ),
     ]
 

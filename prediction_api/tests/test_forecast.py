@@ -63,16 +63,16 @@ def test_5_all_cumulative_views_numeric_non_negative(mock_fetch):
 
 
 @patch("app.main.fetch_channel_stats")
-def test_6_model_metadata_identifies_candidate_v1(mock_fetch):
+def test_6_model_metadata_identifies_monotonic_trajectory(mock_fetch):
     mock_fetch.return_value = MOCK_CHANNEL_STATS
     response = client.post("/forecast", json=VALID_FORECAST_PAYLOAD)
     assert response.status_code == 200
     data = response.json()
     model = data.get("model", {})
-    assert model.get("artifactVersion") == "viewcastlk_mvp_candidate_v1"
-    assert model.get("modelVersion") == "viewcastlk_mvp_candidate_v1"
+    assert model.get("artifactVersion") == "viewcastlk_monotonic_trajectory_experimental_v1"
+    assert model.get("modelVersion") == "viewcastlk_monotonic_trajectory_experimental_v1"
     assert model.get("dataSource") == "prediction_api"
-    assert model.get("status") == "candidate"
+    assert model.get("status") == "experimental"
 
 
 @patch("app.main.fetch_channel_stats")
@@ -168,10 +168,11 @@ def test_14_and_15_gemini_and_supabase_never_required():
 
 
 @patch("app.main.fetch_channel_stats")
-def test_16_raw_non_monotonic_outputs_are_not_automatically_modified(mock_fetch):
+def test_16_forecast_trajectory_is_monotonic(mock_fetch):
     mock_fetch.return_value = MOCK_CHANNEL_STATS
     response = client.post("/forecast", json=VALID_FORECAST_PAYLOAD)
     assert response.status_code == 200
     data = response.json()
-    # Check that model metadata captures raw trajectoryMonotonic boolean without overriding values
-    assert "trajectoryMonotonic" in data["model"]
+    cumulative_views = [estimate["cumulativeViews"] for estimate in data["estimates"]]
+    assert cumulative_views == sorted(cumulative_views)
+    assert data["model"]["trajectoryMonotonic"] is True

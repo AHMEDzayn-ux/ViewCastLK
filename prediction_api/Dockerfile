@@ -12,7 +12,12 @@ COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copy application source code and candidate model artifacts
+# LightGBM's Linux wheel dynamically links to the GNU OpenMP runtime.
+RUN apt-get update && \
+    apt-get install --yes --no-install-recommends libgomp1 && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy application source code and model artifacts
 COPY . /app
 
 EXPOSE 8000

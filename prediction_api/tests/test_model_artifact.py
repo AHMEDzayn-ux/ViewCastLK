@@ -1,79 +1,95 @@
-"""Automated tests for ViewCastLK model artifact loading and predictions."""
+"""Tests for the deployed monotonic trajectory artifact."""
 
-from pathlib import Path
-import pytest
+import json
+
 import numpy as np
 import pandas as pd
 
-from app.model_registry import ModelRegistry, DEFAULT_ARTIFACT_DIR, ChecksumMismatchError
+from app.model_registry import DEFAULT_ARTIFACT_DIR, ModelRegistry
 
 
 def test_artifact_exists():
-    """Verify that candidate model artifact directory and manifest exist."""
-    assert DEFAULT_ARTIFACT_DIR.exists()
     assert DEFAULT_ARTIFACT_DIR.is_dir()
-    manifest_file = DEFAULT_ARTIFACT_DIR / "manifest.json"
-    assert manifest_file.exists()
-    sample_file = DEFAULT_ARTIFACT_DIR / "sample_input.csv"
-    assert sample_file.exists()
+    assert (DEFAULT_ARTIFACT_DIR / "manifest.json").is_file()
+    assert (DEFAULT_ARTIFACT_DIR / "sample_input.csv").is_file()
 
 
-def test_model_hashes():
-    """Verify SHA-256 hashes of all four horizon model files."""
+def test_model_checksum_matches_manifest():
     registry = ModelRegistry()
-    hashes = registry.verify_checksums()
-    assert len(hashes) == 4
-    for horizon in (7, 14, 21, 30):
-        assert horizon in hashes
-        assert isinstance(hashes[horizon], str)
-        assert len(hashes[horizon]) == 64
+    expected = registry.get_manifest()["model"]["sha256"]
+    assert registry.verify_checksum() == expected
 
 
-def test_load_all_models():
-    """Verify that all four horizon models load successfully into memory."""
+def test_trajectory_model_loads():
+    model = ModelRegistry().load_model()
+    assert hasattr(model, "predict_views")
+    assert tuple(model.horizons) == (7, 14, 21, 30)
+
+
+def test_sample_predictions_match_manifest():
     registry = ModelRegistry()
-    models = registry.load_models()
-    assert len(models) == 4
-    for horizon in (7, 14, 21, 30):
-        assert horizon in models
-        model = registry.get_model(horizon)
-        assert hasattr(model, "predict_views")
-
-
-def test_sample_input_predictions():
-    """Verify sample predictions match expected values from manifest.json."""
-    registry = ModelRegistry()
-    manifest = registry.get_manifest()
-    expected_dict = manifest["sample_smoke_predictions"]
-
-    sample_predictions = registry.predict_sample()
-    assert len(sample_predictions) == 4
+    expected = registry.get_manifest()["sample_smoke_prediction"]
+    predicted = registry.predict_sample()
 
     for horizon in (7, 14, 21, 30):
-        predicted = sample_predictions[horizon]
-        expected = expected_dict[str(horizon)]
-        assert np.isclose(predicted, expected, rtol=1e-5, atol=1e-5), (
-            f"Day {horizon} prediction mismatch: predicted {predicted}, expected {expected}"
+        assert np.isclose(
+            predicted[horizon],
+            expected[f"day_{horizon}_views"],
+            rtol=1e-5,
+            atol=1e-5,
         )
 
 
-def test_prediction_output_sanity():
-    """Check sanity of predictions: finite, non-negative, and report monotonicity."""
+def test_sample_trajectory_is_finite_nonnegative_and_monotonic():
+    predictions = ModelRegistry().predict_sample()
+    values = np.asarray([predictions[horizon] for horizon in (7, 14, 21, 30)])
+
+    assert np.isfinite(values).all()
+    assert (values >= 0).all()
+    assert (np.diff(values) >= 0).all()
+
+
+def test_batch_prediction_has_expected_shape_and_monotonic_rows():
     registry = ModelRegistry()
-    sample_predictions = registry.predict_sample()
+    sample = pd.read_csv(DEFAULT_ARTIFACT_DIR / "sample_input.csv", low_memory=False)
+    batch = pd.concat([sample, sample], ignore_index=True)
+    predictions = registry.predict_trajectory(batch)
 
-    for horizon, val in sample_predictions.items():
-        assert np.isfinite(val), f"Day {horizon} prediction is not finite: {val}"
-        assert val >= 0, f"Day {horizon} prediction is negative: {val}"
+    assert predictions.shape == (2, 4)
+    assert (np.diff(predictions, axis=1) >= 0).all()
 
-    # Note monotonicity: raw Day 30 model output is lower than Day 21 in this candidate artifact.
-    day7 = sample_predictions[7]
-    day14 = sample_predictions[14]
-    day21 = sample_predictions[21]
-    day30 = sample_predictions[30]
 
-    assert day7 <= day14, f"Day 7 ({day7}) > Day 14 ({day14})"
-    assert day14 <= day21, f"Day 14 ({day14}) > Day 21 ({day21})"
-    # Day 30 is preserved raw without post-processing (Day 30 < Day 21 expected for this candidate)
-    is_monotonic_all = (day7 <= day14 <= day21 <= day30)
-    assert is_monotonic_all is False
+def test_artifact_package_checksums_file_is_complete_and_valid():
+    checksum_file = DEFAULT_ARTIFACT_DIR / "SHA256SUMS.txt"
+    entries = {}
+    for line in checksum_file.read_text(encoding="utf-8").splitlines():
+        expected, relative_path = line.split(maxsplit=1)
+        entries[relative_path] = expected
+
+    # SHA256SUMS.txt intentionally does not include itself.
+    packaged_files = {
+        path.relative_to(DEFAULT_ARTIFACT_DIR).as_posix()
+        for path in DEFAULT_ARTIFACT_DIR.rglob("*")
+        if path.is_file()
+        and path.name != "SHA256SUMS.txt"
+        and "__pycache__" not in path.parts
+        and path.suffix != ".pyc"
+    }
+    assert set(entries) == packaged_files
+
+    import hashlib
+
+    for relative_path, expected in entries.items():
+        digest = hashlib.sha256(
+            (DEFAULT_ARTIFACT_DIR / relative_path).read_bytes()
+        ).hexdigest()
+        assert digest == expected, relative_path
+
+
+def test_manifest_contract_is_the_expected_experimental_artifact():
+    manifest = json.loads(
+        (DEFAULT_ARTIFACT_DIR / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["artifact_version"] == "viewcastlk_monotonic_trajectory_experimental_v1"
+    assert manifest["supported_horizons_days"] == [7, 14, 21, 30]
+    assert manifest["trajectory_guarantee"] == "day_7 <= day_14 <= day_21 <= day_30"

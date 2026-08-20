@@ -1,5 +1,6 @@
 import type {
   AccuracyResponse,
+  AvailableAccuracyResponse,
   ChannelStats,
   ForecastRequest,
   ForecastResponse,
@@ -145,14 +146,34 @@ function isForecastResponse(value: unknown): value is ForecastResponse {
   );
 }
 
-function isAccuracyResponse(value: unknown): value is AccuracyResponse {
+export function isAccuracyResponse(value: unknown): value is AccuracyResponse {
   if (!value || typeof value !== "object") return false;
 
-  const candidate = value as Partial<AccuracyResponse>;
+  const candidate = value as Partial<AccuracyResponse> &
+    Record<string, unknown>;
+
+  if (candidate.status === "unavailable") {
+    return (
+      typeof candidate.modelName === "string" &&
+      candidate.modelName.length > 0 &&
+      candidate.evaluatedAt === null &&
+      Array.isArray(candidate.evaluations) &&
+      candidate.evaluations.length === 0 &&
+      (candidate.dataSource === "prediction_api" ||
+        candidate.dataSource === "mock") &&
+      typeof candidate.message === "string" &&
+      candidate.message.length > 0 &&
+      !("baselineName" in candidate)
+    );
+  }
+
+  if (candidate.status !== "available") return false;
+
+  const available = candidate as Partial<AvailableAccuracyResponse>;
   const validEvaluations =
-    Array.isArray(candidate.evaluations) &&
-    candidate.evaluations.length === ACCURACY_SCOPES.length &&
-    candidate.evaluations.every(
+    Array.isArray(available.evaluations) &&
+    available.evaluations.length === ACCURACY_SCOPES.length &&
+    available.evaluations.every(
       (evaluation) =>
         ACCURACY_SCOPES.includes(evaluation.scope) &&
         Array.isArray(evaluation.metrics) &&
@@ -167,14 +188,17 @@ function isAccuracyResponse(value: unknown): value is AccuracyResponse {
               Number.isFinite(metric.baselineValue)),
         ),
     );
-  const evaluationScopes = (candidate.evaluations ?? []).map(
+  const evaluationScopes = (available.evaluations ?? []).map(
     (evaluation) => evaluation.scope,
   );
 
   return (
-    (candidate.status === "available" || candidate.status === "unavailable") &&
-    typeof candidate.modelName === "string" &&
-    typeof candidate.baselineName === "string" &&
+    typeof available.modelName === "string" &&
+    typeof available.baselineName === "string" &&
+    typeof available.evaluatedAt === "string" &&
+    Number.isFinite(Date.parse(available.evaluatedAt)) &&
+    (available.dataSource === "prediction_api" ||
+      available.dataSource === "mock") &&
     validEvaluations &&
     new Set(evaluationScopes).size === ACCURACY_SCOPES.length &&
     ACCURACY_SCOPES.every((scope) => evaluationScopes.includes(scope))

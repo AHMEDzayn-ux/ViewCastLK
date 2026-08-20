@@ -59,7 +59,7 @@ jobs:
             --min=0 \
             --max=1 \
             --port=8000 \
-            --set-env-vars="GEMINI_MODEL=gemini-3.5-flash-lite,DASHBOARD_ORIGIN=https://viewcastlk.pages.dev" \
+            --set-env-vars="GEMINI_MODEL=gemini-3.5-flash-lite,GEMINI_FALLBACK_MODELS=gemini-3.1-flash-lite;gemini-3.7-flash;gemini-3.6-flash;gemini-3.5-flash;gemini-3-flash-preview;gemini-2.5-flash;gemini-2.5-flash-lite,DASHBOARD_ORIGIN=https://viewcastlk.pages.dev" \
             --set-secrets="YOUTUBE_API_KEY=viewcastlk-youtube-api-key:latest,GEMINI_API_KEY=viewcastlk-gemini-api-key:latest" \
             --quiet
 

@@ -7,7 +7,7 @@ import type {
   Recommendation,
   UnavailableRecommendation,
 } from "@/types/forecast";
-import { ACCURACY_SCOPES, PUBLISH_DAYS } from "@/types/forecast";
+import { PUBLISH_DAYS } from "@/types/forecast";
 
 function hashString(value: string): number {
   let hash = 2166136261;
@@ -199,57 +199,14 @@ export function createMockForecast(request: ForecastRequest): ForecastResponse {
 }
 
 export function createMockAccuracy(): AccuracyResponse {
-  const createUnpublishedMetrics = () => [
-    {
-      key: "mape" as const,
-      label: "MAPE",
-      description:
-        "Average prediction error expressed as a percentage of actual views.",
-      unit: "percent" as const,
-      modelValue: null,
-      baselineValue: null,
-    },
-    {
-      key: "mae" as const,
-      label: "MAE",
-      description:
-        "Average absolute difference between predicted and actual view counts.",
-      unit: "views" as const,
-      modelValue: null,
-      baselineValue: null,
-    },
-    {
-      key: "rmse" as const,
-      label: "RMSE",
-      description:
-        "A view-count error measure that gives more weight to larger misses.",
-      unit: "views" as const,
-      modelValue: null,
-      baselineValue: null,
-    },
-    {
-      key: "r2" as const,
-      label: "R²",
-      description:
-        "How much of the variation in actual view counts the model explains.",
-      unit: "score" as const,
-      modelValue: null,
-      baselineValue: null,
-    },
-  ];
-
   return {
     status: "unavailable",
-    modelName: "Published ViewCastLK model",
-    baselineName: "Naive category baseline",
+    modelName: "ViewCastLK model",
     evaluatedAt: null,
     dataSource: "mock",
     message:
-      "Published evaluation metrics are not available yet. No development values are substituted.",
-    evaluations: ACCURACY_SCOPES.map((scope) => ({
-      scope,
-      metrics: createUnpublishedMetrics(),
-    })) as AccuracyResponse["evaluations"],
+      "Evaluation results are not available yet. No unapproved values are displayed.",
+    evaluations: [],
   };
 }
 

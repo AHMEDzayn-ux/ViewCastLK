@@ -5,9 +5,14 @@ Minimal Python server-side backend providing real YouTube channel analytics for 
 ## Features
 
 - `GET /health` — API health check
+- `GET /accuracy` — Honest publication status for approved evaluation results
 - `POST /channel-lookup` — Server-side YouTube channel lookup by `@handle`, channel ID (`UC...`), or YouTube URL
 
 - `POST /forecast` — Day 7, 14, 21, and 30 cumulative-view trajectory
+
+Title guidance uses `GEMINI_MODEL` first and then the semicolon-separated
+`GEMINI_FALLBACK_MODELS` list. Retryable quota or availability failures move to
+the next model; invalid credentials and invalid requests stop immediately.
 
 ## Active model artifact
 

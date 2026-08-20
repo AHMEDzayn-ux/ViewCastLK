@@ -2,10 +2,12 @@ import logging
 import math
 from typing import Optional, Tuple
 from pydantic import BaseModel, Field, field_validator
-from app.config import GEMINI_API_KEY, GEMINI_MODEL
+from app.config import GEMINI_API_KEY, GEMINI_FALLBACK_MODELS, GEMINI_MODEL
 from app.schemas import TitleGuidance
 
 logger = logging.getLogger(__name__)
+
+_RETRYABLE_GEMINI_STATUS_CODES = {404, 408, 429, 500, 502, 503, 504}
 
 
 class TitleToneAnalysisInternal(BaseModel):
@@ -34,6 +36,35 @@ class TitleToneAnalysisInternal(BaseModel):
         if not math.isfinite(v) or v < 0.0 or v > 1.0:
             raise ValueError(f"Tone score {v} is outside allowed range [0.0, 1.0]")
         return float(v)
+
+
+def _gemini_model_candidates() -> tuple[str, ...]:
+    """Returns the configured Gemini models in order, without duplicates."""
+    candidates: list[str] = []
+    for model in (GEMINI_MODEL, *GEMINI_FALLBACK_MODELS):
+        normalized = model.strip()
+        if normalized and normalized not in candidates:
+            candidates.append(normalized)
+    return tuple(candidates)
+
+
+def _gemini_error_status_code(exc: Exception) -> Optional[int]:
+    """Extracts an HTTP status code from google-genai or transport errors."""
+    for value in (
+        getattr(exc, "code", None),
+        getattr(exc, "status_code", None),
+        getattr(getattr(exc, "response", None), "status_code", None),
+    ):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _should_try_next_model(exc: Exception) -> bool:
+    """Only fail over when another model can plausibly complete the request."""
+    return _gemini_error_status_code(exc) in _RETRYABLE_GEMINI_STATUS_CODES
 
 
 def analyze_title_tone(
@@ -72,32 +103,76 @@ def analyze_title_tone(
         from google import genai
         from google.genai import types
 
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=TitleToneAnalysisInternal,
-                temperature=0.2,
+        # The SDK retries transient failures several times by default. Use one
+        # attempt per model so a depleted model does not delay trying the next.
+        client = genai.Client(
+            api_key=GEMINI_API_KEY,
+            http_options=types.HttpOptions(
+                retry_options=types.HttpRetryOptions(attempts=1)
             ),
         )
+        config = types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=TitleToneAnalysisInternal,
+        )
+    except Exception as exc:
+        logger.warning(
+            "Gemini title analysis client setup failed (%s).",
+            type(exc).__name__,
+        )
+        return None, None
 
-        if not response or not response.text:
-            logger.warning("Gemini returned empty title analysis response.")
+    models = _gemini_model_candidates()
+    for index, model in enumerate(models):
+        has_fallback = index < len(models) - 1
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=prompt,
+                config=config,
+            )
+        except Exception as exc:
+            status_code = _gemini_error_status_code(exc)
+            if has_fallback and _should_try_next_model(exc):
+                logger.warning(
+                    "Gemini model %s failed with status %s; trying next model.",
+                    model,
+                    status_code,
+                )
+                continue
+            logger.warning(
+                "Gemini title analysis stopped at model %s (status=%s, error=%s).",
+                model,
+                status_code,
+                type(exc).__name__,
+            )
             return None, None
 
-        internal_analysis = TitleToneAnalysisInternal.model_validate_json(
-            response.text
-        )
+        if not response or not response.text:
+            logger.warning("Gemini model %s returned an empty response.", model)
+            if has_fallback:
+                continue
+            return None, None
+
+        try:
+            internal_analysis = TitleToneAnalysisInternal.model_validate_json(
+                response.text
+            )
+        except Exception as exc:
+            logger.warning(
+                "Gemini model %s returned unusable structured output (%s).",
+                model,
+                type(exc).__name__,
+            )
+            if has_fallback:
+                continue
+            return None, None
 
         guidance = TitleGuidance(
             summary=internal_analysis.summary,
             suggestions=internal_analysis.suggestions,
         )
-
+        logger.info("Gemini title analysis succeeded with model %s.", model)
         return guidance, internal_analysis
 
-    except Exception as exc:
-        logger.warning("Gemini title analysis failed: %s", exc)
-        return None, None
+    return None, None

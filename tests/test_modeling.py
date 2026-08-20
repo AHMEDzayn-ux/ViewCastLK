@@ -11,6 +11,8 @@ from viewcastlk_ml.modeling import (
     EnsembleHorizonModelBundle,
     GlobalMedianBaseline,
     HorizonModelBundle,
+    MonotonicTrajectoryModelBundle,
+    NonnegativeIncrementModelBundle,
     ScaleAwareHorizonModelBundle,
     log_target_inlier_mask,
     regression_metrics,
@@ -129,6 +131,78 @@ class BundleTests(unittest.TestCase):
         ensemble = EnsembleHorizonModelBundle(7, components, [0.25, 0.75])
         prediction = ensemble.predict_views(pd.DataFrame({"x": [1, 2]}))
         np.testing.assert_array_equal(prediction, [250.0, 250.0])
+
+    def test_increment_bundle_returns_nonnegative_view_growth(self) -> None:
+        class FakePreprocessor:
+            def transform(self, raw_features):
+                return raw_features
+
+            def get_feature_names_out(self):
+                return np.asarray(["x"])
+
+        class FakeRegressor:
+            def predict(self, transformed):
+                return np.asarray([-1.0, np.log1p(50.0)])
+
+        bundle = NonnegativeIncrementModelBundle(
+            7,
+            14,
+            FakePreprocessor(),
+            FakeRegressor(),
+        )
+        prediction = bundle.predict_increment_views(
+            pd.DataFrame({"x": [1, 2]})
+        )
+        np.testing.assert_allclose(prediction, [0.0, 50.0])
+
+    def test_trajectory_bundle_is_monotonic_by_construction(self) -> None:
+        class FakeBase:
+            horizon_days = 7
+
+            def predict_views(self, raw_features):
+                return np.asarray([100.0, 200.0])
+
+        class FakeIncrement:
+            def __init__(self, start, end, values):
+                self.from_horizon_days = start
+                self.to_horizon_days = end
+                self.values = np.asarray(values, dtype=float)
+
+            def predict_increment_views(self, raw_features):
+                return self.values
+
+        bundle = MonotonicTrajectoryModelBundle(
+            base_model=FakeBase(),
+            increment_models=[
+                FakeIncrement(7, 14, [50, 0]),
+                FakeIncrement(14, 21, [20, 25]),
+                FakeIncrement(21, 30, [10, 5]),
+            ],  # type: ignore[list-item]
+        )
+        prediction = bundle.predict_views(pd.DataFrame({"x": [1, 2]}))
+        np.testing.assert_array_equal(
+            prediction,
+            [[100.0, 150.0, 170.0, 180.0], [200.0, 200.0, 225.0, 230.0]],
+        )
+        self.assertTrue((np.diff(prediction, axis=1) >= 0).all())
+
+    def test_trajectory_bundle_rejects_a_broken_increment_chain(self) -> None:
+        class FakeBase:
+            horizon_days = 7
+
+        class FakeIncrement:
+            def __init__(self, start, end):
+                self.from_horizon_days = start
+                self.to_horizon_days = end
+
+        with self.assertRaisesRegex(ValueError, "7->14->21->30"):
+            MonotonicTrajectoryModelBundle(
+                base_model=FakeBase(),
+                increment_models=[
+                    FakeIncrement(7, 14),
+                    FakeIncrement(14, 30),
+                ],  # type: ignore[list-item]
+            )
 
 
 if __name__ == "__main__":

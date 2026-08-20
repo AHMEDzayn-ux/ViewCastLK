@@ -30,6 +30,12 @@ SAMPLE_VALID_GEMINI_JSON = json.dumps({
 })
 
 
+class FakeGeminiApiError(Exception):
+    def __init__(self, code: int):
+        super().__init__(f"Gemini API error {code}")
+        self.code = code
+
+
 def test_1_successful_allowed_four_score_analysis():
     with patch("app.title_analysis.GEMINI_API_KEY", "dummy-key"):
         mock_client = MagicMock()
@@ -47,6 +53,10 @@ def test_1_successful_allowed_four_score_analysis():
             assert internal.emotional_appeal == 0.6
             assert internal.seriousness == 0.8
             assert internal.curiosity_gap == 0.5
+            request_config = mock_client.models.generate_content.call_args.kwargs[
+                "config"
+            ]
+            assert request_config.temperature is None
 
 
 def test_2_invalid_malformed_gemini_response():
@@ -99,6 +109,97 @@ def test_5_gemini_rate_limit_or_exception():
             guidance, internal = analyze_title_tone("Test Title")
             assert guidance is None
             assert internal is None
+
+
+def test_rate_limit_falls_back_to_next_model_in_order():
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.text = SAMPLE_VALID_GEMINI_JSON
+    mock_client.models.generate_content.side_effect = [
+        FakeGeminiApiError(429),
+        mock_response,
+    ]
+
+    with (
+        patch("app.title_analysis.GEMINI_API_KEY", "dummy-key"),
+        patch("app.title_analysis.GEMINI_MODEL", "gemini-primary"),
+        patch(
+            "app.title_analysis.GEMINI_FALLBACK_MODELS",
+            ("gemini-primary", "gemini-fallback"),
+        ),
+        patch("google.genai.Client", return_value=mock_client),
+    ):
+        guidance, internal = analyze_title_tone("Test Title")
+
+    assert guidance is not None
+    assert internal is not None
+    attempted_models = [
+        call.kwargs["model"]
+        for call in mock_client.models.generate_content.call_args_list
+    ]
+    assert attempted_models == ["gemini-primary", "gemini-fallback"]
+
+
+def test_all_retryable_model_failures_degrade_cleanly():
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = [
+        FakeGeminiApiError(429),
+        FakeGeminiApiError(503),
+        FakeGeminiApiError(404),
+    ]
+
+    with (
+        patch("app.title_analysis.GEMINI_API_KEY", "dummy-key"),
+        patch("app.title_analysis.GEMINI_MODEL", "model-a"),
+        patch("app.title_analysis.GEMINI_FALLBACK_MODELS", ("model-b", "model-c")),
+        patch("google.genai.Client", return_value=mock_client),
+    ):
+        guidance, internal = analyze_title_tone("Test Title")
+
+    assert guidance is None
+    assert internal is None
+    assert mock_client.models.generate_content.call_count == 3
+
+
+def test_auth_failure_does_not_call_more_models():
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = FakeGeminiApiError(403)
+
+    with (
+        patch("app.title_analysis.GEMINI_API_KEY", "dummy-key"),
+        patch("app.title_analysis.GEMINI_MODEL", "model-a"),
+        patch("app.title_analysis.GEMINI_FALLBACK_MODELS", ("model-b", "model-c")),
+        patch("google.genai.Client", return_value=mock_client),
+    ):
+        guidance, internal = analyze_title_tone("Test Title")
+
+    assert guidance is None
+    assert internal is None
+    assert mock_client.models.generate_content.call_count == 1
+
+
+def test_unusable_output_falls_back_to_next_model():
+    malformed_response = MagicMock()
+    malformed_response.text = "not-json"
+    valid_response = MagicMock()
+    valid_response.text = SAMPLE_VALID_GEMINI_JSON
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = [
+        malformed_response,
+        valid_response,
+    ]
+
+    with (
+        patch("app.title_analysis.GEMINI_API_KEY", "dummy-key"),
+        patch("app.title_analysis.GEMINI_MODEL", "model-a"),
+        patch("app.title_analysis.GEMINI_FALLBACK_MODELS", ("model-b",)),
+        patch("google.genai.Client", return_value=mock_client),
+    ):
+        guidance, internal = analyze_title_tone("Test Title")
+
+    assert guidance is not None
+    assert internal is not None
+    assert mock_client.models.generate_content.call_count == 2
 
 
 def test_6_forecast_succeeds_when_gemini_fails():

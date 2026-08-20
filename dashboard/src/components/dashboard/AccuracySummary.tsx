@@ -5,6 +5,8 @@ import type {
   AccuracyMetric,
   AccuracyResponse,
   AccuracyScope,
+  AvailableAccuracyResponse,
+  UnavailableAccuracyResponse,
 } from "@/types/forecast";
 
 interface AccuracySummaryProps {
@@ -26,7 +28,31 @@ function formatMetric(metric: AccuracyMetric, value: number | null): string {
   return value.toFixed(3);
 }
 
-export default function AccuracySummary({ accuracy }: AccuracySummaryProps) {
+function UnavailableAccuracySummary({
+  accuracy,
+}: {
+  accuracy: UnavailableAccuracyResponse;
+}) {
+  return (
+    <div className="accuracy-summary">
+      <section className="accuracy-unavailable" role="status">
+        <p className="section-kicker">Evaluation pending</p>
+        <h2>Evaluation results are not available yet</h2>
+        <p>{accuracy.message}</p>
+        <p>
+          ViewCastLK does not display demonstration or development values as
+          approved accuracy results.
+        </p>
+      </section>
+    </div>
+  );
+}
+
+function AvailableAccuracySummary({
+  accuracy,
+}: {
+  accuracy: AvailableAccuracyResponse;
+}) {
   const [selectedScope, setSelectedScope] =
     useState<AccuracyScope>("combined");
   const selectedEvaluation =
@@ -42,21 +68,6 @@ export default function AccuracySummary({ accuracy }: AccuracySummaryProps) {
 
   return (
     <div className="accuracy-summary">
-      {accuracy.status === "unavailable" && (
-        <section className="accuracy-unavailable" role="status">
-          <p className="section-kicker">Evaluation pending</p>
-          <h2>No accuracy figures are published yet</h2>
-          <p>
-            {accuracy.message ??
-              "Held-out model evaluation has not been approved for publication."}
-          </p>
-          <p>
-            ViewCastLK does not substitute demonstration values when real
-            evaluation results are unavailable.
-          </p>
-        </section>
-      )}
-
       <div className="accuracy-scope-control">
         <div>
           <label htmlFor="accuracy-scope">Accuracy view</label>
@@ -152,16 +163,22 @@ export default function AccuracySummary({ accuracy }: AccuracySummaryProps) {
             every individual video.
           </li>
         </ul>
-        {accuracy.evaluatedAt && (
-          <p>
-            Evaluation last updated{" "}
-            {new Date(accuracy.evaluatedAt).toLocaleDateString("en-LK", {
-              dateStyle: "long",
-            })}
-            .
-          </p>
-        )}
+        <p>
+          Evaluation last updated{" "}
+          {new Date(accuracy.evaluatedAt).toLocaleDateString("en-LK", {
+            dateStyle: "long",
+          })}
+          .
+        </p>
       </section>
     </div>
   );
+}
+
+export default function AccuracySummary({ accuracy }: AccuracySummaryProps) {
+  if (accuracy.status === "unavailable") {
+    return <UnavailableAccuracySummary accuracy={accuracy} />;
+  }
+
+  return <AvailableAccuracySummary accuracy={accuracy} />;
 }

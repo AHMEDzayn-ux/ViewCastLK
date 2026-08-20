@@ -5,6 +5,7 @@ Minimal Python server-side backend providing real YouTube channel analytics for 
 ## Features
 
 - `GET /health` — API health check
+- `GET /accuracy` — Honest publication status for approved evaluation results
 - `POST /channel-lookup` — Server-side YouTube channel lookup by `@handle`, channel ID (`UC...`), or YouTube URL
 
 - `POST /forecast` — Day 7, 14, 21, and 30 cumulative-view trajectory

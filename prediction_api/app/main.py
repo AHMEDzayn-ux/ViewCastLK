@@ -10,6 +10,7 @@ from app.config import ALLOWED_ORIGINS, DASHBOARD_ORIGIN, YOUTUBE_API_KEY
 from app.feature_builder import build_candidate_feature_frame
 from app.model_registry import ModelRegistry
 from app.schemas import (
+    AccuracyResponse,
     ChannelLookupRequest,
     ChannelStatsResponse,
     DataCompleteness,
@@ -81,6 +82,20 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     return HealthResponse(status="ok", service="viewcastlk-prediction-api")
+
+
+@app.get("/accuracy", response_model=AccuracyResponse)
+async def accuracy_status():
+    manifest = model_registry.get_manifest()
+    return AccuracyResponse(
+        modelName=manifest.get(
+            "artifact_version", "viewcastlk_monotonic_trajectory_experimental_v1"
+        ),
+        message=(
+            "Evaluation results are not available yet. No approved held-out "
+            "MAPE, baseline comparison, or accuracy values are published."
+        ),
+    )
 
 
 @app.post(

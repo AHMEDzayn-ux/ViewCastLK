@@ -185,11 +185,11 @@ export interface AccuracyEvaluation {
   metrics: AccuracyMetric[];
 }
 
-export interface AccuracyResponse {
-  status: "available" | "unavailable";
+export interface AvailableAccuracyResponse {
+  status: "available";
   modelName: string;
   baselineName: string;
-  evaluatedAt: string | null;
+  evaluatedAt: string;
   evaluations: [
     AccuracyEvaluation,
     AccuracyEvaluation,
@@ -200,6 +200,19 @@ export interface AccuracyResponse {
   dataSource: "prediction_api" | "mock";
   message?: string;
 }
+
+export interface UnavailableAccuracyResponse {
+  status: "unavailable";
+  modelName: string;
+  evaluatedAt: null;
+  evaluations: [];
+  dataSource: "prediction_api" | "mock";
+  message: string;
+}
+
+export type AccuracyResponse =
+  | AvailableAccuracyResponse
+  | UnavailableAccuracyResponse;
 
 export interface ForecastValidationErrors {
   title?: string;

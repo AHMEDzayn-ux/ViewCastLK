@@ -32,6 +32,12 @@ jobs:
         working-directory: dashboard
         run: npm ci
 
+      - name: Test and lint dashboard
+        working-directory: dashboard
+        run: |
+          npm test
+          npm run lint
+
       - name: Build dashboard
         working-directory: dashboard
         env:

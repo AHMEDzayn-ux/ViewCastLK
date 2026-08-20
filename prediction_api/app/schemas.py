@@ -1,10 +1,24 @@
-from typing import Any, List, Optional
+from typing import Any, List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
 
 class HealthResponse(BaseModel):
     status: str = "ok"
     service: str = "viewcastlk-prediction-api"
+
+
+class AccuracyResponse(BaseModel):
+    status: Literal["unavailable"] = "unavailable"
+    modelName: str = Field(..., description="Active model artifact name")
+    evaluatedAt: None = Field(
+        None, description="Null until approved held-out results are published"
+    )
+    evaluations: List[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Empty until approved evaluation results are published",
+    )
+    dataSource: Literal["prediction_api"] = "prediction_api"
+    message: str = Field(..., description="Why evaluation results are unavailable")
 
 
 class ChannelLookupRequest(BaseModel):

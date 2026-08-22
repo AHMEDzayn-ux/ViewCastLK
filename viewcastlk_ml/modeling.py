@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from lightgbm import LGBMRegressor
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.utils.validation import check_is_fitted
@@ -31,6 +32,24 @@ MVP_XGB_PARAMS: dict[str, Any] = {
     "early_stopping_rounds": 50,
     "random_state": 42,
     "n_jobs": 4,
+}
+
+MVP_LIGHTGBM_PARAMS: dict[str, Any] = {
+    "objective": "regression",
+    "metric": "l2",
+    "n_estimators": 2000,
+    "learning_rate": 0.03,
+    "num_leaves": 31,
+    "max_depth": -1,
+    "min_child_samples": 50,
+    "subsample": 0.85,
+    "subsample_freq": 1,
+    "colsample_bytree": 0.85,
+    "reg_alpha": 0.1,
+    "reg_lambda": 1.0,
+    "random_state": 42,
+    "n_jobs": 4,
+    "verbosity": -1,
 }
 
 
@@ -272,6 +291,13 @@ def build_xgb_regressor(**overrides) -> XGBRegressor:
     return XGBRegressor(**parameters)
 
 
+def build_lgbm_regressor(**overrides) -> LGBMRegressor:
+    """Build the reproducible LightGBM regressor used by checkpoint 11."""
+    parameters = dict(MVP_LIGHTGBM_PARAMS)
+    parameters.update(overrides)
+    return LGBMRegressor(**parameters)
+
+
 @dataclass
 class HorizonModelBundle:
     """Serializable unit used by a future prediction API for one horizon."""
@@ -299,7 +325,7 @@ class ScaleAwareHorizonModelBundle:
 
     horizon_days: int
     preprocessor: Any
-    regressor: XGBRegressor
+    regressor: Any
     prediction_scale: str
     training_metadata: dict[str, Any] = field(default_factory=dict)
 

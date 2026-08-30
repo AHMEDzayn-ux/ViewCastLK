@@ -60,9 +60,15 @@ def detect(details, stored, captured_at, baseline=False):
         was = stored.get(vid, "__absent__")
         if was == "__absent__":
             continue                            # not tracked; caller decides
+        if was == sha:
+            # Unchanged, which is the case for 99.6% of videos on any run.
+            # Writing the identical hash back is not free: Postgres rewrites
+            # the whole row on any UPDATE, and at four runs a day that churned
+            # the videos table by roughly 100 MB per run.
+            continue
         shas[vid] = sha
-        if was is None or was == sha:
-            continue                            # first fingerprint, or unchanged
+        if was is None:
+            continue                            # first fingerprint, not an edit
         changes.append({
             "video_id": vid,
             "observed_at": captured_at,

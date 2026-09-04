@@ -7,6 +7,7 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from lightgbm import LGBMRegressor
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.utils.validation import check_is_fitted
@@ -31,6 +32,24 @@ MVP_XGB_PARAMS: dict[str, Any] = {
     "early_stopping_rounds": 50,
     "random_state": 42,
     "n_jobs": 4,
+}
+
+MVP_LIGHTGBM_PARAMS: dict[str, Any] = {
+    "objective": "regression",
+    "metric": "l2",
+    "n_estimators": 2000,
+    "learning_rate": 0.03,
+    "num_leaves": 31,
+    "max_depth": -1,
+    "min_child_samples": 50,
+    "subsample": 0.85,
+    "subsample_freq": 1,
+    "colsample_bytree": 0.85,
+    "reg_alpha": 0.1,
+    "reg_lambda": 1.0,
+    "random_state": 42,
+    "n_jobs": 4,
+    "verbosity": -1,
 }
 
 
@@ -272,6 +291,13 @@ def build_xgb_regressor(**overrides) -> XGBRegressor:
     return XGBRegressor(**parameters)
 
 
+def build_lgbm_regressor(**overrides) -> LGBMRegressor:
+    """Build the reproducible LightGBM regressor used by checkpoint 11."""
+    parameters = dict(MVP_LIGHTGBM_PARAMS)
+    parameters.update(overrides)
+    return LGBMRegressor(**parameters)
+
+
 @dataclass
 class HorizonModelBundle:
     """Serializable unit used by a future prediction API for one horizon."""
@@ -299,7 +325,7 @@ class ScaleAwareHorizonModelBundle:
 
     horizon_days: int
     preprocessor: Any
-    regressor: XGBRegressor
+    regressor: Any
     prediction_scale: str
     training_metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -361,3 +387,80 @@ class EnsembleHorizonModelBundle:
         for component in self.components:
             names.extend(component.feature_names)
         return list(dict.fromkeys(names))
+
+
+@dataclass
+class NonnegativeIncrementModelBundle:
+    """Serializable model for nonnegative growth between two horizons."""
+
+    from_horizon_days: int
+    to_horizon_days: int
+    preprocessor: Any
+    regressor: Any
+    training_metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.from_horizon_days >= self.to_horizon_days:
+            raise ValueError("Increment horizons must be strictly increasing")
+
+    def predict_increment_views(self, raw_features: pd.DataFrame) -> np.ndarray:
+        transformed = self.preprocessor.transform(raw_features)
+        predicted_log_increment = np.asarray(
+            self.regressor.predict(transformed), dtype=float
+        )
+        return views_from_log_predictions(predicted_log_increment)
+
+    @property
+    def feature_names(self) -> list[str]:
+        return list(self.preprocessor.get_feature_names_out())
+
+
+@dataclass
+class MonotonicTrajectoryModelBundle:
+    """Compose a day-7 base with positive increments into one trajectory.
+
+    The representation makes decreasing cumulative-view predictions
+    impossible by construction rather than repairing them after inference.
+    """
+
+    base_model: Any
+    increment_models: list[NonnegativeIncrementModelBundle]
+    training_metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        base_horizon = getattr(self.base_model, "horizon_days", None)
+        if base_horizon != 7:
+            raise ValueError("The trajectory base model must predict day 7")
+        expected_transitions = ((7, 14), (14, 21), (21, 30))
+        actual_transitions = tuple(
+            (model.from_horizon_days, model.to_horizon_days)
+            for model in self.increment_models
+        )
+        if actual_transitions != expected_transitions:
+            raise ValueError(
+                "Increment models must form the chain 7->14->21->30"
+            )
+
+    @property
+    def horizons(self) -> tuple[int, int, int, int]:
+        return (7, 14, 21, 30)
+
+    def predict_views(self, raw_features: pd.DataFrame) -> np.ndarray:
+        current = np.maximum(
+            0.0,
+            np.asarray(self.base_model.predict_views(raw_features), dtype=float),
+        )
+        predictions = [current]
+        for increment_model in self.increment_models:
+            increment = increment_model.predict_increment_views(raw_features)
+            current = current + np.maximum(0.0, increment)
+            predictions.append(current)
+        return np.column_stack(predictions)
+
+    def predict_frame(self, raw_features: pd.DataFrame) -> pd.DataFrame:
+        values = self.predict_views(raw_features)
+        return pd.DataFrame(
+            values,
+            index=raw_features.index,
+            columns=[f"day_{horizon}_views" for horizon in self.horizons],
+        )

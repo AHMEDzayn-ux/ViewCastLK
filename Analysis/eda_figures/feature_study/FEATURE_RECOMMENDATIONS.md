@@ -69,11 +69,15 @@ missing at serving costs 0.05 to 0.17.
 * **Short or long-form: replace `is_short`, do not drop it.** The old flag was
   just `duration_seconds <= 60`, so it added nothing the tree could not already
   read from duration (Δ within noise at every horizon). That was a flaw in the
-  flag, not a sign the format does not matter. Split by channel size, Shorts get
-  6 to 9 times the day-7 views of long-form for channels under 10K subscribers,
-  and only lose at 1M+ (`Analysis/eda_figures/simple_features/SF7_shorts_by_channel_size.png`).
-  The ≤60 s rule also misses Shorts of 61 s to 3 min, allowed since October 2024.
-  From 18 September the training table's `is_short` is the real format:
+  flag, not a sign the format does not matter. With the real flag, Shorts get
+  more day-7 views than long-form in every channel size band, 6 to 13 times more
+  under 10K subscribers. Within a single channel it varies: Shorts beat the
+  channel's own long-form for 56 to 72% of channels under 100K subscribers and
+  about 40% of larger ones, so the model should learn it together with channel
+  size (`Analysis/eda_figures/simple_features/SF7_shorts_by_channel_size.png`).
+  The ≤60 s rule also missed Shorts of 61 s to 3 min, allowed since October 2024,
+  and counted about 7,500 short horizontal clips as Shorts.
+  From the 18 September build the training table's `is_short` is the real format:
   vertical or square player and at most 3 minutes (`video_shapes` table,
   `is_short_source` says whether shape or the old rule decided it). At serving
   the creator says which they are making, so the form needs a

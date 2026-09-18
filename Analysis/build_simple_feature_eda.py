@@ -87,11 +87,11 @@ def load():
 
     f["duration"] = cut(num("duration_seconds") / 60, [0, 1, 5, 20, 60, inf],
                         ["<1 min", "1–5 min", "5–20 min", "20–60 min", "60+ min"])
-    # YouTube has allowed Shorts up to 3 minutes since October 2024 and the API
-    # has no Shorts flag, so 61 s to 3 min is a mix of Shorts and short
-    # long-form clips. It is kept separate instead of being called long-form.
-    f["Short or long-form"] = cut(num("duration_seconds"), [0, 61, 181, inf],
-                                  ["Short (≤60s)", "61s–3 min (mixed)", "long-form (>3 min)"])
+    # is_short is the real format from the player shape (vertical or square
+    # and at most 3 minutes), not the old duration <= 60 s rule.
+    f["Short or long-form"] = pd.Categorical(
+        d.is_short.fillna(False).astype(bool).map({True: "Short", False: "long-form"}),
+        categories=["Short", "long-form"], ordered=True)
     f["category"] = d.category_name.astype("string")
     lang = d.default_audio_language.astype("string").str.lower().str.split("-").str[0]
     f["audio language"] = lang.where(lang.isin(["si", "en", "ta"]), "other/unknown").map(
@@ -144,8 +144,9 @@ SOURCE = {
 }
 DUPLICATES = {"title word count": "title length (characters)", "weekend": "publish weekday"}
 # Features whose raw comparison is misleading, with the reason (see SF7).
-OVERRIDES = {"Short or long-form": ("keep", "hidden overall by 1M+ channels; for channels under 10K "
-                                             "subscribers Shorts get 6 to 9 times the views (SF7)")}
+OVERRIDES = {"Short or long-form": ("keep", "hidden overall because channel size is mixed in; within "
+                                             "each size band Shorts get more views, 6 to 13 times more "
+                                             "under 10K subscribers (SF7)")}
 PAGES = {
     "SF2_channel_features": ["subscribers", "channel video count", "channel age",
                              "channel average views per video", "channel uploads per day"],
@@ -303,18 +304,18 @@ def shorts_by_channel_size(d, f):
     """SF7: Shorts against long-form within each channel size, and within each channel."""
     fmt, tier = f["Short or long-form"], f["subscribers"]
     names = list(fmt.cat.categories)
-    colours = ["#2F6DB5", "#B8C2CC", "#E08B4B"]
+    colours = ["#2F6DB5", "#E08B4B"]
     tiers = [t for t in tier.cat.categories if (tier == t).sum() >= MIN_N]
     med = d.views.groupby([tier, fmt], observed=True).median().unstack()
     cnt = d.views.groupby([tier, fmt], observed=True).size().unstack()
 
     fig, (a, b) = plt.subplots(1, 2, figsize=(14, 5.2), gridspec_kw={"width_ratios": [3, 2]})
-    x, w = np.arange(len(tiers)), .27
+    x, w = np.arange(len(tiers)), .36
     for i, (name, c) in enumerate(zip(names, colours)):
         m = med.reindex(tiers)[name]
-        a.bar(x + (i - 1) * w, m, w, color=c, label=name)
+        a.bar(x + (i - .5) * w, m, w, color=c, label=name)
         for xi, (v, n) in enumerate(zip(m, cnt.reindex(tiers)[name])):
-            a.text(xi + (i - 1) * w, v * 1.08, f"{short(v)}\nn={n:,}", ha="center", va="bottom", fontsize=6.4)
+            a.text(xi + (i - .5) * w, v * 1.08, f"{short(v)}\nn={n:,}", ha="center", va="bottom", fontsize=6.4)
     a.set_yscale("log")
     a.yaxis.set_minor_formatter(mticker.NullFormatter())
     a.yaxis.set_major_formatter(mticker.FuncFormatter(lambda v, _: short(v)))
@@ -322,11 +323,11 @@ def shorts_by_channel_size(d, f):
     a.set_xticks(x)
     a.set_xticklabels(tiers)
     a.set(xlabel="channel subscribers", ylabel="median day-7 views (log scale)",
-          title="Shorts get far more views for channels under 100K subscribers")
+          title="Shorts get more day-7 views than long-form at every channel size")
     a.legend(fontsize=8, loc="upper left")
 
     # Same channel, both formats: does its Shorts' median beat its own long-form median?
-    short_, long_ = names[0], names[2]
+    short_, long_ = names[0], names[1]
     g = pd.DataFrame({"channel": d.channel_id, "fmt": fmt, "tier": tier, "views": d.views})
     g = g[g.fmt.isin([short_, long_])]
     per = g.groupby(["channel", "fmt"], observed=True).views.agg(["median", "size"]).unstack()

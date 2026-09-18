@@ -43,6 +43,7 @@ PRIMARY_KEYS = {
     "video_snapshots": ["video_id", "captured_at"],
     "video_categories": ["category_id"],
     "video_metadata_changes": ["video_id", "observed_at"],
+    "video_shapes": ["video_id"],
 }
 
 # Columns needing an explicit cast — flatten_* functions hand back plain
@@ -60,6 +61,8 @@ COLUMN_CASTS = {
     "video_count": "bigint",
     "like_count": "bigint",
     "comment_count": "bigint",
+    "embed_width": "integer",
+    "embed_height": "integer",
     "live_concurrent_viewers": "bigint",
     "hidden_subscriber_count": "boolean",
     "made_for_kids": "boolean",

@@ -38,6 +38,7 @@ import re
 import sys
 from datetime import timezone
 
+import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -110,9 +111,11 @@ SELECT v.video_id, v.channel_id, v.published_at, v.title,
        v.tags, v.category_id, v.category_name, v.duration, v.definition,
        v.caption, v.made_for_kids, v.default_audio_language, v.default_language,
        c.country AS channel_country, c.channel_published_at,
-       c.topic_categories
+       c.topic_categories,
+       sh.embed_width, sh.embed_height
 FROM videos v
 JOIN channels c USING (channel_id)
+LEFT JOIN video_shapes sh USING (video_id)
 """
 
 # Nearest observation to each horizon, per video.
@@ -248,7 +251,18 @@ def main():
     df["publish_dow_sin"], df["publish_dow_cos"] = cyc(df["publish_dow_slt"], 7)
 
     df["duration_seconds"] = df["duration"].apply(duration_seconds)
-    df["is_short"] = df["duration_seconds"].le(60)
+    # The API has no Shorts flag. A Short is vertical or square and at most
+    # 3 minutes long (the limit since October 2024), read from the player
+    # shape in video_shapes. Where the shape is unknown (not yet backfilled,
+    # or the video had gone when checked) fall back to the old <=60 s rule,
+    # and say which rule decided in is_short_source.
+    w = pd.to_numeric(df["embed_width"], errors="coerce")
+    h = pd.to_numeric(df["embed_height"], errors="coerce")
+    shape_known = w.notna() & h.notna()
+    df["is_vertical"] = (h >= w).where(shape_known)
+    df["is_short"] = np.where(shape_known, (h >= w) & df["duration_seconds"].le(180),
+                              df["duration_seconds"].le(60)).astype(bool)
+    df["is_short_source"] = np.where(shape_known, "shape", "duration")
 
     title = df["title"].fillna("")
     df["title_length"] = title.str.len()
@@ -276,7 +290,7 @@ def main():
     df["eligible"] = (~df["is_live_broadcast"]) & df["duration_seconds"].notna()
 
     FEATURES = [
-        "category_id", "category_name", "duration_seconds", "is_short",
+        "category_id", "category_name", "duration_seconds", "is_short", "is_short_source", "is_vertical",
         "definition", "caption", "made_for_kids",
         "default_audio_language", "default_language",
         "publish_hour_slt", "publish_dow_slt", "publish_is_weekend",
@@ -351,8 +365,9 @@ def main():
           f"{int(el.channel_stats_backfilled.sum()):,} of {len(el):,}")
     print(f"edited since first seen — title: {int(el.title_changed.sum()):,}   "
           f"description: {int(el.description_changed.sum()):,}")
-    print(f"shorts (<=60s): {int(el.is_short.sum()):,}   "
-          f"long-form: {int((~el.is_short).sum()):,}")
+    print(f"shorts: {int(el.is_short.sum()):,}   long-form: {int((~el.is_short).sum()):,}   "
+          f"(decided by shape for {int(el.is_short_source.eq('shape').sum()):,}, "
+          f"by the <=60 s rule for {int(el.is_short_source.eq('duration').sum()):,})")
     print("\ntitle script mix:")
     for k, v in el.title_script.value_counts().items():
         print(f"    {k:8} {v:,}")

@@ -56,6 +56,7 @@ from youtube_client import (
     flatten_channel_identity,
     flatten_channel_snapshot,
     flatten_video_identity,
+    flatten_video_shape,
     flatten_video_snapshot,
 )
 from storage import (
@@ -109,6 +110,7 @@ CHANNEL_SNAPSHOTS_TABLE = "channel_snapshots"
 VIDEOS_TABLE = "videos"
 VIDEO_SNAPSHOTS_TABLE = "video_snapshots"
 METADATA_CHANGES_TABLE = "video_metadata_changes"
+VIDEO_SHAPES_TABLE = "video_shapes"
 
 
 class QuotaExceeded(Exception):
@@ -335,6 +337,8 @@ def main():
 
         unseen_details = [v for v in details if v["id"] not in known_video_ids]
         append_rows([flatten_video_identity(v, category_names) for v in unseen_details], VIDEOS_TABLE)
+        # After videos, so a shape row never exists without its video.
+        append_rows([flatten_video_shape(v, captured_at) for v in unseen_details], VIDEO_SHAPES_TABLE)
         append_rows([flatten_video_snapshot(v, captured_at) for v in details], VIDEO_SNAPSHOTS_TABLE)
 
         elapsed = time.time() - start

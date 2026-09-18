@@ -217,7 +217,11 @@ def discover_channel_candidates(keyword: str, max_results: int = 25) -> list[str
     return [item["snippet"]["channelId"] for item in response.get("items", [])]
 
 
-VIDEO_PARTS = "snippet,statistics,contentDetails,status,liveStreamingDetails"
+VIDEO_PARTS = "snippet,statistics,contentDetails,status,liveStreamingDetails,player"
+# With maxHeight set, the player part reports embedWidth/embedHeight in the
+# video's own aspect ratio, which is how Shorts are told apart (see
+# flatten_video_shape). Parts do not change the cost: still 1 unit per call.
+PLAYER_MAX_HEIGHT = 8192
 
 
 def get_video_details(video_ids: list[str]) -> list[dict]:
@@ -229,6 +233,7 @@ def get_video_details(video_ids: list[str]) -> list[dict]:
         response = youtube.videos().list(
             part=VIDEO_PARTS,
             id=",".join(chunk),
+            maxHeight=PLAYER_MAX_HEIGHT,
         ).execute(num_retries=API_RETRIES)
         details.extend(response.get("items", []))
     return details
@@ -315,6 +320,19 @@ def flatten_video_identity(v: dict, category_names: dict[str, str] = None) -> di
         "default_language": snippet.get("defaultLanguage", ""),
         "thumbnail_url": thumbnail.get("url", ""),
         "made_for_kids": v.get("status", {}).get("madeForKids", ""),
+    }
+
+
+def flatten_video_shape(v: dict, captured_at: str) -> dict:
+    """Player dimensions, written once per video. A Short is vertical or square
+    (embed_height >= embed_width) and at most 3 minutes long; the API has no
+    Shorts flag of its own."""
+    player = v.get("player", {})
+    return {
+        "video_id": v["id"],
+        "embed_width": player.get("embedWidth", ""),
+        "embed_height": player.get("embedHeight", ""),
+        "captured_at": captured_at,
     }
 
 

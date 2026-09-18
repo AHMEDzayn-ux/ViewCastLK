@@ -62,9 +62,9 @@ prediction time.
 ## Target
 
 `log1p(day-7 views)`. The raw target has a mean 16x its median and a maximum
-four orders of magnitude above it; on the log scale skew is -0.09, near
+four orders of magnitude above it; on the log scale skew is -0.13, near
 symmetric. Day 7 is the primary horizon because it has the most labels
-(30,718); §11 checks whether the findings hold at 14, 21 and 30 days.
+(70,466); §13 checks whether the findings hold at 14, 21 and 30 days.
 """)
 
 code(r"""
@@ -505,7 +505,7 @@ print(ds.groupby("title_script").channel_resid.agg(
 md(r"""
 ## 8. Tag mining
 
-Tags are the richest pre-publication text field. 30% of videos have none —
+Tags are the richest pre-publication text field. 29% of videos have none —
 which is itself a signal worth testing before treating it as missing data.
 """)
 
@@ -1145,37 +1145,40 @@ print("are the findings worth putting in the report.")
 md(r"""
 ## 14. Findings
 
-Written against the 17 August build (30,718 day-7 labelled videos, 1,944
-channels). **Re-read these against your own run** — every number moves as
-collection continues, and a conclusion nobody re-checked is a conclusion
-waiting to be wrong.
+Written against the 14 September build (70,466 day-7 labelled videos from 2,251
+channels, published 16 July to 7 September 2026). **Re-read these against your
+own run** — every number moves as collection continues, and a conclusion nobody
+re-checked is a conclusion waiting to be wrong.
 
 ### 1. The variance budget
 
 | grouping | variance explained |
 |---|---|
-| **channel identity** | **64.1%** |
-| subscriber band | 19.8% |
-| category | 7.9% |
-| title script | 3.4% |
+| **channel identity** | **63.5%** |
+| subscriber band | 22.5% |
+| category | 8.8% |
+| title script | 3.7% |
 | duration band | 1.9% |
-| publish hour | 1.8% |
-| day of week / is_short / weekend | ~0.0% |
+| publish hour | 1.7% |
+| day of week / is_short / weekend | ~0.1% |
 
-Shuffling the channel labels still "explains" 6.3% — that is the overfitting
-floor from having 1,944 groups. The genuine channel effect is ~58 points, still
-an order of magnitude above anything else.
+Shuffling the channel labels still "explains" 3.2% — that is the overfitting
+floor from having 2,251 groups. The genuine channel effect is ~60 points, still
+an order of magnitude above anything else, and it holds at every horizon
+(channel 63.5–64.8%, category 8.0–8.8%; §13).
 
 **Publish day-of-week, weekend and is_short explain essentially nothing on
 their own.** That is a real negative result and worth stating in the report.
 
 ### 2. Category inverts under control — the headline
 
-Raw, Entertainment leads (~4,800 median views) and News & Politics sits near
-the bottom (~960). Remove each channel's own mean and **News & Politics becomes
-the strongest category**. The mechanism: a handful of news channels post ~150
-near-identical clips a day, splitting a fixed audience across many videos. Low
-views per clip is a *volume* effect, not an audience-interest effect.
+Raw, Entertainment leads (log-mean around 5,200 views) and News & Politics
+ranks fifth of fourteen (around 1,100). Remove each channel's own mean and
+**News & Politics becomes the strongest category** (+1.78 ± 0.26, on 141 videos
+from channels posting in more than one category), while Entertainment falls from
+first to last. The mechanism: two news channels post over 50 clips a day, one
+around 150, splitting a fixed audience across many videos. Low views per clip is
+a *volume* effect, not an audience-interest effect.
 
 Any category comparison that does not control for channel is measuring channel
 composition. Do not put the raw ranking in the report without this caveat.
@@ -1187,17 +1190,24 @@ single global coefficient would have been misleading:
 
 | effect | range across categories | flips? |
 |---|---|---|
-| shorts vs long-form | −0.34 → +1.10 | **yes** |
-| correlation with duration | −0.26 → +0.20 | **yes** |
+| shorts vs long-form | −0.36 → +0.93 | **yes** |
+| correlation with duration | −0.27 → +0.20 | **yes** |
 | correlation with tag count | −0.15 → +0.16 | **yes** |
-| correlation with title length | −0.13 → +0.07 | **yes** |
-| weekend effect | −0.16 → +0.38 | **yes** |
+| correlation with title length | −0.03 → +0.10 | **yes** |
+| weekend effect | −0.13 → +0.34 | **yes** |
 
-The global shorts effect is ≈ +0.06 — nearly zero. It is not that format does
+The global shorts effect is ≈ +0.05 — nearly zero. It is not that format does
 not matter; it is that it matters in *opposite directions* in different
 categories and is averaging itself away. **Interaction terms are not optional
 here.** A model without category×format and category×duration interactions
 cannot represent what is in this data.
+
+The same holds channel by channel, not only category by category. Among
+channels with at least 30 labelled uploads that post both formats, Shorts clearly
+beat that channel's own long form for 42% and clearly lose for 19%; longer
+long-form videos clearly do better for 41% of channels and worse for 7%
+(`build_channel_guideline_figures.py`, figure G2). Advice that suits the average
+channel is wrong for a large minority of real ones.
 
 ### 4. Self-cannibalisation is real, and it explains the category inversion
 
@@ -1205,47 +1215,55 @@ In §4 the news inversion was explained by a *mechanism* — high-volume channel
 splitting a fixed audience. §9 tests that instead of asserting it.
 
 The posting rhythm is extreme: the median gap between consecutive uploads on
-the same channel is **1.1 hours**, and **48.1% of videos have another upload
+the same channel is **1.6 hours**, and **46.0% of videos have another upload
 from the same channel less than an hour earlier**.
 
 All three cadence measures agree, on within-channel residuals:
 
 | measure | correlation with residual |
 |---|---|
-| hours since previous upload | **+0.103** |
-| hours until *next* upload | **+0.109** |
-| same-channel uploads in previous 24 h | **−0.069** |
+| hours since previous upload | **+0.084** |
+| hours until *next* upload | **+0.091** |
+| same-channel uploads in previous 24 h | **−0.055** |
 
 The middle row is the cleanest test. A video published *later* cannot have
 caused the earlier one's publication, so "this video did worse when the channel
 followed up quickly" is hard to explain as a scheduling artefact.
 
-And the mechanism check lands: News & Politics scores **+0.20** when the
-channel posted nothing else in the previous 24 hours, but **−0.002** among the
-most crowded uploads. The news advantage is real and it is *destroyed by the
+And the mechanism check lands: News & Politics scores **+0.18** when the
+channel posted nothing else in the previous 24 hours, but **0.00** among the
+most crowded uploads. The news advantage is real and it is *removed by the
 channel's own volume*.
 
-**For a creator this is the most actionable finding in the notebook:** spacing
-uploads out is worth more than any title or format tweak measured here.
+**For news channels this is actionable; elsewhere it is small.** Outside News &
+Politics the same comparison moves views by only a few per cent (about 1.03× the
+channel's average with a clear day behind an upload, against 0.95× after ten or
+more; `build_channel_guideline_figures.py`, figure G3), and simply having a
+number in the title (+0.22 within channel) shows a larger association than
+spacing for most categories. Spacing is category-specific advice, not a general
+rule.
 
 ### 5. Timing matters less than folklore claims
 
-Raw hourly spread is 1.66 log units; within channel it falls to **0.82**, so
-roughly half the apparent "best time to post" effect is just which channels
-post when. What survives is coherent: best hours **18:00–20:00 SLT**, worst
-**02:00–04:00**. Real, but modest, and it varies by channel size.
+Raw hourly spread is 1.74 log units; within channel it falls to **0.70**, so
+roughly 60% of the apparent "best time to post" effect is just which channels
+post when. What survives is coherent: best hours **19:00–21:00 SLT**, worst
+**02:00–04:00**. Real, but modest, and it varies by channel: taking each channel
+with at least 30 uploads separately, the most common best band (12:00–18:00) is
+best for only 34% of them, and only 27% show a clear difference between bands
+(`build_channel_guideline_figures.py`, figure G2).
 
 ### 6. What the machine-driven passes add
 
 Predicting the within-channel residual from held-out channels gives, across
-eight splits, **mean R² = +0.001 (sd 0.11, range −0.26 to +0.11)** — three of
+eight splits, **mean R² = −0.029 (sd 0.083, range −0.23 to +0.04)** — four of
 eight splits are worse than predicting the mean.
 
 **That is indistinguishable from zero.** On a channel the model has never seen,
 pre-publication metadata explains essentially none of why one video outperforms
 another from the same channel. An earlier draft of this notebook reported
 +0.072 from a single split and called it a ceiling; repeating the split showed
-that number was noise. Any single-split figure on ~486 test channels is.
+that number was noise. Any single-split figure on ~560 test channels is.
 
 This does not contradict §2 — channel-level signal is strong and stable. It
 says the *within-channel* part is not reachable from this metadata, and that
@@ -1256,20 +1274,26 @@ On the actual target:
 
 | regime | global median | per-channel median | LightGBM |
 |---|---|---|---|
-| **cold start** (unseen channels) | −0.045 | −0.045 | **+0.354** |
-| **warm start** (channels seen) | −0.002 | +0.558 | **+0.692** |
+| **cold start** (unseen channels) | −0.067 | −0.067 | **+0.294** |
+| **warm start** (channels seen) | −0.001 | +0.583 | **+0.709** |
 
 Read this carefully, because it is the project's central result:
 
-- **Cold start**: with no channel history, video features alone reach R² 0.354.
+- **Cold start**: with no channel history, video features alone reach R² 0.294.
   The per-channel median is undefined here, which is why it equals the global
   median — not a bug, an absence.
-- **Warm start**: knowing the channel is worth R² 0.558 on its own. Video
-  features add **+0.134** on top.
+- **Warm start**: knowing the channel is worth R² 0.583 on its own. Video
+  features add **+0.126** on top.
 
 Quote both. Quoting only warm start credits the features with the channel's
 contribution; quoting only cold start hides that the deployed system will
 usually know the channel.
+
+A channel-level check points the same way. Fitted on a channel's own earlier
+uploads, a small model cuts error on its later ones by a median 4.0% against
+simply predicting that channel's average, versus 1.5% for one pooled model, and
+does better than the pooled model for 59% of the 140 channels tested
+(`build_channel_guideline_figures.py`, figure G5).
 
 ### 7. What this means for feature engineering
 
@@ -1283,7 +1307,7 @@ usually know the channel.
   effect showed up.
 - **Do not spend effort on** day-of-week, weekend, definition or made_for_kids
   as standalone features; they explain ~0% and did not survive any segment cut.
-- **`title_upper_ratio`** is the strongest simple title correlate (+0.077) and
+- **`title_upper_ratio`** is the strongest simple title correlate (+0.059) and
   is trivially actionable for a creator.
 - **Add the cadence features** — `gap_prev_h`, `gap_next_h` and
   `same_ch_24h_before` from §9. They are computable before publication (the
@@ -1292,8 +1316,8 @@ usually know the channel.
 
 ### 8. Honest limits
 
-46 days of publication history, so no seasonality is learnable and every
-finding is conditional on July–August 2026. Sri Lanka only. Residual analyses
+52 days of publication history, so no seasonality is learnable and every
+finding is conditional on July–September 2026. Sri Lanka only. Residual analyses
 are restricted to channels with variation on the dimension in question — the
 within-channel category result rests on channels posting in more than one
 category, which may not be typical. Day 7 is the primary horizon; §13 checks
@@ -1325,7 +1349,7 @@ Structure to follow:
    and which should be encoded as *deviation from the channel's own norm*
    rather than as absolute values.
 
-6. **Honest limits.** 46 days of publication history, no seasonality, one
+6. **Honest limits.** 52 days of publication history, no seasonality, one
    country, and residual analysis restricted to channels with variation on the
    dimension in question.
 """)

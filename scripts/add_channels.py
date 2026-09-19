@@ -21,8 +21,8 @@ worth more than the units. Channels uploading slowly enough that 31 days fits
 inside the feed's fifteen entries -- most of them -- cost nothing at all.
 
 Usage:
-    python scripts/add_channels.py --file ../Analysis/channels_to_add.csv --dry-run
-    python scripts/add_channels.py --file ../Analysis/channels_to_add.csv --limit 500
+    python scripts/add_channels.py --file ../Analysis/tools/collection/channels_to_add.csv --dry-run
+    python scripts/add_channels.py --file ../Analysis/tools/collection/channels_to_add.csv --limit 500
 """
 import argparse
 import math

@@ -123,7 +123,7 @@ recording each file's day, row count, byte size and SHA-256. That manifest is
 the only durable record of the checksums — the Actions log is not one — and it
 is what a downloaded copy is checked against.
 
-`Analysis/verify_archives.py` does that check. Point it at a folder of
+`Analysis/tools/dataset/verify_archives.py` does that check. Point it at a folder of
 downloaded archives and it confirms three things: every file's SHA-256 matches
 what was recorded at upload, every file holds the row count the job counted, and
 a video's trajectory can be reconstructed across file boundaries. Where the

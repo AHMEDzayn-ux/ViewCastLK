@@ -17,7 +17,7 @@ import pandas as pd
 df = pd.read_parquet("viewcastlk_training_table.parquet")
 ```
 
-Full statistics: `python Analysis/dataset_stats.py --horizon 7`
+Full statistics: `python Analysis/tools/dataset/dataset_stats.py --horizon 7`
 
 ---
 

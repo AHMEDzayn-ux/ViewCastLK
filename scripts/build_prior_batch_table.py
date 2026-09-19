@@ -16,7 +16,7 @@ Four differences the consumer must know about:
    from checking each channel. Querying all 41,127 channels against the API
    showed only 21.6% actually declare LK, 40.8% declare somewhere else (India
    alone is 20.8%), and 29.9% declare nothing. This script keeps ONLY channels
-   verified as LK, using Analysis/prior_channel_countries.csv.
+   verified as LK, using Analysis/tools/collection/prior_channel_countries.csv.
 
 2. CHANNEL STATS ARE NOT POINT-IN-TIME. subscriber_count is as of their
    snapshot, not as of publication — the leakage our own builder avoids. Rows
@@ -63,7 +63,7 @@ def find_up(name, start=None):
 
 
 SRC = find_up("Reference Datasets")
-COUNTRIES = find_up(os.path.join("Analysis", "prior_channel_countries.csv"))
+COUNTRIES = find_up(os.path.join("Analysis", "tools", "collection", "prior_channel_countries.csv"))
 
 # their days_since_publish is whole-ish days, so +/-0.5 d == our +/-12 h
 TOL_DAYS = 0.5

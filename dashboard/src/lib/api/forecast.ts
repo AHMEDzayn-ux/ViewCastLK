@@ -15,6 +15,7 @@ import {
   createMockChannelStats,
   createMockForecast,
 } from "@/lib/mock/forecast";
+import { supabase } from "@/lib/supabase/client";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_PREDICTION_API_URL?.trim().replace(
   /\/$/,
@@ -232,6 +233,7 @@ function isChannelStats(value: unknown): value is ChannelStats {
 async function requestJson<T>(
   path: string,
   init?: RequestInit,
+  requiresAuthentication = false,
 ): Promise<T> {
   if (!API_BASE_URL) {
     throw new PredictionApiError(
@@ -241,11 +243,29 @@ async function requestJson<T>(
     );
   }
 
+  let authorizationHeader: Record<string, string> = {};
+
+  if (requiresAuthentication) {
+    const { data, error } = await supabase.auth.getSession();
+    const accessToken = data.session?.access_token;
+
+    if (error || !accessToken) {
+      throw new PredictionApiError(
+        "Sign in again to continue forecasting.",
+        401,
+        "session_required",
+      );
+    }
+
+    authorizationHeader = { Authorization: `Bearer ${accessToken}` };
+  }
+
   const response = await fetch(API_BASE_URL + path, {
     ...init,
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",
+      ...authorizationHeader,
       ...init?.headers,
     },
   });
@@ -256,6 +276,14 @@ async function requestJson<T>(
     | null;
 
   if (!response.ok) {
+    if (response.status === 401) {
+      throw new PredictionApiError(
+        "Your session has expired. Sign in again to continue.",
+        401,
+        "invalid_session",
+      );
+    }
+
     const errorPayload = payload as { message?: string; code?: string } | null;
     throw new PredictionApiError(
       errorPayload?.message ??
@@ -289,7 +317,7 @@ export async function generateForecast(
     method: "POST",
     body: JSON.stringify(request),
     signal: options?.signal,
-  });
+  }, true);
 
   if (!isForecastResponse(response)) {
     throw new PredictionApiError(
@@ -337,7 +365,7 @@ export async function lookupChannelStats(
     method: "POST",
     body: JSON.stringify({ channelIdentifier: normalizedIdentifier }),
     signal: options?.signal,
-  });
+  }, true);
 
   if (!isChannelStats(response)) {
     throw new PredictionApiError(

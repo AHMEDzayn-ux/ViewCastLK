@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ForecastForm from "@/components/dashboard/ForecastForm";
@@ -22,7 +23,7 @@ type PageState =
   | { status: "error"; request: ForecastRequest; message: string };
 
 export default function ForecastPage() {
-  const { user } = useAuth();
+  const { isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
   const [state, setState] = useState<PageState>({ status: "idle" });
   const userRef = useRef(user);
 
@@ -71,6 +72,38 @@ export default function ForecastPage() {
   }
 
   const isLoading = state.status === "loading";
+
+  if (isAuthLoading) {
+    return (
+      <main className="page-shell forecast-page">
+        <section className="result-state" aria-busy="true" role="status">
+          <p className="result-state__eyebrow">Secure forecast access</p>
+          <h1>Checking your account</h1>
+          <p>Please wait a moment.</p>
+        </section>
+      </main>
+    );
+  }
+
+  if (!isAuthenticated) {
+    // This client-side gate is UX only. The prediction API validates the
+    // bearer token independently before using quota or running inference.
+    return (
+      <main className="page-shell forecast-page">
+        <section className="result-state">
+          <p className="result-state__eyebrow">Sign in required</p>
+          <h1>Sign in to generate a forecast</h1>
+          <p>
+            Forecast generation and channel lookup are available to verified
+            ViewCastLK accounts.
+          </p>
+          <Link className="primary-button history-state__action" href="/login?next=%2Fforecast">
+            Sign in to forecast
+          </Link>
+        </section>
+      </main>
+    );
+  }
 
   return (
     <main className="page-shell forecast-page">

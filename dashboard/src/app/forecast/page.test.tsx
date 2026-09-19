@@ -41,7 +41,11 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/components/auth/AuthProvider", () => ({
-  useAuth: () => ({ user: mocks.user }),
+  useAuth: () => ({
+    isAuthenticated: true,
+    isLoading: false,
+    user: mocks.user,
+  }),
 }));
 
 vi.mock("@/lib/api/forecast", () => ({

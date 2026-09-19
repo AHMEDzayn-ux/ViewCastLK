@@ -2,11 +2,16 @@ from datetime import datetime, timezone
 import uuid
 from typing import Any
 
-from fastapi import FastAPI, Request, status
+from fastapi import Depends, FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config import ALLOWED_ORIGINS, DASHBOARD_ORIGIN, YOUTUBE_API_KEY
+from app.auth import (
+    AuthenticatedUser,
+    AuthenticationException,
+    require_authenticated_user,
+)
 from app.feature_builder import build_candidate_feature_frame
 from app.model_registry import ModelRegistry
 from app.schemas import (
@@ -36,13 +41,23 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
+    allow_headers=["Accept", "Authorization", "Content-Type"],
 )
 
 # Global model registry singleton
 model_registry = ModelRegistry()
+
+
+@app.exception_handler(AuthenticationException)
+async def authentication_exception_handler(
+    request: Request, exc: AuthenticationException
+):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"message": exc.message, "code": exc.code},
+    )
 
 
 @app.exception_handler(ChannelLookupException)
@@ -102,13 +117,18 @@ async def accuracy_status():
     "/channel-lookup",
     response_model=ChannelStatsResponse,
     responses={
+        401: {"model": ErrorResponse},
         400: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
         502: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
     },
 )
-async def channel_lookup(payload: ChannelLookupRequest):
+async def channel_lookup(
+    payload: ChannelLookupRequest,
+    _authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
+):
     return fetch_channel_stats(payload.channelIdentifier, YOUTUBE_API_KEY)
 
 
@@ -116,13 +136,18 @@ async def channel_lookup(payload: ChannelLookupRequest):
     "/forecast",
     response_model=ForecastResponse,
     responses={
+        401: {"model": ErrorResponse},
         400: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
         502: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
     },
 )
-async def create_forecast(payload: ForecastRequest):
+async def create_forecast(
+    payload: ForecastRequest,
+    _authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
+):
     # 1. Resolve real YouTube channel statistics using reusable service
     channel_stats = fetch_channel_stats(payload.channelIdentifier, YOUTUBE_API_KEY)
 

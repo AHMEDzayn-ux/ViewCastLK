@@ -8,6 +8,7 @@ from app.title_analysis import TitleToneAnalysisInternal, analyze_title_tone
 from app.feature_builder import build_candidate_feature_frame
 
 client = TestClient(app)
+pytestmark = pytest.mark.usefixtures("authenticated_api")
 
 MOCK_CHANNEL_STATS = ChannelStatsResponse(
     subscriberCount=10000,

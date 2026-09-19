@@ -118,9 +118,11 @@ export default function LoginForm() {
       : searchParams.get("verified") === "1"
         ? "Email verified successfully. You can now sign in."
         : null;
-  const destination = searchParams.get("next") === "/history"
-    ? "/history"
-    : "/forecast";
+  const requestedDestination = searchParams.get("next");
+  const destination =
+    requestedDestination === "/history" || requestedDestination === "/forecast"
+      ? requestedDestination
+      : "/forecast";
 
   const handleCaptchaSuccess = useCallback((token: string) => {
     setCaptchaToken(token);

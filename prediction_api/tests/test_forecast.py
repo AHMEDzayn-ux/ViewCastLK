@@ -9,6 +9,7 @@ from app.schemas import ChannelStatsResponse
 from app.youtube import ChannelLookupException
 
 client = TestClient(app)
+pytestmark = pytest.mark.usefixtures("authenticated_api")
 
 MOCK_CHANNEL_STATS = ChannelStatsResponse(
     subscriberCount=125000,

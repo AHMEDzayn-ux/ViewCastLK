@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "").strip()
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_PUBLISHABLE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY", "").strip()
 DASHBOARD_ORIGIN_RAW = os.getenv("DASHBOARD_ORIGIN", "http://localhost:3000").strip()
 ALLOWED_ORIGINS = [
     origin.strip() for origin in DASHBOARD_ORIGIN_RAW.split(",") if origin.strip()

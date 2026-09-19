@@ -120,7 +120,9 @@ export default function LoginForm() {
         : null;
   const requestedDestination = searchParams.get("next");
   const destination =
-    requestedDestination === "/history" || requestedDestination === "/forecast"
+    requestedDestination === "/history" ||
+    requestedDestination === "/forecast" ||
+    requestedDestination === "/account"
       ? requestedDestination
       : "/forecast";
 

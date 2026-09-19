@@ -194,6 +194,18 @@ describe("LoginForm", () => {
     });
   });
 
+  it("returns to the root-relative account route after channel sign in", async () => {
+    mocks.searchParams = new URLSearchParams("next=%2Faccount");
+    render(<LoginForm />);
+    fillLoginForm();
+    completeVerification();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => {
+      expect(mocks.routerReplace).toHaveBeenCalledWith("/account");
+    });
+  });
+
   it("rejects an external post-login destination", async () => {
     mocks.searchParams = new URLSearchParams("next=https%3A%2F%2Fevil.example");
     render(<LoginForm />);

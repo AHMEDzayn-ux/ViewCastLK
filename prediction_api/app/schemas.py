@@ -51,6 +51,19 @@ class ErrorResponse(BaseModel):
     code: str
 
 
+class YouTubeAuthorizationResponse(BaseModel):
+    authorizationUrl: str
+
+
+class YouTubeConnectionResponse(BaseModel):
+    isConnected: bool
+    channelId: Optional[str] = None
+    channelTitle: Optional[str] = None
+    status: Optional[str] = None
+    connectedAt: Optional[str] = None
+    lastRefreshOkAt: Optional[str] = None
+
+
 class ForecastRequest(BaseModel):
     title: str = Field(
         ..., description="Pre-publication video title (non-empty)"

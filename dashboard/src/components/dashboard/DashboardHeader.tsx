@@ -53,7 +53,12 @@ export default function DashboardHeader() {
           <nav className="primary-nav" aria-label="Primary navigation">
             {[
               ...NAVIGATION,
-              ...(isAuthenticated ? [{ href: "/history", label: "History" }] : []),
+              ...(isAuthenticated
+                ? [
+                    { href: "/history", label: "History" },
+                    { href: "/account", label: "Channel" },
+                  ]
+                : []),
             ].map((item) => {
               const isCurrent =
                 pathname === item.href ||

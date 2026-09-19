@@ -9,6 +9,9 @@ Minimal Python server-side backend providing real YouTube channel analytics for 
 - `POST /channel-lookup` — Server-side YouTube channel lookup by `@handle`, channel ID (`UC...`), or YouTube URL
 
 - `POST /forecast` — Day 7, 14, 21, and 30 cumulative-view trajectory
+- `GET /auth/youtube/start` — Begin a user-bound, server-side Google OAuth flow
+- `GET /auth/youtube/callback` — Complete OAuth without returning tokens to the browser
+- `GET /creator/youtube-connection` — Return browser-safe connection status
 
 ## Authentication and history provenance
 
@@ -24,6 +27,14 @@ user's rows, but it does not prove that values in a user's own row originated
 from the prediction API; a user could fabricate values in their own history by
 calling the Data API directly. No service-role writer is introduced solely to
 remove that provenance limitation.
+
+Creator OAuth state, encrypted refresh credentials, and private Analytics data
+use the unexposed `creator` schema through `SUPABASE_AUTH_DB_URL`. Browser roles
+have neither schema usage nor table grants. The server requires
+`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`,
+`GOOGLE_OAUTH_REDIRECT_URI`, and a URL-safe base64 `TOKEN_ENCRYPTION_KEY`
+representing exactly 32 random bytes. These values are server-only secrets or
+configuration and must never use a `NEXT_PUBLIC_` prefix.
 
 Title guidance uses `GEMINI_MODEL` first and then the semicolon-separated
 `GEMINI_FALLBACK_MODELS` list. Retryable quota or availability failures move to
@@ -48,9 +59,10 @@ model.
    ```bash
    cp .env.example .env
    ```
-2. Configure `YOUTUBE_API_KEY`, `SUPABASE_URL`, and
-   `SUPABASE_PUBLISHABLE_KEY` in `.env`. The Supabase publishable key is public
-   project configuration; do not use a service-role or secret key here.
+2. Configure the values documented in `.env.example`. The Supabase publishable
+   key is public project configuration; do not use a service-role or secret key
+   as its replacement. Keep all creator database, Google OAuth, and encryption
+   values server-only.
 3. Install dependencies:
    ```bash
    pip install -r requirements.txt

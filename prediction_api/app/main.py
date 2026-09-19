@@ -2,10 +2,10 @@ from datetime import datetime, timezone
 import uuid
 from typing import Any
 
-from fastapi import Depends, FastAPI, Request, status
+from fastapi import Depends, FastAPI, Query, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from app.config import ALLOWED_ORIGINS, DASHBOARD_ORIGIN, YOUTUBE_API_KEY
 from app.auth import (
     AuthenticatedUser,
@@ -28,9 +28,22 @@ from app.schemas import (
     ModelMetadata,
     TitleGuidance,
     UnavailableRecommendation,
+    YouTubeAuthorizationResponse,
+    YouTubeConnectionResponse,
 )
 from app.title_analysis import analyze_title_tone
 from app.youtube import ChannelLookupException, fetch_channel_stats
+from app.creator_store import CreatorStore, CreatorStoreUnavailable
+from app.youtube_oauth import (
+    YouTubeOAuthException,
+    build_authorization_url,
+    encrypt_refresh_token,
+    exchange_authorization_code,
+    fetch_authenticated_channel,
+    generate_oauth_state,
+    hash_oauth_state,
+    oauth_state_expiry,
+)
 
 app = FastAPI(
     title="ViewCastLK Prediction API",
@@ -48,6 +61,7 @@ app.add_middleware(
 
 # Global model registry singleton
 model_registry = ModelRegistry()
+creator_store = CreatorStore()
 
 
 @app.exception_handler(AuthenticationException)
@@ -67,6 +81,29 @@ async def channel_lookup_exception_handler(
     return JSONResponse(
         status_code=exc.status_code,
         content={"message": exc.message, "code": exc.code},
+    )
+
+
+@app.exception_handler(YouTubeOAuthException)
+async def youtube_oauth_exception_handler(
+    request: Request, exc: YouTubeOAuthException
+):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"message": exc.message, "code": exc.code},
+    )
+
+
+@app.exception_handler(CreatorStoreUnavailable)
+async def creator_store_exception_handler(
+    request: Request, exc: CreatorStoreUnavailable
+):
+    return JSONResponse(
+        status_code=503,
+        content={
+            "message": "YouTube channel connection is temporarily unavailable.",
+            "code": "creator_storage_unavailable",
+        },
     )
 
 
@@ -109,6 +146,97 @@ async def accuracy_status():
         message=(
             "Evaluation results are not available yet. No approved held-out "
             "MAPE, baseline comparison, or accuracy values are published."
+        ),
+    )
+
+
+@app.get(
+    "/auth/youtube/start",
+    response_model=YouTubeAuthorizationResponse,
+    responses={401: {"model": ErrorResponse}, 503: {"model": ErrorResponse}},
+)
+async def start_youtube_oauth(
+    authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
+):
+    state_value = generate_oauth_state()
+    authorization_url = build_authorization_url(state_value)
+    await creator_store.create_oauth_state(
+        state_hash=hash_oauth_state(state_value),
+        user_id=authenticated_user.id,
+        expires_at=oauth_state_expiry(),
+    )
+    # A JSON URL lets the browser authenticate this API request with its bearer
+    # token, then perform a normal top-level redirect without putting that token
+    # into a query string.
+    return YouTubeAuthorizationResponse(authorizationUrl=authorization_url)
+
+
+@app.get(
+    "/auth/youtube/callback",
+    responses={400: {"model": ErrorResponse}, 502: {"model": ErrorResponse}},
+)
+async def youtube_oauth_callback(
+    state_value: str = Query(alias="state", min_length=1, max_length=512),
+    code: str | None = Query(default=None, max_length=4096),
+    error: str | None = Query(default=None, max_length=256),
+):
+    state_record = await creator_store.consume_oauth_state(
+        state_hash=hash_oauth_state(state_value)
+    )
+    if state_record is None:
+        raise YouTubeOAuthException(
+            status_code=400,
+            message="This YouTube connection request is invalid or has expired.",
+            code="invalid_oauth_state",
+        )
+
+    if error or not code:
+        return RedirectResponse(
+            url=f"{DASHBOARD_ORIGIN.rstrip('/')}/account?youtube=not_connected",
+            status_code=303,
+        )
+
+    tokens = await exchange_authorization_code(code)
+    channel = await fetch_authenticated_channel(tokens.access_token)
+    encrypted_refresh_token = encrypt_refresh_token(
+        tokens.refresh_token, user_id=state_record.user_id
+    )
+    await creator_store.upsert_youtube_connection(
+        user_id=state_record.user_id,
+        channel_id=channel.channel_id,
+        channel_title=channel.title,
+        encrypted_refresh_token=encrypted_refresh_token,
+        scopes=tokens.scopes,
+    )
+    return RedirectResponse(
+        url=f"{DASHBOARD_ORIGIN.rstrip('/')}/account?youtube=connected",
+        status_code=303,
+    )
+
+
+@app.get(
+    "/creator/youtube-connection",
+    response_model=YouTubeConnectionResponse,
+    responses={401: {"model": ErrorResponse}, 503: {"model": ErrorResponse}},
+)
+async def youtube_connection_status(
+    authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
+):
+    connection = await creator_store.get_youtube_connection_status(
+        user_id=authenticated_user.id
+    )
+    if connection is None:
+        return YouTubeConnectionResponse(isConnected=False)
+    return YouTubeConnectionResponse(
+        isConnected=True,
+        channelId=connection["channel_id"],
+        channelTitle=connection["channel_title"],
+        status=connection["status"],
+        connectedAt=connection["connected_at"].isoformat(),
+        lastRefreshOkAt=(
+            connection["last_refresh_ok_at"].isoformat()
+            if connection["last_refresh_ok_at"]
+            else None
         ),
     )
 

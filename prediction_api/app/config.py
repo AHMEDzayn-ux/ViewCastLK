@@ -15,6 +15,13 @@ if not ALLOWED_ORIGINS:
 DASHBOARD_ORIGIN = ALLOWED_ORIGINS[0]
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
+SUPABASE_AUTH_DB_URL = os.getenv("SUPABASE_AUTH_DB_URL", "").strip()
+GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+GOOGLE_OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
+GOOGLE_OAUTH_REDIRECT_URI = os.getenv(
+    "GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:8000/auth/youtube/callback"
+).strip()
+TOKEN_ENCRYPTION_KEY = os.getenv("TOKEN_ENCRYPTION_KEY", "").strip()
 
 # Keep the primary model separately for backwards-compatible deployments. The
 # fallback list is ordered for the free-tier quotas currently available to this

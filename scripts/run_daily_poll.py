@@ -68,6 +68,8 @@ from storage import (
     load_roster_mapping,
     load_active_video_ids,
     load_known_ids,
+    load_roster_request_channel_ids,
+    mark_roster_requests_fulfilled,
 )
 from channel_roster import load_handles
 
@@ -294,10 +296,19 @@ def main():
 
     try:
         if REFRESH_CHANNELS:
-            handles = load_handles()
+            file_handles = load_handles()
+            requested_channel_ids = load_roster_request_channel_ids()
+            handles = list(dict.fromkeys(file_handles + requested_channel_ids))
             known_channel_ids = load_known_ids(CHANNELS_TABLE, "channel_id")
-            print(f"Full run: refreshing {len(handles)} tracked channels...")
+            print(
+                f"Full run: refreshing {len(handles)} tracked channels "
+                f"({len(requested_channel_ids)} from creator requests)..."
+            )
             channels = resolve_channels(handles, captured_at, known_channel_ids)
+            resolved_ids = {channel["id"] for channel in channels}
+            mark_roster_requests_fulfilled(
+                set(requested_channel_ids).intersection(resolved_ids)
+            )
             # Discovery reads the stored playlist ids rather than the ones just
             # resolved, so that channels flagged inactive are skipped here too.
             # Resolution still walks the whole roster — it works from handles and

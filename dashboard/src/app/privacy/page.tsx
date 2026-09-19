@@ -45,10 +45,9 @@ export default function PrivacyPage() {
         <section>
           <h2>Revocation and deletion</h2>
           <p>
-            You can revoke access from your Google Account at any time. A
-            ViewCastLK disconnect control will revoke the connection and remove
-            the associated creator-private data when that lifecycle feature is
-            enabled.
+            You can revoke access from your Google Account at any time. The
+            ViewCastLK disconnect control also requests Google revocation and
+            immediately removes the associated creator-private data.
           </p>
         </section>
       </div>

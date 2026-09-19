@@ -12,6 +12,7 @@ Minimal Python server-side backend providing real YouTube channel analytics for 
 - `GET /auth/youtube/start` — Begin a user-bound, server-side Google OAuth flow
 - `GET /auth/youtube/callback` — Complete OAuth without returning tokens to the browser
 - `GET /creator/youtube-connection` — Return browser-safe connection status
+- `DELETE /creator/youtube-connection` — Revoke access and delete creator-private data
 
 ## Authentication and history provenance
 
@@ -35,6 +36,33 @@ have neither schema usage nor table grants. The server requires
 `GOOGLE_OAUTH_REDIRECT_URI`, and a URL-safe base64 `TOKEN_ENCRYPTION_KEY`
 representing exactly 32 random bytes. These values are server-only secrets or
 configuration and must never use a `NEXT_PUBLIC_` prefix.
+
+The optional public collector handoff uses a separate
+`SUPABASE_WAREHOUSE_DB_URL` connection and writes only a public channel ID to
+`roster_requests`. It never copies Auth user IDs, OAuth credentials, private
+Analytics, or adjustment values into the warehouse.
+
+## Creator refresh and model lifecycle
+
+The `.github/workflows/creator-refresh.yml` workflow runs
+`python -m app.creator_refresh_job` weekly and can also be dispatched manually. Each run
+refreshes each eligible Google credential, synchronizes newly mature history,
+and recomputes adjustments for the active model. An `invalid_grant` removes
+that user's creator-private rows; temporary provider or network failures keep
+the rows for retry. Disconnect attempts Google revocation and immediately
+deletes the same private rows even if the provider is temporarily unavailable.
+
+Every newly deployed shared-model artifact must include its exact
+`training_video_ids.txt` and a new artifact/model version. Adjustments are
+version-bound: old-version rows are never applied. Until the weekly job
+recomputes an adjustment for the new version, forecasts safely use the shared
+model result.
+
+The weekly workflow requires `SUPABASE_AUTH_DB_URL`, `SUPABASE_DB_URL`,
+`GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and
+`TOKEN_ENCRYPTION_KEY` as GitHub Actions secrets. Cloud Run uses the equivalent
+Secret Manager bindings documented in its deployment workflow, including the
+separate `SUPABASE_WAREHOUSE_DB_URL` binding.
 
 Title guidance uses `GEMINI_MODEL` first and then the semicolon-separated
 `GEMINI_FALLBACK_MODELS` list. Retryable quota or availability failures move to

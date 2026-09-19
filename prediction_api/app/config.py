@@ -16,6 +16,9 @@ DASHBOARD_ORIGIN = ALLOWED_ORIGINS[0]
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
 SUPABASE_AUTH_DB_URL = os.getenv("SUPABASE_AUTH_DB_URL", "").strip()
+# Separate public warehouse connection. Creator-private Analytics must never be
+# written through this connection; it is used only for the channel roster hook.
+SUPABASE_WAREHOUSE_DB_URL = os.getenv("SUPABASE_WAREHOUSE_DB_URL", "").strip()
 GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
 GOOGLE_OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
 GOOGLE_OAUTH_REDIRECT_URI = os.getenv(

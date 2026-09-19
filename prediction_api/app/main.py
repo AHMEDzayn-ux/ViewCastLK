@@ -31,10 +31,13 @@ from app.schemas import (
     UnavailableRecommendation,
     YouTubeAuthorizationResponse,
     YouTubeConnectionResponse,
+    YouTubeDisconnectResponse,
 )
 from app.title_analysis import analyze_title_tone
 from app.youtube import ChannelLookupException, fetch_channel_stats
 from app.creator_store import CreatorStore, CreatorStoreUnavailable
+from app.creator_lifecycle import disconnect_creator_connection
+from app.public_roster import PublicRosterStore, PublicRosterUnavailable
 from app.youtube_oauth import (
     YouTubeOAuthException,
     build_authorization_url,
@@ -57,13 +60,14 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Accept", "Authorization", "Content-Type"],
 )
 
 # Global model registry singleton
 model_registry = ModelRegistry()
 creator_store = CreatorStore()
+public_roster_store = PublicRosterStore()
 
 
 @app.exception_handler(AuthenticationException)
@@ -211,6 +215,14 @@ async def youtube_oauth_callback(
         scopes=tokens.scopes,
     )
     try:
+        await public_roster_store.request_channel_collection(
+            channel_id=channel.channel_id
+        )
+    except PublicRosterUnavailable:
+        # Creator connection is independent of the public collector. The
+        # weekly refresh retries this idempotent roster handoff.
+        pass
+    try:
         await synchronize_creator_history(
             user_id=state_record.user_id,
             access_token=tokens.access_token,
@@ -255,6 +267,21 @@ async def youtube_connection_status(
             else None
         ),
     )
+
+
+@app.delete(
+    "/creator/youtube-connection",
+    response_model=YouTubeDisconnectResponse,
+    responses={401: {"model": ErrorResponse}, 503: {"model": ErrorResponse}},
+)
+async def disconnect_youtube_connection(
+    authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
+):
+    await disconnect_creator_connection(
+        user_id=authenticated_user.id,
+        store=creator_store,
+    )
+    return YouTubeDisconnectResponse()
 
 
 @app.post(

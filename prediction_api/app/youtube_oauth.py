@@ -17,6 +17,7 @@ YOUTUBE_OAUTH_SCOPES = (
 )
 GOOGLE_AUTHORIZATION_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_REVOCATION_URL = "https://oauth2.googleapis.com/revoke"
 YOUTUBE_CHANNELS_URL = "https://www.googleapis.com/youtube/v3/channels"
 OAUTH_STATE_LIFETIME = timedelta(minutes=10)
 
@@ -29,10 +30,20 @@ class YouTubeOAuthException(Exception):
         self.code = code
 
 
+class GoogleCredentialRevoked(Exception):
+    """The refresh grant is no longer valid and private data must be removed."""
+
+
 @dataclass(frozen=True)
 class GoogleTokenResponse:
     access_token: str
     refresh_token: str
+    scopes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class GoogleRefreshResponse:
+    access_token: str
     scopes: tuple[str, ...]
 
 
@@ -141,11 +152,86 @@ async def exchange_authorization_code(code: str) -> GoogleTokenResponse:
     )
 
 
+async def refresh_access_token(refresh_token: str) -> GoogleRefreshResponse:
+    """Exchange a server-held refresh credential without exposing it to clients."""
+    require_oauth_configuration()
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                GOOGLE_TOKEN_URL,
+                data={
+                    "client_id": config.GOOGLE_OAUTH_CLIENT_ID,
+                    "client_secret": config.GOOGLE_OAUTH_CLIENT_SECRET,
+                    "refresh_token": refresh_token,
+                    "grant_type": "refresh_token",
+                },
+                headers={"Accept": "application/json"},
+            )
+    except httpx.HTTPError as exc:
+        raise _refresh_failed() from exc
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise _refresh_failed() from exc
+
+    if response.status_code != 200:
+        if isinstance(payload, dict) and payload.get("error") == "invalid_grant":
+            raise GoogleCredentialRevoked()
+        raise _refresh_failed()
+
+    access_token = payload.get("access_token") if isinstance(payload, dict) else None
+    scope_value = payload.get("scope", "") if isinstance(payload, dict) else ""
+    scopes = tuple(item for item in str(scope_value).split() if item)
+    if not access_token:
+        raise _refresh_failed()
+    if scopes and not set(YOUTUBE_OAUTH_SCOPES).issubset(scopes):
+        raise GoogleCredentialRevoked()
+    return GoogleRefreshResponse(
+        access_token=str(access_token),
+        scopes=tuple(sorted(scopes or YOUTUBE_OAUTH_SCOPES)),
+    )
+
+
+async def revoke_google_token(refresh_token: str) -> None:
+    """Revoke a Google grant; an already-invalid token is treated idempotently."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                GOOGLE_REVOCATION_URL,
+                data={"token": refresh_token},
+                headers={
+                    "Accept": "application/json",
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+            )
+    except httpx.HTTPError as exc:
+        raise YouTubeOAuthException(
+            status_code=502,
+            message="Google could not confirm revocation.",
+            code="youtube_revocation_failed",
+        ) from exc
+    if response.status_code not in (200, 400):
+        raise YouTubeOAuthException(
+            status_code=502,
+            message="Google could not confirm revocation.",
+            code="youtube_revocation_failed",
+        )
+
+
 def _oauth_exchange_failed() -> YouTubeOAuthException:
     return YouTubeOAuthException(
         status_code=502,
         message="Google could not complete the channel connection. Please try again.",
         code="youtube_oauth_exchange_failed",
+    )
+
+
+def _refresh_failed() -> YouTubeOAuthException:
+    return YouTubeOAuthException(
+        status_code=502,
+        message="Google access could not be refreshed. It will be retried later.",
+        code="youtube_refresh_temporary_failure",
     )
 
 

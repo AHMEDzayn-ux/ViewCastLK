@@ -20,7 +20,7 @@ const STATUS_COPY: Record<string, string> = {
   pending_sync: "Connected. Your private channel history is waiting for its first sync.",
   active: "Connected and ready for personalised forecasts.",
   reauth_required: "Google access needs to be renewed. Reconnect your channel.",
-  error: "The last channel sync did not complete. Reconnect to restore access.",
+  error: "The last channel sync did not complete. We will retry it automatically.",
 };
 
 export default function YouTubeConnectionCard() {
@@ -125,7 +125,7 @@ export default function YouTubeConnectionCard() {
   const connection = state.kind === "loaded" ? state.connection : null;
   const isConnected = connection?.isConnected === true;
   const needsReconnect =
-    connection?.status === "reauth_required" || connection?.status === "error";
+    connection?.status === "reauth_required";
 
   return (
     <section className="connection-card" aria-labelledby="youtube-connection-title">

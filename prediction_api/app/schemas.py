@@ -64,6 +64,10 @@ class YouTubeConnectionResponse(BaseModel):
     lastRefreshOkAt: Optional[str] = None
 
 
+class YouTubeDisconnectResponse(BaseModel):
+    disconnected: Literal[True] = True
+
+
 class ForecastRequest(BaseModel):
     title: str = Field(
         ..., description="Pre-publication video title (non-empty)"

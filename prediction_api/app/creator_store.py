@@ -192,6 +192,56 @@ class CreatorStore:
                     (status, refresh_ok, user_id),
                 )
 
+    async def record_refresh_success(self, *, user_id: str) -> None:
+        await asyncio.to_thread(self._record_refresh_success, user_id=user_id)
+
+    def _record_refresh_success(self, *, user_id: str) -> None:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    update creator.youtube_connections
+                    set last_refresh_ok_at = now()
+                    where user_id = %s
+                    """,
+                    (user_id,),
+                )
+
+    async def list_refreshable_connections(self) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(self._list_refreshable_connections)
+
+    def _list_refreshable_connections(self) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(
+                    """
+                    select user_id, channel_id, encrypted_refresh_token, scopes, status
+                    from creator.youtube_connections
+                    where status in ('active', 'pending_sync', 'error')
+                    order by connected_at
+                    """
+                )
+                return [dict(row) for row in cursor.fetchall()]
+
+    async def delete_creator_data(self, *, user_id: str) -> None:
+        await asyncio.to_thread(self._delete_creator_data, user_id=user_id)
+
+    def _delete_creator_data(self, *, user_id: str) -> None:
+        """Delete one user's private creator rows, never their Auth user."""
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                for table in (
+                    "oauth_states",
+                    "insights",
+                    "adjustments",
+                    "video_history",
+                    "youtube_connections",
+                ):
+                    cursor.execute(
+                        f"delete from creator.{table} where user_id = %s",
+                        (user_id,),
+                    )
+
     async def upsert_video_history(self, *, user_id: str, rows: list[dict[str, Any]]) -> None:
         if not rows:
             return

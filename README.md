@@ -47,6 +47,7 @@ channel_handles.txt         # The tracked roster — one @handle or channel ID p
                             # line, plain text (not in the database). Edit this
                             # to add/remove channels; no code changes needed.
 channel_roster.py           # Loads channel_handles.txt.
+supabase/migrations/*roster_requests.sql  # Server-only creator channel queue.
 fetch_categories.py         # One-time script: YouTube category id -> name.
 discover_more_channels.py   # Occasional script: broad search.list sweep across
                             # category+keyword queries to grow the roster.
@@ -55,6 +56,13 @@ run_daily_poll.py           # THE recurring job, run on a schedule by
 migrate_csv_to_supabase.py  # One-time: load pre-Supabase CSV data into the DB.
 .github/workflows/collect.yml  # Scheduled workflow: 4 runs/day (full + discovery-only).
 ```
+
+The full collector run unions the checked-in roster with every durable
+`roster_requests` channel ID. It uses the existing channel-resolution path,
+marks successfully resolved requests fulfilled, and continues refreshing them
+from the database-backed roster on later runs. The queue stores public channel
+IDs only; private creator Analytics never enter the warehouse or training
+pipeline.
 
 ## Data model: identity vs. snapshot tables
 

@@ -1,4 +1,5 @@
 import base64
+import asyncio
 from datetime import datetime, timezone
 from urllib.parse import parse_qs, urlparse
 from unittest.mock import AsyncMock
@@ -12,10 +13,14 @@ from app.main import app
 import app.main as main_module
 from app.youtube_oauth import (
     GoogleTokenResponse,
+    GoogleCredentialRevoked,
+    GOOGLE_REVOCATION_URL,
     YouTubeChannelIdentity,
     YOUTUBE_OAUTH_SCOPES,
     decrypt_refresh_token,
     encrypt_refresh_token,
+    refresh_access_token,
+    revoke_google_token,
 )
 
 
@@ -89,6 +94,8 @@ def test_callback_encrypts_refresh_token_and_redirects_without_tokens(monkeypatc
     store = AsyncMock()
     store.consume_oauth_state.return_value = OAuthStateRecord(user_id="user-a")
     monkeypatch.setattr(main_module, "creator_store", store)
+    roster_store = AsyncMock()
+    monkeypatch.setattr(main_module, "public_roster_store", roster_store)
     monkeypatch.setattr(
         main_module,
         "exchange_authorization_code",
@@ -127,6 +134,9 @@ def test_callback_encrypts_refresh_token_and_redirects_without_tokens(monkeypatc
     assert decrypt_refresh_token(
         saved["encrypted_refresh_token"], user_id="user-a"
     ) == "test-refresh-token"
+    roster_store.request_channel_collection.assert_awaited_once_with(
+        channel_id="UC-test-channel"
+    )
 
 
 def test_callback_state_is_consumed_before_google_denial(monkeypatch):
@@ -189,3 +199,96 @@ def test_connection_status_returns_only_browser_safe_fields(monkeypatch):
         "lastRefreshOkAt": None,
     }
     assert "must-not-appear" not in response.text
+
+
+class _FakeResponse:
+    def __init__(self, status_code, payload):
+        self.status_code = status_code
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+
+class _FakeAsyncClient:
+    response = _FakeResponse(500, {})
+    posted_data = None
+    posted_url = None
+
+    def __init__(self, **_kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_args):
+        return False
+
+    async def post(self, url, *, data, headers):
+        type(self).posted_url = url
+        type(self).posted_data = data
+        return type(self).response
+
+
+def test_refresh_access_token_uses_server_credential(monkeypatch):
+    _configure_oauth(monkeypatch)
+    monkeypatch.setattr("app.youtube_oauth.httpx.AsyncClient", _FakeAsyncClient)
+    _FakeAsyncClient.response = _FakeResponse(
+        200,
+        {
+            "access_token": "fresh-access",
+            "scope": " ".join(YOUTUBE_OAUTH_SCOPES),
+        },
+    )
+
+    refreshed = asyncio.run(refresh_access_token("server-refresh"))
+
+    assert refreshed.access_token == "fresh-access"
+    assert _FakeAsyncClient.posted_data["grant_type"] == "refresh_token"
+    assert _FakeAsyncClient.posted_data["refresh_token"] == "server-refresh"
+
+
+def test_refresh_invalid_grant_is_distinguished_from_temporary_failure(monkeypatch):
+    _configure_oauth(monkeypatch)
+    monkeypatch.setattr("app.youtube_oauth.httpx.AsyncClient", _FakeAsyncClient)
+    _FakeAsyncClient.response = _FakeResponse(400, {"error": "invalid_grant"})
+
+    try:
+        asyncio.run(refresh_access_token("revoked-refresh"))
+    except GoogleCredentialRevoked:
+        pass
+    else:
+        raise AssertionError("invalid_grant must trigger revoked-credential handling")
+
+
+def test_revoke_posts_token_in_form_body_not_url(monkeypatch):
+    monkeypatch.setattr("app.youtube_oauth.httpx.AsyncClient", _FakeAsyncClient)
+    _FakeAsyncClient.response = _FakeResponse(200, {})
+
+    asyncio.run(revoke_google_token("server-refresh"))
+
+    assert _FakeAsyncClient.posted_url == GOOGLE_REVOCATION_URL
+    assert "server-refresh" not in _FakeAsyncClient.posted_url
+    assert _FakeAsyncClient.posted_data == {"token": "server-refresh"}
+
+
+def test_disconnect_endpoint_is_authenticated_and_idempotent(monkeypatch):
+    unauthenticated = client.delete("/creator/youtube-connection")
+    assert unauthenticated.status_code == 401
+
+    disconnect = AsyncMock()
+    monkeypatch.setattr(main_module, "disconnect_creator_connection", disconnect)
+    app.dependency_overrides[require_authenticated_user] = lambda: AuthenticatedUser(
+        id="user-a"
+    )
+    try:
+        first = client.delete("/creator/youtube-connection")
+        second = client.delete("/creator/youtube-connection")
+    finally:
+        app.dependency_overrides.pop(require_authenticated_user, None)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json() == {"disconnected": True}
+    assert disconnect.await_count == 2
+    disconnect.assert_awaited_with(user_id="user-a", store=main_module.creator_store)

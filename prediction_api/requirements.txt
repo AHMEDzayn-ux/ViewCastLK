@@ -14,3 +14,4 @@ xgboost==3.2.0
 lightgbm==4.7.0
 joblib==1.5.3
 pytest>=8.0.0
+pytest-asyncio>=0.24.0

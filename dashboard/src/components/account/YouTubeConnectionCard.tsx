@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/AuthProvider";
 import {
+  disconnectYouTubeConnection,
   getYouTubeConnection,
   startYouTubeConnection,
   type YouTubeConnectionStatus,
@@ -26,6 +27,8 @@ export default function YouTubeConnectionCard() {
   const { isAuthenticated, isLoading } = useAuth();
   const [state, setState] = useState<ViewState>({ kind: "idle" });
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isLoading || !isAuthenticated) return;
@@ -49,6 +52,7 @@ export default function YouTubeConnectionCard() {
 
   async function connect() {
     setIsConnecting(true);
+    setActionError(null);
     setState((current) =>
       current.kind === "error" ? { kind: "loading" } : current,
     );
@@ -61,6 +65,32 @@ export default function YouTubeConnectionCard() {
         message: "We could not start the secure Google connection. Please try again.",
       });
       setIsConnecting(false);
+    }
+  }
+
+  async function disconnect() {
+    if (!window.confirm("Disconnect this YouTube channel and delete its private creator data?")) {
+      return;
+    }
+    setIsDisconnecting(true);
+    setActionError(null);
+    try {
+      await disconnectYouTubeConnection();
+      setState({
+        kind: "loaded",
+        connection: {
+          isConnected: false,
+          channelId: null,
+          channelTitle: null,
+          status: null,
+          connectedAt: null,
+          lastRefreshOkAt: null,
+        },
+      });
+    } catch {
+      setActionError("We could not disconnect the channel. Please try again.");
+    } finally {
+      setIsDisconnecting(false);
     }
   }
 
@@ -125,6 +155,11 @@ export default function YouTubeConnectionCard() {
             {state.message}
           </p>
         )}
+        {actionError && (
+          <p className="connection-card__error" role="alert">
+            {actionError}
+          </p>
+        )}
       </div>
 
       <div className="connection-card__actions">
@@ -140,6 +175,16 @@ export default function YouTubeConnectionCard() {
               ? "Reconnect channel"
               : "Connect with Google"}
         </button>
+        {isConnected && (
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={isConnecting || isDisconnecting}
+            onClick={disconnect}
+          >
+            {isDisconnecting ? "Disconnecting…" : "Disconnect channel"}
+          </button>
+        )}
         <Link href="/privacy">Review the privacy policy</Link>
       </div>
     </section>

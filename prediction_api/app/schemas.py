@@ -130,6 +130,21 @@ class ForecastEstimate(BaseModel):
     )
 
 
+class PersonalizationAdjustment(BaseModel):
+    horizonDays: Literal[7, 14, 21, 30]
+    format: Literal["all", "short", "long"]
+    factor: float
+    nVideos: int
+
+
+class ForecastPersonalization(BaseModel):
+    applied: bool
+    format: Literal["short", "long"]
+    modelVersion: str
+    sharedEstimates: List[ForecastEstimate]
+    adjustments: List[PersonalizationAdjustment] = Field(default_factory=list)
+
+
 class UnavailableRecommendation(BaseModel):
     type: str = Field(..., description="Recommendation category type")
     reason: str = Field(..., description="Reason recommendation is unavailable")
@@ -174,6 +189,7 @@ class ForecastResponse(BaseModel):
     estimates: List[ForecastEstimate] = Field(
         ..., description="Forecast estimates for horizons 7, 14, 21, 30"
     )
+    personalization: ForecastPersonalization
     channelStats: Optional[ChannelStatsResponse] = Field(
         None, description="Resolved channel statistics"
     )

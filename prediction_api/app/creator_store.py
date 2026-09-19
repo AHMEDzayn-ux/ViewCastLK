@@ -288,3 +288,31 @@ class CreatorStore:
                             for row in rows
                         ],
                     )
+
+    async def get_active_adjustments(
+        self, *, user_id: str, model_version: str
+    ) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(
+            self._get_active_adjustments,
+            user_id=user_id,
+            model_version=model_version,
+        )
+
+    def _get_active_adjustments(
+        self, *, user_id: str, model_version: str
+    ) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(
+                    """
+                    select a.horizon, a.format, a.factor, a.n_videos, a.model_version
+                    from creator.adjustments a
+                    join creator.youtube_connections c on c.user_id = a.user_id
+                    where a.user_id = %s
+                      and a.model_version = %s
+                      and c.status = 'active'
+                    order by a.horizon, a.format
+                    """,
+                    (user_id, model_version),
+                )
+                return [dict(row) for row in cursor.fetchall()]

@@ -163,9 +163,17 @@ export function createMockForecast(request: ForecastRequest): ForecastResponse {
     .toLowerCase()
     .includes("degraded-demo");
 
+  const estimates = makeEstimates(request, random);
   return {
     forecastId: "mock-" + seed.toString(16),
-    estimates: makeEstimates(request, random),
+    estimates,
+    personalization: {
+      applied: false,
+      format: request.durationSeconds <= 60 ? "short" : "long",
+      modelVersion: "development-mock-v1",
+      sharedEstimates: estimates,
+      adjustments: [],
+    },
     recommendations: recommendationResult.recommendations,
     unavailableRecommendations:
       recommendationResult.unavailableRecommendations,

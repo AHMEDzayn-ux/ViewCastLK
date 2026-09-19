@@ -73,6 +73,33 @@ function isForecastResponse(value: unknown): value is ForecastResponse {
     );
   });
 
+  const validPersonalization =
+    candidate.personalization === undefined ||
+    (typeof candidate.personalization.applied === "boolean" &&
+      (candidate.personalization.format === "short" ||
+        candidate.personalization.format === "long") &&
+      typeof candidate.personalization.modelVersion === "string" &&
+      Array.isArray(candidate.personalization.sharedEstimates) &&
+      candidate.personalization.sharedEstimates.length === 4 &&
+      candidate.personalization.sharedEstimates.every(
+        (estimate, index) =>
+          estimate.horizonDays === EXPECTED_HORIZONS[index] &&
+          Number.isFinite(estimate.cumulativeViews) &&
+          estimate.cumulativeViews >= 0,
+      ) &&
+      Array.isArray(candidate.personalization.adjustments) &&
+      candidate.personalization.adjustments.every(
+        (adjustment) =>
+          EXPECTED_HORIZONS.includes(adjustment.horizonDays) &&
+          (adjustment.format === "all" ||
+            adjustment.format === "short" ||
+            adjustment.format === "long") &&
+          Number.isFinite(adjustment.factor) &&
+          adjustment.factor > 0 &&
+          Number.isInteger(adjustment.nVideos) &&
+          adjustment.nVideos >= 0,
+      ));
+
   const validRecommendations =
     Array.isArray(candidate.recommendations) &&
     candidate.recommendations.every((recommendation) => {
@@ -134,6 +161,7 @@ function isForecastResponse(value: unknown): value is ForecastResponse {
   return (
     typeof candidate.forecastId === "string" &&
     validEstimates &&
+    validPersonalization &&
     validRecommendations &&
     validUnavailableRecommendations &&
     validRecommendationCoverage &&

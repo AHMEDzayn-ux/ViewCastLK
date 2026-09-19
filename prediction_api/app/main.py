@@ -22,6 +22,7 @@ from app.schemas import (
     DataCompletenessIssue,
     ErrorResponse,
     ForecastEstimate,
+    ForecastPersonalization,
     ForecastRequest,
     ForecastResponse,
     HealthResponse,
@@ -44,7 +45,7 @@ from app.youtube_oauth import (
     hash_oauth_state,
     oauth_state_expiry,
 )
-from app.personalization import synchronize_creator_history
+from app.personalization import apply_forecast_adjustments, synchronize_creator_history
 
 app = FastAPI(
     title="ViewCastLK Prediction API",
@@ -317,12 +318,12 @@ async def create_forecast(
 
     horizons = (7, 14, 21, 30)
     raw_predictions: dict[int, float] = {}
-    estimates: list[ForecastEstimate] = []
+    shared_estimates: list[ForecastEstimate] = []
 
     for position, horizon in enumerate(horizons):
         raw_val = float(trajectory[0, position])
         raw_predictions[horizon] = raw_val
-        estimates.append(
+        shared_estimates.append(
             ForecastEstimate(
                 horizonDays=horizon,
                 cumulativeViews=max(0, int(round(raw_val))),
@@ -349,6 +350,31 @@ async def create_forecast(
         status="experimental",
         trajectoryMonotonic=is_monotonic,
     )
+
+    shared_rounded = {
+        estimate.horizonDays: estimate.cumulativeViews for estimate in shared_estimates
+    }
+    adjustment_rows: list[dict[str, Any]] = []
+    try:
+        adjustment_rows = await creator_store.get_active_adjustments(
+            user_id=_authenticated_user.id,
+            model_version=artifact_ver,
+        )
+    except Exception:
+        # Personalization is optional. A creator-store outage must not prevent
+        # the authenticated user from receiving the unchanged shared forecast.
+        adjustment_rows = []
+    requested_format = "short" if payload.durationSeconds <= 60 else "long"
+    displayed_predictions, personalization_payload = apply_forecast_adjustments(
+        shared_predictions=shared_rounded,
+        adjustment_rows=adjustment_rows,
+        requested_format=requested_format,
+        model_version=artifact_ver,
+    )
+    estimates = [
+        ForecastEstimate(horizonDays=horizon, cumulativeViews=displayed_predictions[horizon])
+        for horizon in horizons
+    ]
 
     unavailable_recs = [
         UnavailableRecommendation(
@@ -393,6 +419,7 @@ async def create_forecast(
     return ForecastResponse(
         forecastId=forecast_id,
         estimates=estimates,
+        personalization=ForecastPersonalization(**personalization_payload),
         channelStats=channel_stats,
         recommendations=[],
         unavailableRecommendations=unavailable_recs,

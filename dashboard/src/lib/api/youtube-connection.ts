@@ -24,7 +24,10 @@ export class YouTubeConnectionError extends Error {
   }
 }
 
-async function authenticatedGet<T>(path: string): Promise<T> {
+async function authenticatedRequest<T>(
+  path: string,
+  method: "GET" | "DELETE" = "GET",
+): Promise<T> {
   if (!API_BASE_URL) {
     throw new YouTubeConnectionError(
       "YouTube channel connection is not configured in this environment.",
@@ -38,7 +41,7 @@ async function authenticatedGet<T>(path: string): Promise<T> {
   }
 
   const response = await fetch(API_BASE_URL + path, {
-    method: "GET",
+    method,
     headers: {
       Accept: "application/json",
       Authorization: `Bearer ${accessToken}`,
@@ -60,13 +63,13 @@ async function authenticatedGet<T>(path: string): Promise<T> {
 }
 
 export async function getYouTubeConnection(): Promise<YouTubeConnectionStatus> {
-  return authenticatedGet<YouTubeConnectionStatus>(
+  return authenticatedRequest<YouTubeConnectionStatus>(
     "/creator/youtube-connection",
   );
 }
 
 export async function startYouTubeConnection(): Promise<string> {
-  const response = await authenticatedGet<{ authorizationUrl: string }>(
+  const response = await authenticatedRequest<{ authorizationUrl: string }>(
     "/auth/youtube/start",
   );
   const authorizationUrl = new URL(response.authorizationUrl);
@@ -80,4 +83,11 @@ export async function startYouTubeConnection(): Promise<string> {
     );
   }
   return authorizationUrl.toString();
+}
+
+export async function disconnectYouTubeConnection(): Promise<void> {
+  await authenticatedRequest<{ disconnected: boolean }>(
+    "/creator/youtube-connection",
+    "DELETE",
+  );
 }

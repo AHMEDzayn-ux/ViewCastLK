@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   },
   getConnection: vi.fn(),
   startConnection: vi.fn(),
+  disconnectConnection: vi.fn(),
 }));
 
 vi.mock("@/components/auth/AuthProvider", () => ({
@@ -21,6 +22,7 @@ vi.mock("@/components/auth/AuthProvider", () => ({
 vi.mock("@/lib/api/youtube-connection", () => ({
   getYouTubeConnection: mocks.getConnection,
   startYouTubeConnection: mocks.startConnection,
+  disconnectYouTubeConnection: mocks.disconnectConnection,
 }));
 
 vi.mock("next/link", () => ({
@@ -95,6 +97,54 @@ describe("YouTubeConnectionCard", () => {
       (screen.getByRole("button", { name: "Opening Google…" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+  });
+
+  it("confirms and disconnects the connected channel", async () => {
+    mocks.getConnection.mockResolvedValue({
+      isConnected: true,
+      channelId: "UC-safe-channel",
+      channelTitle: "Creator channel",
+      status: "active",
+      connectedAt: "2026-09-20T00:00:00Z",
+      lastRefreshOkAt: "2026-09-20T01:00:00Z",
+    });
+    mocks.disconnectConnection.mockResolvedValue(undefined);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<YouTubeConnectionCard />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Disconnect channel" }),
+    );
+
+    expect(mocks.disconnectConnection).toHaveBeenCalledTimes(1);
+    expect(
+      await screen.findByRole("button", { name: "Connect with Google" }),
+    ).toBeTruthy();
+  });
+
+  it("keeps the connection visible when disconnect fails", async () => {
+    mocks.getConnection.mockResolvedValue({
+      isConnected: true,
+      channelId: "UC-safe-channel",
+      channelTitle: "Creator channel",
+      status: "active",
+      connectedAt: "2026-09-20T00:00:00Z",
+      lastRefreshOkAt: "2026-09-20T01:00:00Z",
+    });
+    mocks.disconnectConnection.mockRejectedValue(new Error("private provider detail"));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<YouTubeConnectionCard />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Disconnect channel" }),
+    );
+
+    expect(
+      await screen.findByText("We could not disconnect the channel. Please try again."),
+    ).toBeTruthy();
+    expect(screen.getByText("Creator channel")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Disconnect channel" })).toBeTruthy();
+    expect(document.body.textContent).not.toContain("private provider detail");
   });
 
   it("shows a safe retry message when connection start fails", async () => {

@@ -15,7 +15,11 @@ from app.creator_analytics import (
     cumulative_horizons,
     fetch_daily_analytics,
 )
-from app.personalization import compute_adjustments, load_current_training_video_ids
+from app.personalization import (
+    apply_forecast_adjustments,
+    compute_adjustments,
+    load_current_training_video_ids,
+)
 from app.youtube_oauth import YouTubeChannelIdentity
 
 
@@ -190,6 +194,117 @@ def test_no_usable_rows_produces_neutral_all_format_factor():
 
     assert all(row["format"] == "all" for row in adjustments)
     assert all(row["factor"] == 1.0 and row["n_videos"] == 0 for row in adjustments)
+
+
+def test_unconnected_or_stale_adjustment_keeps_shared_forecast():
+    shared = {7: 100, 14: 200, 21: 300, 30: 400}
+    displayed, metadata = apply_forecast_adjustments(
+        shared_predictions=shared,
+        adjustment_rows=[
+            {
+                "horizon": 7,
+                "format": "all",
+                "factor": 2.0,
+                "n_videos": 10,
+                "model_version": "old-model",
+            }
+        ],
+        requested_format="long",
+        model_version="current-model",
+    )
+
+    assert displayed == shared
+    assert metadata["applied"] is False
+    assert metadata["adjustments"] == []
+
+
+def test_format_adjustment_wins_then_falls_back_to_all():
+    shared = {7: 100, 14: 200, 21: 300, 30: 400}
+    rows = [
+        {
+            "horizon": horizon,
+            "format": "all",
+            "factor": 1.5,
+            "n_videos": 8,
+            "model_version": "model-v1",
+        }
+        for horizon in (7, 14, 21, 30)
+    ]
+    rows.append(
+        {
+            "horizon": 7,
+            "format": "short",
+            "factor": 2.0,
+            "n_videos": 6,
+            "model_version": "model-v1",
+        }
+    )
+
+    short, short_metadata = apply_forecast_adjustments(
+        shared_predictions=shared,
+        adjustment_rows=rows,
+        requested_format="short",
+        model_version="model-v1",
+    )
+    long, _ = apply_forecast_adjustments(
+        shared_predictions=shared,
+        adjustment_rows=rows,
+        requested_format="long",
+        model_version="model-v1",
+    )
+
+    assert short[7] == 200
+    assert short[14] == 300
+    assert long[7] == 150
+    assert short_metadata["applied"] is True
+    assert short_metadata["sharedEstimates"][0]["cumulativeViews"] == 100
+
+
+def test_long_adjustment_wins_for_long_form_forecast():
+    shared = {7: 100, 14: 200, 21: 300, 30: 400}
+    rows = []
+    for horizon in (7, 14, 21, 30):
+        rows.extend(
+            [
+                {
+                    "horizon": horizon,
+                    "format": "all",
+                    "factor": 1.25,
+                    "n_videos": 9,
+                    "model_version": "model-v1",
+                },
+                {
+                    "horizon": horizon,
+                    "format": "long",
+                    "factor": 1.5,
+                    "n_videos": 7,
+                    "model_version": "model-v1",
+                },
+            ]
+        )
+
+    displayed, metadata = apply_forecast_adjustments(
+        shared_predictions=shared,
+        adjustment_rows=rows,
+        requested_format="long",
+        model_version="model-v1",
+    )
+
+    assert displayed == {7: 150, 14: 300, 21: 450, 30: 600}
+    assert all(row["format"] == "long" for row in metadata["adjustments"])
+
+
+def test_connected_creator_without_adjustments_receives_shared_forecast():
+    shared = {7: 100, 14: 200, 21: 300, 30: 400}
+    displayed, metadata = apply_forecast_adjustments(
+        shared_predictions=shared,
+        adjustment_rows=[],
+        requested_format="short",
+        model_version="model-v1",
+    )
+
+    assert displayed == shared
+    assert metadata["applied"] is False
 
 
 def test_current_training_id_artifact_is_unique_and_nonempty():

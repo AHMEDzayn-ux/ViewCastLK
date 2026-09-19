@@ -86,6 +86,58 @@ def compute_adjustments(
     return output
 
 
+def apply_forecast_adjustments(
+    *,
+    shared_predictions: dict[int, int],
+    adjustment_rows: list[dict[str, Any]],
+    requested_format: str,
+    model_version: str,
+) -> tuple[dict[int, int], dict[str, Any]]:
+    matching = [
+        row
+        for row in adjustment_rows
+        if row.get("model_version") == model_version
+        and row.get("horizon") in (7, 14, 21, 30)
+        and row.get("format") in ("all", "short", "long")
+        and float(row.get("factor", 0)) > 0
+    ]
+    personalized: dict[int, int] = {}
+    used: list[dict[str, Any]] = []
+    for horizon in (7, 14, 21, 30):
+        candidates = [row for row in matching if row["horizon"] == horizon]
+        selected = next(
+            (row for row in candidates if row["format"] == requested_format),
+            None,
+        ) or next((row for row in candidates if row["format"] == "all"), None)
+        factor = float(selected["factor"]) if selected else 1.0
+        personalized[horizon] = max(
+            0, int(round(float(shared_predictions[horizon]) * factor))
+        )
+        if selected:
+            used.append(
+                {
+                    "horizonDays": horizon,
+                    "format": selected["format"],
+                    "factor": factor,
+                    "nVideos": int(selected["n_videos"]),
+                }
+            )
+
+    applied = any(row["nVideos"] > 0 for row in used)
+    if not applied:
+        personalized = dict(shared_predictions)
+    return personalized, {
+        "applied": applied,
+        "format": requested_format,
+        "modelVersion": model_version,
+        "sharedEstimates": [
+            {"horizonDays": horizon, "cumulativeViews": shared_predictions[horizon]}
+            for horizon in (7, 14, 21, 30)
+        ],
+        "adjustments": used if applied else [],
+    }
+
+
 def _historical_feature_frame(
     *, video: CreatorVideo, position: int, channel: YouTubeChannelIdentity
 ):

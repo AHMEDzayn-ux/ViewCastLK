@@ -40,6 +40,11 @@ class GoogleTokenResponse:
 class YouTubeChannelIdentity:
     channel_id: str
     title: str | None
+    uploads_playlist_id: str | None = None
+    published_at: datetime | None = None
+    subscriber_count: int | None = None
+    view_count: int | None = None
+    video_count: int | None = None
 
 
 def require_oauth_configuration() -> None:
@@ -149,7 +154,10 @@ async def fetch_authenticated_channel(access_token: str) -> YouTubeChannelIdenti
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(
                 YOUTUBE_CHANNELS_URL,
-                params={"part": "id,snippet", "mine": "true"},
+                params={
+                    "part": "id,snippet,contentDetails,statistics",
+                    "mine": "true",
+                },
                 headers={
                     "Authorization": f"Bearer {access_token}",
                     "Accept": "application/json",
@@ -165,7 +173,18 @@ async def fetch_authenticated_channel(access_token: str) -> YouTubeChannelIdenti
         items = payload.get("items", [])
         first = items[0]
         channel_id = first["id"]
-        title = first.get("snippet", {}).get("title")
+        snippet = first.get("snippet", {})
+        title = snippet.get("title")
+        uploads_playlist_id = first.get("contentDetails", {}).get(
+            "relatedPlaylists", {}
+        ).get("uploads")
+        published_raw = snippet.get("publishedAt")
+        published_at = (
+            datetime.fromisoformat(published_raw.replace("Z", "+00:00"))
+            if isinstance(published_raw, str)
+            else None
+        )
+        statistics = first.get("statistics", {})
     except (ValueError, KeyError, IndexError, TypeError) as exc:
         raise _channel_lookup_failed() from exc
 
@@ -174,7 +193,21 @@ async def fetch_authenticated_channel(access_token: str) -> YouTubeChannelIdenti
     return YouTubeChannelIdentity(
         channel_id=channel_id,
         title=title if isinstance(title, str) and title else None,
+        uploads_playlist_id=(
+            uploads_playlist_id if isinstance(uploads_playlist_id, str) else None
+        ),
+        published_at=published_at,
+        subscriber_count=_optional_int(statistics.get("subscriberCount")),
+        view_count=_optional_int(statistics.get("viewCount")),
+        video_count=_optional_int(statistics.get("videoCount")),
     )
+
+
+def _optional_int(value) -> int | None:
+    try:
+        return int(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
 
 
 def _channel_lookup_failed() -> YouTubeOAuthException:

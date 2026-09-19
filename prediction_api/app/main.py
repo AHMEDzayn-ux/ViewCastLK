@@ -44,6 +44,7 @@ from app.youtube_oauth import (
     hash_oauth_state,
     oauth_state_expiry,
 )
+from app.personalization import synchronize_creator_history
 
 app = FastAPI(
     title="ViewCastLK Prediction API",
@@ -208,6 +209,20 @@ async def youtube_oauth_callback(
         encrypted_refresh_token=encrypted_refresh_token,
         scopes=tokens.scopes,
     )
+    try:
+        await synchronize_creator_history(
+            user_id=state_record.user_id,
+            access_token=tokens.access_token,
+            channel=channel,
+            store=creator_store,
+            model_registry=model_registry,
+        )
+    except Exception:
+        # Connection remains valid even when the initial history sync fails;
+        # the scheduled retry path can recover without repeating OAuth.
+        await creator_store.set_youtube_connection_status(
+            user_id=state_record.user_id, status="error"
+        )
     return RedirectResponse(
         url=f"{DASHBOARD_ORIGIN.rstrip('/')}/account?youtube=connected",
         status_code=303,

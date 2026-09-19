@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 
 import psycopg2
-from psycopg2.extras import RealDictCursor
+from psycopg2.extras import RealDictCursor, execute_values
 
 from app.config import SUPABASE_AUTH_DB_URL
 
@@ -147,3 +147,144 @@ class CreatorStore:
                 )
                 row = cursor.fetchone()
         return dict(row) if row else None
+
+    async def get_youtube_connection_secret(self, *, user_id: str) -> dict[str, Any] | None:
+        return await asyncio.to_thread(
+            self._get_youtube_connection_secret, user_id=user_id
+        )
+
+    def _get_youtube_connection_secret(self, *, user_id: str) -> dict[str, Any] | None:
+        with self._connect() as connection:
+            with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(
+                    """
+                    select user_id, channel_id, encrypted_refresh_token, scopes, status
+                    from creator.youtube_connections
+                    where user_id = %s
+                    """,
+                    (user_id,),
+                )
+                row = cursor.fetchone()
+        return dict(row) if row else None
+
+    async def set_youtube_connection_status(
+        self, *, user_id: str, status: str, refresh_ok: bool = False
+    ) -> None:
+        await asyncio.to_thread(
+            self._set_youtube_connection_status,
+            user_id=user_id,
+            status=status,
+            refresh_ok=refresh_ok,
+        )
+
+    def _set_youtube_connection_status(
+        self, *, user_id: str, status: str, refresh_ok: bool
+    ) -> None:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    update creator.youtube_connections
+                    set status = %s,
+                        last_refresh_ok_at = case when %s then now() else last_refresh_ok_at end
+                    where user_id = %s
+                    """,
+                    (status, refresh_ok, user_id),
+                )
+
+    async def upsert_video_history(self, *, user_id: str, rows: list[dict[str, Any]]) -> None:
+        if not rows:
+            return
+        await asyncio.to_thread(self._upsert_video_history, user_id=user_id, rows=rows)
+
+    def _upsert_video_history(self, *, user_id: str, rows: list[dict[str, Any]]) -> None:
+        values = [
+            (
+                user_id,
+                row["video_id"],
+                row.get("title"),
+                row.get("category"),
+                row.get("duration_seconds"),
+                row["published_at"],
+                row["is_short"],
+                row.get("d7"),
+                row.get("d14"),
+                row.get("d21"),
+                row.get("d30"),
+                row.get("pred7"),
+                row.get("pred14"),
+                row.get("pred21"),
+                row.get("pred30"),
+                row.get("model_version"),
+            )
+            for row in rows
+        ]
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                execute_values(
+                    cursor,
+                    """
+                    insert into creator.video_history (
+                      user_id, video_id, title, category, duration_seconds,
+                      published_at, is_short, d7, d14, d21, d30,
+                      pred7, pred14, pred21, pred30, model_version
+                    ) values %s
+                    on conflict (user_id, video_id) do update set
+                      title = excluded.title,
+                      category = excluded.category,
+                      duration_seconds = excluded.duration_seconds,
+                      published_at = excluded.published_at,
+                      is_short = excluded.is_short,
+                      d7 = excluded.d7,
+                      d14 = excluded.d14,
+                      d21 = excluded.d21,
+                      d30 = excluded.d30,
+                      pred7 = excluded.pred7,
+                      pred14 = excluded.pred14,
+                      pred21 = excluded.pred21,
+                      pred30 = excluded.pred30,
+                      model_version = excluded.model_version,
+                      updated_at = now()
+                    """,
+                    values,
+                )
+
+    async def replace_adjustments(
+        self, *, user_id: str, model_version: str, rows: list[dict[str, Any]]
+    ) -> None:
+        await asyncio.to_thread(
+            self._replace_adjustments,
+            user_id=user_id,
+            model_version=model_version,
+            rows=rows,
+        )
+
+    def _replace_adjustments(
+        self, *, user_id: str, model_version: str, rows: list[dict[str, Any]]
+    ) -> None:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "delete from creator.adjustments where user_id = %s and model_version = %s",
+                    (user_id, model_version),
+                )
+                if rows:
+                    execute_values(
+                        cursor,
+                        """
+                        insert into creator.adjustments (
+                          user_id, horizon, format, factor, n_videos, model_version
+                        ) values %s
+                        """,
+                        [
+                            (
+                                user_id,
+                                row["horizon"],
+                                row["format"],
+                                row["factor"],
+                                row["n_videos"],
+                                model_version,
+                            )
+                            for row in rows
+                        ],
+                    )

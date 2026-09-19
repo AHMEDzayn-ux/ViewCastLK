@@ -14,6 +14,21 @@ def test_artifact_exists():
     assert (DEFAULT_ARTIFACT_DIR / "sample_input.csv").is_file()
 
 
+def test_training_video_ids_artifact_matches_manifest():
+    import hashlib
+
+    manifest = json.loads(
+        (DEFAULT_ARTIFACT_DIR / "manifest.json").read_text(encoding="utf-8")
+    )
+    record = manifest["training_video_ids"]
+    path = DEFAULT_ARTIFACT_DIR / record["path"]
+    identifiers = path.read_text(encoding="utf-8").splitlines()
+
+    assert len(identifiers) == record["count"] == 40851
+    assert len(identifiers) == len(set(identifiers))
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == record["sha256"]
+
+
 def test_model_checksum_matches_manifest():
     registry = ModelRegistry()
     expected = registry.get_manifest()["model"]["sha256"]

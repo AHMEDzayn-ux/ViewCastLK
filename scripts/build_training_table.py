@@ -1,5 +1,9 @@
 """Build the ViewCastLK model-training table from the Supabase warehouse.
 
+SECURITY BOUNDARY: shared-model training reads only the public collection
+warehouse. Account-scoped creator history, adjustments, insights, and other
+private creator data must never be added as a source for this pipeline.
+
 Produces ONE ROW PER VIDEO containing only information that would have been
 available BEFORE that video was published, plus the day-7/14/21/30 view
 targets. Feature engineering and modelling happen downstream of this file.

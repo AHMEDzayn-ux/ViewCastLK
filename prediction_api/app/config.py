@@ -22,6 +22,12 @@ GOOGLE_OAUTH_REDIRECT_URI = os.getenv(
     "GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:8000/auth/youtube/callback"
 ).strip()
 TOKEN_ENCRYPTION_KEY = os.getenv("TOKEN_ENCRYPTION_KEY", "").strip()
+CREATOR_HISTORY_VIDEO_LIMIT = max(
+    1, int(os.getenv("CREATOR_HISTORY_VIDEO_LIMIT", "200"))
+)
+YOUTUBE_ANALYTICS_BATCH_SIZE = max(
+    1, min(10, int(os.getenv("YOUTUBE_ANALYTICS_BATCH_SIZE", "10")))
+)
 
 # Keep the primary model separately for backwards-compatible deployments. The
 # fallback list is ordered for the free-tier quotas currently available to this

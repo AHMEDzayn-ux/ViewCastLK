@@ -1,28 +1,58 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import ForecastForm from "@/components/dashboard/ForecastForm";
 import ForecastResults from "@/components/dashboard/ForecastResults";
 import ErrorState from "@/components/dashboard/ErrorState";
 import LoadingState from "@/components/dashboard/LoadingState";
 import { generateForecast } from "@/lib/api/forecast";
+import { saveForecastHistory } from "@/lib/history/forecast-history";
 import type { ForecastRequest, ForecastResponse } from "@/types/forecast";
 
 type PageState =
   | { status: "idle" }
   | { status: "loading"; request: ForecastRequest }
-  | { status: "success"; request: ForecastRequest; response: ForecastResponse }
+  | {
+      status: "success";
+      request: ForecastRequest;
+      response: ForecastResponse;
+      historySaveNotice?: string;
+    }
   | { status: "error"; request: ForecastRequest; message: string };
 
 export default function ForecastPage() {
+  const { user } = useAuth();
   const [state, setState] = useState<PageState>({ status: "idle" });
+  const userRef = useRef(user);
+
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
 
   async function runForecast(request: ForecastRequest) {
     setState({ status: "loading", request });
 
     try {
       const response = await generateForecast(request);
-      setState({ status: "success", request, response });
+      let historySaveNotice: string | undefined;
+      const authenticatedUser = userRef.current;
+
+      if (authenticatedUser) {
+        try {
+          await saveForecastHistory(authenticatedUser.id, request, response);
+        } catch {
+          historySaveNotice =
+            "Forecast generated, but it could not be saved to your history.";
+        }
+      }
+
+      setState({
+        status: "success",
+        request,
+        response,
+        historySaveNotice,
+      });
     } catch (error) {
       const message =
         error instanceof Error
@@ -92,6 +122,7 @@ export default function ForecastPage() {
             <ForecastResults
               request={state.request}
               response={state.response}
+              historySaveNotice={state.historySaveNotice}
               onChangeInputs={focusForm}
             />
           )}

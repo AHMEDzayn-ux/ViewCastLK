@@ -24,6 +24,7 @@ const mocks = vi.hoisted(() => ({
   subscriptionUnsubscribe: vi.fn(),
   turnstileReset: vi.fn(),
   updateUser: vi.fn(),
+  searchParams: new URLSearchParams(),
 }));
 
 vi.mock("@/lib/auth/turnstile-config", () => ({
@@ -52,7 +53,7 @@ vi.mock("@/lib/supabase/client", () => ({
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.routerReplace }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => mocks.searchParams,
 }));
 
 vi.mock("next/link", () => ({
@@ -121,6 +122,7 @@ function fillForgotPasswordForm() {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.authCallback = undefined;
+  mocks.searchParams = new URLSearchParams();
   mocks.resetPasswordForEmail.mockResolvedValue({ data: {}, error: null });
   mocks.signInWithPassword.mockResolvedValue({
     data: { session: { user: { id: "user-a" } } },
@@ -178,6 +180,30 @@ describe("LoginForm", () => {
       expect(mocks.routerReplace).toHaveBeenCalledWith("/forecast");
     });
     expect(mocks.turnstileReset).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns only to the allowlisted history route after sign in", async () => {
+    mocks.searchParams = new URLSearchParams("next=%2Fhistory");
+    render(<LoginForm />);
+    fillLoginForm();
+    completeVerification();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => {
+      expect(mocks.routerReplace).toHaveBeenCalledWith("/history");
+    });
+  });
+
+  it("rejects an external post-login destination", async () => {
+    mocks.searchParams = new URLSearchParams("next=https%3A%2F%2Fevil.example");
+    render(<LoginForm />);
+    fillLoginForm();
+    completeVerification();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    await waitFor(() => {
+      expect(mocks.routerReplace).toHaveBeenCalledWith("/forecast");
+    });
   });
 
   it("shows a safe credential error without exposing the provider message", async () => {

@@ -51,7 +51,10 @@ export default function DashboardHeader() {
 
         <div className="site-header__actions">
           <nav className="primary-nav" aria-label="Primary navigation">
-            {NAVIGATION.map((item) => {
+            {[
+              ...NAVIGATION,
+              ...(isAuthenticated ? [{ href: "/history", label: "History" }] : []),
+            ].map((item) => {
               const isCurrent =
                 pathname === item.href ||
                 (item.href === "/methodology" && pathname === "/about");

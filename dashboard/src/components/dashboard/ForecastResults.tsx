@@ -8,12 +8,14 @@ interface ForecastResultsProps {
   response: ForecastResponse;
   request: ForecastRequest;
   onChangeInputs: () => void;
+  historySaveNotice?: string;
 }
 
 export default function ForecastResults({
   response,
   request,
   onChangeInputs,
+  historySaveNotice,
 }: ForecastResultsProps) {
   const generatedAt = new Date(response.model.generatedAt).toLocaleString(
     "en-LK",
@@ -51,6 +53,11 @@ export default function ForecastResults({
       </header>
 
       <DegradedNotice completeness={response.completeness} />
+      {historySaveNotice && (
+        <div className="history-save-notice" role="status">
+          {historySaveNotice}
+        </div>
+      )}
       <HorizonCards estimates={response.estimates} />
       <ForecastChart estimates={response.estimates} />
       <RecommendationCards

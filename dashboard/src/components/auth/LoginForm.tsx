@@ -118,6 +118,9 @@ export default function LoginForm() {
       : searchParams.get("verified") === "1"
         ? "Email verified successfully. You can now sign in."
         : null;
+  const destination = searchParams.get("next") === "/history"
+    ? "/history"
+    : "/forecast";
 
   const handleCaptchaSuccess = useCallback((token: string) => {
     setCaptchaToken(token);
@@ -189,7 +192,7 @@ export default function LoginForm() {
         return;
       }
 
-      router.replace("/forecast");
+      router.replace(destination);
     } catch (error) {
       setSubmission({ status: "error", message: safeLoginErrorMessage(error) });
     } finally {

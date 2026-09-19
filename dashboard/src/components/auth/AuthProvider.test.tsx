@@ -131,6 +131,9 @@ describe("AuthProvider and account navigation", () => {
     });
 
     expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
+    expect(
+      screen.getByRole("link", { name: "History" }).getAttribute("href"),
+    ).toBe("/history");
     expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Create account" })).toBeNull();
 
@@ -139,6 +142,7 @@ describe("AuthProvider and account navigation", () => {
     });
 
     expect(screen.getByRole("link", { name: "Sign in" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "History" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
   });
 

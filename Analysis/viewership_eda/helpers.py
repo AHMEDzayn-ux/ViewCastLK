@@ -155,6 +155,9 @@ def build_features(d):
     f["duration"] = cut(num("duration_seconds") / 60, [0, 1, 3, 5, 20, 60, inf],
                         ["<1 min", "1–3 min", "3–5 min", "5–20 min", "20–60 min", "60+ min"])
     _m("duration", "format", "on the form", "video length")
+    f["Short length"] = cut((num("duration_seconds")).where(d.is_short), [0, 15, 30, 60, 120, 181],
+                            ["<15s", "15–30s", "30–60s", "1–2 min", "2–3 min"])
+    _m("Short length", "format", "on the form", "length of a Short (Shorts only)")
     f["Short or long-form"] = pd.Categorical(d.is_short.map({True: "Short", False: "long-form"}),
                                              categories=["Short", "long-form"], ordered=True)
     _m("Short or long-form", "format", "not sent yet (form needs the field)",
@@ -560,42 +563,98 @@ def _dots(ax, shown, own=True):
 def category_page(d, f, cat_name, names=PAGE_INPUTS):
     """How each creator-controlled input moves day-7 views inside one category.
     1x = the typical video in this category, not all videos."""
-    rows = d.category_name.eq(cat_name)
+    return subset_page(d, f, d.category_name.eq(cat_name), cat_name, names,
+                       f"inside_{cat_name.replace(' & ', '_').replace(' ', '_')}")
+
+
+def subset_page(d, f, rows, label, names, fig_name, cols=3):
+    """One small chart per input, inside one subset of videos (a category, or
+    Shorts only). 1x = the typical video in that subset."""
     n_vid, n_ch = int((rows & d.v7.notna()).sum()), d.channel_id[rows & d.v7.notna()].nunique()
     base = d.v7[rows].median()
-    fig, axes = plt.subplots(3, 3, figsize=(14, 10.5))
+    nrows = int(np.ceil(len(names) / cols))
+    fig, axes = plt.subplots(nrows, cols, figsize=(4.7 * cols, 3.5 * nrows))
+    for ax in list(axes.flat)[len(names):]:
+        ax.axis("off")
     summary = []
     for ax, name in zip(axes.flat, names):
-        t = group_table(d, f[name], rows=rows)
+        t = _order(name, group_table(d, f[name], rows=rows))
         shown = t[t.videos >= MIN_SHOW]
         if len(shown) < 2:
             ax.axis("off")
             ax.set_title(f"{name}\n(too few videos)", fontsize=9)
             continue
-        _dots(ax, shown)
+        _dots(ax, shown, own=META[name]["kind"] == "video")
         ax.set_title(name, fontsize=9.5)
         big = t[t.videos >= MIN_CELL]
         bo = t[(t.own_n >= MIN_CELL) & t.own_x.notna()]
+        if META[name]["kind"] != "video":
+            bo = bo.iloc[0:0]
         summary.append({
             "input": name,
-            "best (vs typical in category)": f"{big.raw_x.idxmax()} ({times(big.raw_x.max())})" if len(big) > 1 else "",
+            "best (vs typical in this group)": f"{big.raw_x.idxmax()} ({times(big.raw_x.max())})" if len(big) > 1 else "",
             "worst": f"{big.raw_x.idxmin()} ({times(big.raw_x.min())})" if len(big) > 1 else "",
-            "best vs own channel": f"{bo.own_x.idxmax()} ({times(bo.own_x.max())})" if len(bo) > 1 else "too few channels",
+            "best vs own channel": f"{bo.own_x.idxmax()} ({times(bo.own_x.max())})" if len(bo) > 1
+            else ("not applicable" if META[name]["kind"] != "video" else "too few channels"),
             "worst vs own channel": f"{bo.own_x.idxmin()} ({times(bo.own_x.min())})" if len(bo) > 1 else "",
             "own-channel gap": bo.own_x.max() / bo.own_x.min() if len(bo) > 1 else np.nan,
         })
-    handles = [plt.Line2D([], [], marker="o", color=RAW, ls="", label="typical video vs typical in this category"),
+    handles = [plt.Line2D([], [], marker="o", color=RAW, ls="", label="typical video vs the typical one in this group"),
                plt.Rectangle((0, 0), 1, 1, color=RAW, alpha=.3, label="middle half of videos"),
                plt.Line2D([], [], marker="D", color=OWN, ls="", label="vs its own channel's average")]
     fig.legend(handles=handles, loc="lower center", ncol=3, frameon=False, bbox_to_anchor=(.5, -.01))
-    fig.suptitle(f"{cat_name}: {n_vid:,} videos from {n_ch:,} channels. "
-                 f"1× = the typical {cat_name} video ({short(base)} day-7 views)",
+    fig.suptitle(f"{label}: {n_vid:,} videos from {n_ch:,} channels. "
+                 f"1× = the typical {label} video ({short(base)} day-7 views)",
                  fontsize=11.5, fontweight="bold")
     fig.tight_layout(rect=(0, .03, 1, .97))
-    save(fig, f"inside_{cat_name.replace(' & ', '_').replace(' ', '_')}")
+    save(fig, fig_name)
     s = pd.DataFrame(summary).set_index("input")
     s["own-channel gap"] = s["own-channel gap"].map(lambda v: "" if pd.isna(v) else f"{v:.2f}×")
     display(s)
+
+
+FORMAT_INPUTS = ["subscribers", "category", "YouTube topic", "Short length", "duration",
+                 "publish time band", "publish weekday", "audio language", "title length",
+                 "number in title", "capital letters in title", "tag count", "description length"]
+
+
+def format_page(d, f, fmt):
+    rows = d.is_short if fmt == "Short" else ~d.is_short
+    names = [n for n in FORMAT_INPUTS if not (fmt == "Short" and n == "duration")
+             and not (fmt == "long-form" and n == "Short length")]
+    subset_page(d, f, rows, "Shorts" if fmt == "Short" else "long-form", names,
+                f"format_{fmt.replace('-', '_')}")
+
+
+def format_compare(d, f, names=None):
+    """Best and worst value of each input, inside Shorts and inside long-form.
+    Channel inputs use the raw view; inputs that vary within a channel use the
+    own-channel view."""
+    names = names or [n for n in FORMAT_INPUTS if n not in ("duration", "Short length")]
+    rows = []
+    for n in names:
+        video = META[n]["kind"] == "video"
+        row = {"input": n, "compared on": "own channel" if video else "raw"}
+        tops = {}
+        for fmt, mask in (("Shorts", d.is_short), ("long-form", ~d.is_short)):
+            t = group_table(d, f[n], rows=mask)
+            if video:
+                t = t[(t.own_n >= MIN_CELL) & t.own_x.notna()]
+                col = "own_x"
+            else:
+                t = t[t.videos >= MIN_CELL]
+                col = "raw_x"
+            if len(t) < 2:
+                row[f"{fmt}: best"] = row[f"{fmt}: worst"] = "too few videos"
+                continue
+            tops[fmt] = t[col].idxmax()
+            row[f"{fmt}: best"] = f"{t[col].idxmax()} ({times(t[col].max())})"
+            row[f"{fmt}: worst"] = f"{t[col].idxmin()} ({times(t[col].min())})"
+            row[f"{fmt}: gap"] = f"{t[col].max() / t[col].min():.2f}×"
+        row["same best value?"] = ("yes" if tops.get("Shorts") == tops.get("long-form") else "no") \
+            if len(tops) == 2 else ""
+        rows.append(row)
+    display(pd.DataFrame(rows).set_index("input").fillna(""))
 
 
 def news_check(d, f, names):

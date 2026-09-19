@@ -379,7 +379,7 @@ everything else, it could be pulling the whole-dataset results in sections 4
 to 9. This table repeats every input's day-7 result without it.
 """)
 code("""
-L.news_check(d, f, [n for n in f.columns if n not in ("channel country", "captions", "made for kids", "HD or SD", "category")])
+L.news_check(d, f, [n for n in f.columns if n not in ("channel country", "captions", "made for kids", "HD or SD", "category", "Short length")])
 """)
 note("news_check")
 
@@ -466,10 +466,37 @@ say("\\n".join(lines))
 """)
 note("cat_lines")
 
+# ============================================================ 11 formats
+md("""
+---
+# 11. Shorts and long-form, separately
+
+Shorts and long-form reach viewers in different ways (the Shorts feed against
+search, home and suggested videos), so an input can matter for one format and
+not the other. This section repeats the per-input view inside each format.
+**1× is now the typical Short, or the typical long-form video.** Duration is
+split more finely for Shorts, since they are all 3 minutes or less.
+""")
+md("## Shorts")
+code("L.format_page(d, f, \"Short\")")
+note("format Short")
+md("## Long-form")
+code("L.format_page(d, f, \"long-form\")")
+note("format long-form")
+md("""
+## Does the same advice hold for both formats?
+
+The best and worst value of each input, inside Shorts and inside long-form.
+Inputs that vary within a channel are compared with the video's own channel;
+channel inputs (subscribers, category, topic) use the raw view.
+""")
+code("L.format_compare(d, f)")
+note("format compare")
+
 # ================================================================ 11 growth
 md("""
 ---
-# 11. Growth from day 7 to day 30
+# 12. Growth from day 7 to day 30
 
 How many extra views a video gains between day 7 and day 30, on the videos
 with all four labels. 20% means day-30 views are 1.2 times day-7 views.
@@ -507,7 +534,7 @@ note("growth")
 # ============================================================== 12 thin data
 md("""
 ---
-# 12. Where the data is thin
+# 13. Where the data is thin
 
 Number of videos with a day-7 label for each category and channel size. A model
 learns little where a cell is small, so forecasts there deserve less trust.
@@ -528,7 +555,7 @@ note("thin")
 # ============================================================ 13 over time
 md("""
 ---
-# 13. Does the data change over time?
+# 14. Does the data change over time?
 
 Typical day-7 views by the week a video was published. The model is trained on
 earlier weeks and tested on later ones, so a steady line is what we want.
@@ -563,7 +590,7 @@ note("drift")
 # ================================================================= 14 viral
 md("""
 ---
-# 14. What the most-viewed videos look like
+# 15. What the most-viewed videos look like
 
 The top 1% of videos by day-7 views, compared with all videos.
 """)
@@ -590,7 +617,7 @@ note("viral")
 # ============================================================== 15 repeats
 md("""
 ---
-# 15. Inputs that repeat each other
+# 16. Inputs that repeat each other
 
 When two inputs carry the same information, the model only needs one.
 **Rank agreement** runs from 0 (unrelated) to 1 (always in the same order).
@@ -618,7 +645,7 @@ note("repeats")
 # =========================================================== 16 availability
 md("""
 ---
-# 16. What the forecast actually receives
+# 17. What the forecast actually receives
 
 An input only helps if the app can supply it when a creator asks for a forecast.
 This is what `prediction_api/app/feature_builder.py` sends today.
@@ -642,7 +669,7 @@ note("availability")
 # ================================================================ 17 summary
 md("""
 ---
-# 17. Summary: every input
+# 18. Summary: every input
 
 Day-7 numbers use all videos with a day-7 label. The four "explains" columns
 use the same videos at every horizon (those with all four labels), so they can
@@ -650,7 +677,7 @@ be compared across time.
 """)
 code("""
 rows = []
-for name in f.columns:
+for name in [c for c in f.columns if c != "Short length"]:
     s = S.get(name) or L.stats(d, f, name)
     v, why = L.verdict(name, s)
     row = {"input": name, "section": L.META[name]["section"], "source at forecast time": L.META[name]["source"],

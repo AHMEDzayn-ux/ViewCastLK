@@ -52,7 +52,7 @@ every chart in this notebook uses ratios and log scales.
 day-30 views are only a few per cent above its day-7 views. The day-7 forecast
 is therefore close to the final number for most videos; later horizons add
 little for a typical video but more for the minority that keep growing
-(section 11).
+(section 12).
 """,
 
     # ---------------------------------------------------------- channel
@@ -89,7 +89,7 @@ many clips. **Verdict: keep.**
 **What it shows.** Channels posting under one video every ten days get the
 fewest views. Views rise with posting rate up to 2 to 10 videos a day, then
 drop for channels posting more than 10 a day (again, mostly news). It overlaps
-heavily with video count (section 15). **Verdict: keep.**
+heavily with video count (section 16). **Verdict: keep.**
 """,
     "channel age": """
 **What it shows.** A weak effect. Channels older than 5 years get a little
@@ -178,7 +178,7 @@ little better than the channel's other languages. **Verdict: keep.**
     "default language": """
 **What it shows.** Similar to audio language, and they agree on only 58% of
 videos. The API sends audio language mapped to en / si / ta, so the model
-should be trained on that same mapping (section 16). **Verdict: keep one;
+should be trained on that same mapping (section 17). **Verdict: keep one;
 audio language is the one the form collects.**
 """,
     "title script": """
@@ -222,7 +222,7 @@ for tone advice). These inputs could be worked out from it for free.
     "title length": """
 **What it shows.** Longer titles (over 70 characters) get slightly more views,
 raw and within a channel (1.18× gap). **Verdict: keep, weak.** It repeats word
-count (section 15), so one of the two is enough.
+count (section 16), so one of the two is enough.
 """,
     "title word count": """
 **What it shows.** The same pattern as title length, a little clearer (1.27×
@@ -436,6 +436,12 @@ script, title length, question and exclamation marks, weekday.
 channel size. For channels under 100K subscribers, Shorts get about 1.35× to 2×
 the channel's own long-form. For bigger channels they do not help.
 
+**Shorts and long-form behave differently** (section 11). For Shorts, length
+is the main lever (under 15 seconds about 2× better than 2 to 3 minutes). For
+long-form, tags, description, a number in the title and time of day each make a
+1.5× to 2.7× difference against the same channel's other videos. Guidelines in
+the app should be split by format.
+
 **For the model and the app:**
 
 1. Fetch the channel's YouTube topic at forecast time.
@@ -454,7 +460,7 @@ and Science favour long-form, most others favour Shorts.
 **Horizons.** Every input's effect is nearly the same at day 7, 14, 21 and 30
 (same videos). The largest drift is subscribers, falling from 18.6% to 17.1%.
 One model design across horizons is reasonable; per-horizon differences come
-from growth (section 11), not from different inputs mattering.
+from growth (section 12), not from different inputs mattering.
 """,
 }
 
@@ -573,5 +579,53 @@ Only a longer description and 5 to 20 minute videos help slightly.
 than Shorts** (1.1× against 0.9×), unlike most categories. 5 to 20 minute videos
 and a 1K to 3K character description help a little; the morning is the weakest
 time.
+""",
+})
+
+
+NOTES.update({
+    "format Short": """
+**What this shows.** Inside Shorts, **length is the main thing a creator
+controls**. Shorts under 15 seconds get about 1.4× their channel's average and
+2 to 3 minute Shorts about 0.75×, roughly a 2× gap, and it holds without News.
+Shorter Shorts are more likely to be watched to the end and replayed, which the
+Shorts feed rewards.
+
+Almost nothing else matters much for Shorts: time of day, weekday, a number in
+the title and capital letters all stay within about 1.2×. Tamil-language Shorts
+do better than the same channel's other Shorts (1.8×), but from a small number
+of channels. Channel size still sets the level: Shorts from 100K to 1M
+subscriber channels typically get 3.9× the typical Short.
+""",
+    "format long-form": """
+**What this shows.** For long-form, **how the video is presented matters much
+more** than for Shorts. Compared with the same channel's other long videos:
+
+* **Length:** 60+ minutes does best (1.9×), and long-form under a minute (short
+  horizontal clips) worst (0.6×).
+* **Tags:** 16 to 30 tags best, 1 to 5 worst (a 1.9× gap; 2.7× without News).
+* **Description:** 1K to 3K characters best, empty worst (2.0×; 1.6× without News).
+* **Number in the title:** 1.3× against 0.8× (1.6× gap, with or without News).
+* **Time of day:** evening best, night worst (1.5×; without News, late night
+  21:00 to 23:00 is best, 1.7× gap).
+* **Capital letters** looked strong (1.65×) but that is mostly News; without it
+  the gap is 1.2×.
+
+This fits how long videos are found: through search, the home page and
+suggested videos, which read the title, tags and description. Shorts are found
+by swiping, where those matter less.
+""",
+    "format compare": """
+**What this shows.** The two formats rarely share the same best choice. Only
+title length (71 to 90 characters) and the top category (Comedy) agree. For
+tags, description, number in the title and time of day, long-form has the
+larger gap and a different best value.
+
+**For the model:** the Short or long-form input should be able to change how
+other inputs act, not just shift the level. A tree model can learn this if it
+is given the Short flag; a model without it would average two different
+patterns. **For the app:** guidelines should be split by format. Advice on
+tags, descriptions and titles belongs with long-form; for Shorts the useful
+advice is mainly about length.
 """,
 })

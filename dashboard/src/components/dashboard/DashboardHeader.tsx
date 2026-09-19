@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { isDevelopmentMockMode } from "@/lib/api/forecast";
 
 const NAVIGATION = [
@@ -13,6 +15,17 @@ const NAVIGATION = [
 export default function DashboardHeader() {
   const pathname = usePathname();
   const isMockMode = isDevelopmentMockMode();
+  const { isAuthenticated, isLoading, isSigningOut, signOut } = useAuth();
+  const [signOutError, setSignOutError] = useState<string | null>(null);
+
+  async function handleSignOut() {
+    setSignOutError(null);
+    const wasSuccessful = await signOut();
+
+    if (!wasSuccessful) {
+      setSignOutError("We could not sign you out. Please try again.");
+    }
+  }
 
   return (
     <header className="site-header">
@@ -36,24 +49,68 @@ export default function DashboardHeader() {
           </span>
         </Link>
 
-        <nav className="primary-nav" aria-label="Primary navigation">
-          {NAVIGATION.map((item) => {
-            const isCurrent =
-              pathname === item.href ||
-              (item.href === "/methodology" && pathname === "/about");
+        <div className="site-header__actions">
+          <nav className="primary-nav" aria-label="Primary navigation">
+            {NAVIGATION.map((item) => {
+              const isCurrent =
+                pathname === item.href ||
+                (item.href === "/methodology" && pathname === "/about");
 
-            return (
-              <Link
-                href={item.href}
-                key={item.href}
-                aria-current={isCurrent ? "page" : undefined}
-                className={isCurrent ? "primary-nav__link is-current" : "primary-nav__link"}
+              return (
+                <Link
+                  href={item.href}
+                  key={item.href}
+                  aria-current={isCurrent ? "page" : undefined}
+                  className={
+                    isCurrent
+                      ? "primary-nav__link is-current"
+                      : "primary-nav__link"
+                  }
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </nav>
+
+          <nav className="auth-navigation" aria-label="Account navigation">
+            {isLoading ? (
+              <span
+                className="auth-navigation__placeholder"
+                aria-label="Loading account status"
               >
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
+                Account
+              </span>
+            ) : isAuthenticated ? (
+              <button
+                className="auth-navigation__button"
+                type="button"
+                disabled={isSigningOut}
+                onClick={handleSignOut}
+              >
+                {isSigningOut ? "Signing out..." : "Sign out"}
+              </button>
+            ) : (
+              <>
+                <Link className="auth-navigation__link" href="/login">
+                  Sign in
+                </Link>
+                <Link
+                  className="auth-navigation__link auth-navigation__link--primary"
+                  href="/signup"
+                >
+                  Create account
+                </Link>
+              </>
+            )}
+
+            {signOutError && (
+              <p className="auth-navigation__error" role="alert">
+                {signOutError}
+              </p>
+            )}
+          </nav>
+        </div>
       </div>
     </header>
   );

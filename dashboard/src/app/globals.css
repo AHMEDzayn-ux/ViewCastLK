@@ -168,6 +168,13 @@ a {
   gap: 2rem;
 }
 
+.site-header__actions {
+  display: flex;
+  align-self: stretch;
+  align-items: center;
+  gap: 0.8rem;
+}
+
 .brand {
   display: inline-flex;
   flex: 0 0 auto;
@@ -251,6 +258,83 @@ a {
 
 .primary-nav__link.is-current::after {
   background: var(--accent);
+}
+
+.auth-navigation {
+  position: relative;
+  display: flex;
+  min-width: 13rem;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+.auth-navigation__link,
+.auth-navigation__button,
+.auth-navigation__placeholder {
+  display: inline-flex;
+  min-height: 2.4rem;
+  align-items: center;
+  justify-content: center;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 750;
+  line-height: 1;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.auth-navigation__link:hover,
+.auth-navigation__button:hover:not(:disabled) {
+  color: var(--accent-strong);
+}
+
+.auth-navigation__link--primary,
+.auth-navigation__button {
+  border-color: var(--accent-strong);
+}
+
+.auth-navigation__link--primary {
+  background: var(--accent-strong);
+  color: #f8f6ed;
+}
+
+.auth-navigation__link--primary:hover {
+  background: var(--accent);
+  color: #f8f6ed;
+}
+
+.auth-navigation__button {
+  cursor: pointer;
+}
+
+.auth-navigation__button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.auth-navigation__placeholder {
+  width: 100%;
+  color: var(--text-muted);
+}
+
+.auth-navigation__error {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 0;
+  width: min(19rem, calc(100vw - 2rem));
+  margin: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid #dfb6af;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 0.76rem;
+  line-height: 1.35;
+  box-shadow: var(--shadow-small);
 }
 
 .page-shell {
@@ -1523,6 +1607,10 @@ select option {
     overflow-x: auto;
   }
 
+  .site-header__actions {
+    justify-content: space-between;
+  }
+
   .primary-nav__link {
     min-height: 3rem;
     white-space: nowrap;
@@ -1565,6 +1653,18 @@ select option {
 
   .primary-nav {
     margin: 0 -0.3rem;
+  }
+
+  .site-header__actions {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.35rem;
+  }
+
+  .auth-navigation {
+    min-width: 0;
+    justify-content: flex-end;
+    padding-bottom: 0.7rem;
   }
 
   .primary-nav__link {

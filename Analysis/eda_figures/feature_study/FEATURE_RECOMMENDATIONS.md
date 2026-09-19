@@ -23,10 +23,9 @@ work, not a replacement for the model's own evaluation.
 
 ## 1. The deployed model is scored on inputs it never receives
 
-The API cannot know a planned video's YouTube topics, and it never receives an
-is_short flag. `feature_builder.py` therefore sends every `topic_*` flag as False
-with `topic_missing` True, and `is_short` as missing, on every real forecast. In
-training those features were present for 99% of rows.
+`feature_builder.py` sends every `topic_*` flag as False with `topic_missing`
+True, and `is_short` as missing, on every real forecast. In training those
+features were present for 99% of rows.
 
 | horizon | deployed model, training-style inputs | deployed model, inputs as actually served | model retrained on served inputs |
 |---|---|---|---|
@@ -39,9 +38,16 @@ Any accuracy figure computed on the training-style inputs overstates what a
 creator gets, by up to 7 percentage points of "within 2×" at day 30. Retraining
 on the inputs serving actually has recovers nearly all of it.
 
-The topics were only ever worth a little: removing them from the deployed model
-on training-style inputs costs 0.013 to 0.025. Having them in training and
-missing at serving costs 0.05 to 0.17.
+Having the topics in training and missing at serving costs 0.05 to 0.17.
+Removing them from the model costs only 0.013 to 0.025, but that is not the
+best fix: see "Fetch the channel's topics" below.
+
+**Correction (19 September).** An earlier version of this document said the
+topics are never available for a planned video. That was wrong. `topic_*`
+comes from `topic_categories`, which `build_training_table.py` takes from the
+**channels** table: it is the channel's YouTube topic, not the video's. The API
+already calls `channels.list` for every forecast, and adding `topicDetails` to
+its `part` returns the topics in the same call at no extra quota.
 
 ---
 
@@ -61,11 +67,17 @@ missing at serving costs 0.05 to 0.17.
 
 | feature | evidence |
 |---|---|
-| all 19 `topic_*` flags and `topic_missing` | never available for a planned video; worth 0.013 to 0.025 when present, cost 0.05 to 0.17 as served |
 | `is_live_broadcast`, `channel_country`, `caption`, `made_for_kids` | one value covers 100.0%, 99.9%, 99.8% and 99.5% of rows. Already excluded; keep them excluded. |
 
 ### Fix
 
+* **Fetch the channel's topics at forecast time.** In `prediction_api/app/youtube.py`,
+  change `part="snippet,statistics"` to `part="snippet,statistics,topicDetails"`
+  and map `topicDetails.topicCategories` to the `topic_*` flags the same way the
+  training table does. The channel's topic explains about 10% of day-7 views on
+  its own (14% without News & Politics; `Analysis/simple_eda.ipynb`, section 4),
+  more than category. Until this is done, train without the topics rather than
+  with them missing at serving.
 * **Short or long-form: replace `is_short`, do not drop it.** The old flag was
   just `duration_seconds <= 60`, so it added nothing the tree could not already
   read from duration (Δ within noise at every horizon). That was a flaw in the

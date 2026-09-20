@@ -21,6 +21,8 @@ df = pd.read_parquet("viewcastlk_training_table.parquet")
 Current build notes and statistics:
 [`Dataset latest/HANDOVER_20260918.md`](Dataset%20latest/HANDOVER_20260918.md).
 
+Full statistics: `python Analysis/tools/dataset/dataset_stats.py --horizon 7`
+
 ---
 
 ## The one rule that must not be broken

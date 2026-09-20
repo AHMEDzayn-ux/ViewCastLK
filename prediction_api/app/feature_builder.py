@@ -11,6 +11,14 @@ from urllib.parse import unquote, urlparse
 import numpy as np
 import pandas as pd
 
+from app.channel_history import HISTORY_COLUMNS, empty_history_features
+from app.pre_publication_features import (
+    TIMING_COLUMNS,
+    TITLE_COLUMNS,
+    derive_timing_features,
+    derive_title_features,
+)
+
 # Safe resolution of model artifact directory and importing viewcastlk_ml
 ARTIFACT_DIR = (
     Path(__file__).resolve().parent.parent
@@ -292,6 +300,7 @@ def _extract_val(obj: Any, keys: list[str]) -> Any:
 def build_candidate_feature_frame(
     request: Any,
     channel_stats: Any = None,
+    history: Any = None,
 ) -> pd.DataFrame:
     """Convert creator form request and channel stats into one model-ready raw DataFrame.
 
@@ -362,6 +371,24 @@ def build_candidate_feature_frame(
         "subscriber_tier": subscriber_tier,
     }
     row_dict.update(topic_dict)
+
+    # 7. Title and planned-slot features, from what the creator typed.
+    row_dict.update(derive_title_features(_extract_val(request, ["title"])))
+    row_dict.update(
+        derive_timing_features(publish_hour=raw_hour, publish_day=raw_day)
+    )
+
+    # 8. The channel's own recent record, when the caller could supply it.
+    #
+    # An artefact that does not ask for these columns drops them at the
+    # reindex below, so passing history costs nothing when the deployed model
+    # was trained without it.
+    if history:
+        row_dict.update(
+            {key: value for key, value in dict(history).items() if key in HISTORY_COLUMNS}
+        )
+    else:
+        row_dict.update(empty_history_features())
 
     # Create 1-row DataFrame and reindex explicitly to match authoritative manifest.json order
     df = pd.DataFrame([row_dict])

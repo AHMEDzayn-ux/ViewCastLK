@@ -29,6 +29,13 @@ class ChannelLookupRequest(BaseModel):
 
 
 class ChannelStatsResponse(BaseModel):
+    channelId: Optional[str] = Field(
+        None,
+        description=(
+            "The resolved YouTube channel ID. The forecast uses it to read the "
+            "channel's own collected history from the public warehouse."
+        ),
+    )
     subscriberCount: Optional[int] = Field(
         None, description="Total subscribers or null if hidden/unavailable"
     )

@@ -195,6 +195,7 @@ def fetch_channel_stats(
         topic_categories = channel_item.get("topicDetails", {}).get("topicCategories")
 
         return ChannelStatsResponse(
+            channelId=channel_item.get("id"),
             subscriberCount=subscriber_count,
             totalViewCount=total_view_count,
             videoCount=video_count,

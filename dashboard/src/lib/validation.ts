@@ -46,7 +46,13 @@ export function validateForecastForm(
       errors.duration = "Planned duration must be longer than zero.";
     } else if (totalSeconds > 43_200) {
       errors.duration = "Planned duration must be 12 hours or less.";
+    } else if (values.videoFormat === "short" && totalSeconds > 180) {
+      errors.duration = "A YouTube Short must be 3 minutes or shorter.";
     }
+  }
+
+  if (!values.videoFormat) {
+    errors.videoFormat = "Choose whether this is a Short or a standard video.";
   }
 
   if (!values.audioLanguage) {
@@ -100,6 +106,7 @@ export function toForecastRequest(
     durationSeconds:
       Number(values.durationMinutes) * 60 +
       Number(values.durationSeconds || "0"),
+    isShort: values.videoFormat === "short",
     audioLanguage:
       values.audioLanguage as ForecastRequest["audioLanguage"],
     channelIdentifier: values.channelIdentifier.trim(),

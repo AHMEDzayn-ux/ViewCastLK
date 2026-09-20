@@ -13,7 +13,6 @@ REMOVED_COLUMNS = {
     "definition",
     "caption",
     "made_for_kids",
-    "description_length",
 }
 
 
@@ -40,6 +39,7 @@ class HorizonExportContractTests(unittest.TestCase):
             "eligible",
             "is_live_broadcast",
             "title_changed",
+            "channel_stats_backfilled",
         ]
         for horizon in HORIZONS:
             columns.extend(
@@ -71,6 +71,7 @@ class HorizonExportContractTests(unittest.TestCase):
                 as_bool(self.source["eligible"])
                 & ~as_bool(self.source["is_live_broadcast"])
                 & ~as_bool(self.source["title_changed"])
+                & ~as_bool(self.source["channel_stats_backfilled"])
                 & as_bool(self.source[usable])
                 & self.source[target].notna()
             )

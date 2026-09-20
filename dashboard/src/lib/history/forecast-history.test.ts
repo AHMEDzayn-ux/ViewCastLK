@@ -25,6 +25,7 @@ const request: ForecastRequest = {
   title: "A planned video",
   category: "Education",
   durationSeconds: 615,
+  isShort: false,
   audioLanguage: "Sinhala",
   channelIdentifier: "@creator",
   plannedPublishDay: "Friday",

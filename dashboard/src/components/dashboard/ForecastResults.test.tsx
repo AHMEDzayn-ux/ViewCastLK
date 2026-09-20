@@ -16,6 +16,7 @@ const request: ForecastRequest = {
   title: "Creator forecast",
   category: "Education",
   durationSeconds: 45,
+  isShort: false,
   audioLanguage: "English",
   channelIdentifier: "@creator",
   plannedPublishDay: null,

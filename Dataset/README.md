@@ -1,12 +1,13 @@
 # ViewCastLK — training dataset
 
-Built 12 August 2026 from the Supabase warehouse by
-`ViewCastLK/scripts/build_training_table.py`. **64,515 rows, one per video.**
+Current canonical snapshot: **18 September 2026**, built from the Supabase
+warehouse by `ViewCastLK/scripts/build_training_table.py`. It contains
+**123,766 rows, one per video**.
 
 | file | size | use |
 |---|---|---|
-| `viewcastlk_training_table.parquet` | 10.4 MB | **model from this one** |
-| `viewcastlk_training_table.csv` | 60.3 MB | inspection, Excel, non-Python tools |
+| `viewcastlk_training_table.parquet` | 22.6 MB | **model from this one** |
+| `viewcastlk_training_table.csv` | 123 MB | inspection, Excel, non-Python tools |
 
 Prefer the Parquet. CSV has no type information, so every read re-guesses it:
 booleans come back as the strings `"True"`/`"False"`, `published_at` as text, and
@@ -17,7 +18,8 @@ import pandas as pd
 df = pd.read_parquet("viewcastlk_training_table.parquet")
 ```
 
-Full statistics: `python Analysis/dataset_stats.py --horizon 7`
+Current build notes and statistics:
+[`Dataset latest/HANDOVER_20260918.md`](Dataset%20latest/HANDOVER_20260918.md).
 
 ---
 
@@ -50,9 +52,11 @@ why thumbnail changes cannot be detected at all.
 
 ### Features — all knowable before publication
 
-**Content** — `category_id`, `category_name`, `duration_seconds`, `is_short`
-(≤60 s), `definition`, `caption`, `made_for_kids`, `default_audio_language`,
-`default_language`
+**Content** — `category_id`, `category_name`, `duration_seconds`, `is_short`,
+`is_short_source`, `is_vertical`, `definition`, `caption`, `made_for_kids`,
+`default_audio_language`, `default_language`. `is_short` uses player shape plus
+the current three-minute Shorts limit, with the old duration rule only as a
+fallback when player shape is unavailable.
 
 **Timing**, converted to Asia/Colombo because posting time matters locally —
 `publish_hour_slt`, `publish_dow_slt` (0 = Monday), `publish_is_weekend`,
@@ -99,89 +103,62 @@ within ±12 h and a value exists. **Always filter on `dh_usable`** — a non-nul
 
 ## Shape
 
-63,126 eligible rows (1,389 live broadcasts and unparseable durations removed)
-across **2,416 channels**, published 2 July – 11 Aug 2026 (40 days).
-Median 7 videos per channel.
+119,415 eligible rows across **2,561 channels**, published through
+18 September 2026.
 
 | horizon | usable | % of eligible | median offset |
 |---|---|---|---|
-| day 7 | 20,663 | 32.7% | 1.4 h |
-| day 14 | 15,685 | 24.8% | 1.4 h |
-| day 21 | 15,100 | 23.9% | 1.4 h |
-| day 30 | 14,753 | 23.4% | 1.4 h |
+| day 7 | 77,399 | 64.8% | 1.5 h |
+| day 14 | 73,057 | 61.2% | 1.5 h |
+| day 21 | 72,704 | 60.9% | 1.5 h |
+| day 30 | 73,678 | 61.7% | 1.5 h |
 
 ---
 
 ## What will bite you
 
-**1. Each horizon is a separate dataset — no video has all four.**
+**1. Train and evaluate each horizon separately.**
 
-Collection began 17 July, so old videos are past their early marks and recent
-ones have not reached their late ones. Coverage by publication week:
+Labels now overlap substantially: 43,765 videos have usable labels at all four
+horizons. Separate exports are still required because each horizon has a
+different target, eligible population, and observation window.
 
-| published | videos | d7 | d14 | d21 | d30 |
-|---|---|---|---|---|---|
-| 29 Jun | 5,744 | 0 | 0 | 0 | 4,838 |
-| 6 Jul | 10,930 | 0 | 0 | 1,627 | 9,930 |
-| 13 Jul | 11,478 | 1,463 | 3,054 | 11,457 | 0 |
-| 20 Jul | 10,917 | 6,539 | 10,817 | 2,086 | 0 |
-| 27 Jul | 11,223 | 11,089 | 2,089 | 0 | 0 |
-| 3 Aug | 11,448 | 2,235 | 0 | 0 | 0 |
+**2. Backfilled channel statistics are not point-in-time features.**
 
-**Train one model per horizon.** A multi-output model has nothing to learn from.
+| horizon | usable | + true point-in-time channel stats |
+|---|---:|---:|
+| day 7 | 77,399 | **70,568** |
+| day 14 | 73,057 | **61,254** |
+| day 21 | 72,704 | **51,016** |
+| day 30 | 73,678 | **37,994** |
 
-The empty cells are permanent. Every archived snapshot (17 July – 9 August,
-2,148,774 rows on Google Drive) was re-processed on 12 August and produced
-**zero** additional labels: the observations behind those cells were never
-taken, because most of those channels only joined the roster in the August
-expansion and their videos arrived through backfill with the early history
-already missing. Coverage grows forward from here, never backward.
-
-**2. Usable rows shrink sharply once you demand clean channel stats.**
-
-| horizon | usable | + true point-in-time channel stats | + unedited title |
-|---|---|---|---|
-| day 7 | 20,663 | **13,832** | 13,683 |
-| day 14 | 15,685 | **8,074** | 8,008 |
-| day 21 | 15,100 | **2,571** | 2,558 |
-| day 30 | 14,753 | **0** | 0 |
-
-58.4% of eligible rows have `channel_stats_backfilled = True`: no channel
-snapshot predates the video, so the earliest available one was substituted.
-Because it is measured *after* publication it is mildly contaminated.
-
-For **day 21 and day 30 you have no choice** — every labelled video there
-predates channel tracking. Use the backfilled stats and say so, or restrict the
-project's headline claim to day 7 and day 14.
+Rows marked `channel_stats_backfilled = True` used the earliest available
+snapshot because none predates the video. Exclude them when making the strict
+pre-publication claim. There are now enough clean rows to do this at every
+horizon; 37,033 videos have clean point-in-time statistics and usable labels at
+all four horizons.
 
 **3. The target is extremely heavy-tailed.**
 
-Day-7 views: median 1,146, mean 19,326 (17× the median), p99 303,539, max
-17.4 M. The top 1% of videos hold **44.8%** of all day-7 views. Fit on
-`log1p(views)` — on that scale skew is −0.09, near symmetric. RMSE on raw counts
-is close to meaningless.
+Day-7 views have a median of 1,197, a 75th percentile of 6,068, and a 99th
+percentile of 340,256. Fit on `log1p(views)`; RMSE on raw counts is dominated by
+rare viral videos.
 
-**4. Channel identity dominates, and channels are wildly unequal.**
+**4. Channel identity is a major source of leakage.**
 
-The top 10 channels hold **25.7%** of all rows; the largest posts ~150 clips a
-day. Split by **channel**, not at random, or the same channel's videos land on
-both sides and the model memorises channels instead of learning about videos.
+Split by **channel**, not at random, or the same channel's videos land on both
+sides and the model memorises channels instead of learning about videos. The
+baseline to beat is a per-channel median computed from training rows only.
 
-Subscribers correlate 0.423 with log views — only ~18% of variance — and the
-medians saturate past 10K subscribers (10K–100K: 1,511; 1M+: 1,851). Channel
-size is the strongest *simple* predictor, not a sufficient one. The baseline to
-beat is a **per-channel median**.
+**5. Publication history is still short.** Avoid month or week-of-year
+seasonality features until the collection window is much longer.
 
-**5. Only 40 days of publication history.** No seasonality is learnable; month
-or week-of-year features would be noise.
+**6. Missing tags and languages are informative.** Encode missingness rather
+than dropping rows.
 
-**6. 29.9% of videos have no tags**, 13.3% no `default_audio_language`. Null
-means the uploader set none — informative, so encode as a category rather than
-dropping rows.
-
-**7. `title_changed` (392) and `description_changed` (494)** mark videos edited
-since first seen. Small, but a title edited after a video took off may be a
-*reaction* to performance. Consider excluding them when using title features.
+**7. `title_changed` and `description_changed` mark post-publication edits.** A
+change after a video took off may be a reaction to performance. Exclude changed
+titles when using title features.
 
 ---
 
@@ -195,7 +172,7 @@ df = pd.read_parquet("viewcastlk_training_table.parquet")
 
 HORIZON = 7                                     # one model per horizon
 d = df[df.eligible & df[f"d{HORIZON}_usable"]].copy()
-d = d[~d.channel_stats_backfilled]              # drop for d7/d14; impossible for d21/d30
+d = d[~d.channel_stats_backfilled]              # strict point-in-time features at every horizon
 d["y"] = np.log1p(d[f"d{HORIZON}_views"])
 
 # group split — the same channel must not appear on both sides

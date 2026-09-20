@@ -33,10 +33,14 @@ function makeEstimates(request: ForecastRequest, random: () => number) {
   const durationMinutes = request.durationSeconds / 60;
   const durationAdjustment =
     durationMinutes < 3 ? 0.9 : durationMinutes <= 20 ? 1.06 : 0.96;
+  const formatAdjustment = request.isShort ? 1.08 : 1;
   const categoryAdjustment =
     0.85 + (hashString(request.category) % 35) / 100;
   const baseDaySeven = Math.round(
-    (3600 + random() * 5200) * durationAdjustment * categoryAdjustment,
+    (3600 + random() * 5200) *
+      durationAdjustment *
+      formatAdjustment *
+      categoryAdjustment,
   );
   const growth = [1, 1.48, 1.78, 2.04] as const;
   let previousCumulativeViews = 0;
@@ -151,6 +155,7 @@ export function createMockForecast(request: ForecastRequest): ForecastResponse {
       request.title,
       request.category,
       request.durationSeconds,
+      request.isShort,
       request.audioLanguage,
       request.channelIdentifier,
       request.plannedPublishDay ?? "unknown-day",

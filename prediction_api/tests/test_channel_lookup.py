@@ -36,7 +36,7 @@ def test_channel_lookup_success_by_handle():
     )
 
     mock_youtube.channels().list.assert_called_once_with(
-        part="snippet,statistics", forHandle="@wasthi"
+        part="snippet,statistics,topicDetails", forHandle="@wasthi"
     )
 
     assert result.subscriberCount == 125000
@@ -71,7 +71,7 @@ def test_channel_lookup_success_by_id():
     )
 
     mock_youtube.channels().list.assert_called_once_with(
-        part="snippet,statistics", id=channel_id
+        part="snippet,statistics,topicDetails", id=channel_id
     )
 
     assert result.subscriberCount == 50000

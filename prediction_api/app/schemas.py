@@ -44,6 +44,13 @@ class ChannelStatsResponse(BaseModel):
     channelAgeDays: Optional[int] = Field(
         None, description="Age of channel in full days"
     )
+    topicCategories: Optional[List[str]] = Field(
+        None,
+        description=(
+            "Wikipedia topic URLs YouTube assigns to the channel, or null when "
+            "the channel has none"
+        ),
+    )
 
 
 class ErrorResponse(BaseModel):

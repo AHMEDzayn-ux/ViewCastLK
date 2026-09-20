@@ -6,6 +6,7 @@ import json
 import sys
 from pathlib import Path
 from typing import Any, Optional, Union
+from urllib.parse import unquote, urlparse
 
 import numpy as np
 import pandas as pd
@@ -192,32 +193,86 @@ def derive_is_short(
     return np.nan
 
 
-def derive_topic_features() -> dict[str, Any]:
-    """Derive topic_* candidate features.
+# The grouping below mirrors scripts/prepare_model_datasets.py exactly. The
+# model learned these flags from the channel's topics in the training table, so
+# serving has to fold the raw Wikipedia URLs the same way or the feature means
+# something different at prediction time than it did during training.
+TOPIC_CANONICAL_GROUPS = {
+    "Music": {
+        "Christian music", "Classical music", "Electronic music",
+        "Hip hop music", "Music", "Music of Asia", "Music of Latin America",
+        "Pop music", "Rock music", "Soul music",
+    },
+    "Gaming": {
+        "Action game", "Action-adventure game", "Casual game",
+        "Puzzle video game", "Racing video game", "Role-playing video game",
+        "Simulation video game", "Sports game", "Strategy video game",
+        "Video game culture",
+    },
+    "Sports": {
+        "Association football", "Boxing", "Cricket", "Motorsport", "Sport",
+        "Volleyball",
+    },
+    "Entertainment": {"Entertainment", "Film", "Performing arts", "Television program"},
+    "Health": {"Health", "Physical fitness"},
+    "Lifestyle": {"Lifestyle (sociology)"},
+    "Politics": {"Politics", "Military"},
+    "Knowledge": {"Knowledge", "Business"},
+}
+TOPIC_CANONICAL_LOOKUP = {
+    original: canonical
+    for canonical, originals in TOPIC_CANONICAL_GROUPS.items()
+    for original in originals
+}
+TOPIC_PARENT_CHILDREN = {
+    "Society": {"Politics", "Religion"},
+    "Lifestyle": {
+        "Tourism", "Vehicle", "Hobby", "Food", "Fashion", "Pet",
+        "Technology", "Health",
+    },
+    "Entertainment": {"Humour"},
+}
+MODEL_TOPIC_LABELS = (
+    "Entertainment", "Fashion", "Food", "Gaming", "Health", "Hobby",
+    "Humour", "Knowledge", "Lifestyle", "Music", "Pet", "Politics",
+    "Religion", "Society", "Sports", "Technology", "Tourism", "Vehicle",
+)
 
-    Serving logic for topic category extraction is unresolved; set all topic_* to False and topic_missing to True.
+
+def canonical_topic_labels(topic_urls: Any) -> set[str]:
+    """Fold YouTube's topic URLs into the labels the model was trained on."""
+    if not topic_urls:
+        return set()
+    labels: set[str] = set()
+    for item in topic_urls:
+        text = str(item).strip()
+        if not text:
+            continue
+        label = unquote(urlparse(text).path.rsplit("/", 1)[-1]).replace("_", " ").strip()
+        label = TOPIC_CANONICAL_LOOKUP.get(label, label)
+        if label:
+            labels.add(label)
+    # A parent topic is dropped when one of its own children is present, so a
+    # channel is not counted twice at two levels of the same branch.
+    for parent, children in TOPIC_PARENT_CHILDREN.items():
+        if parent in labels and labels.intersection(children):
+            labels.discard(parent)
+    return labels
+
+
+def derive_topic_features(topic_urls: Any = None) -> dict[str, Any]:
+    """Derive the topic_* features from the channel's YouTube topics.
+
+    A channel with no topics keeps the previous behaviour: every flag False and
+    topic_missing True, which is what the training table records for those rows.
     """
-    return {
-        "topic_entertainment": False,
-        "topic_fashion": False,
-        "topic_food": False,
-        "topic_gaming": False,
-        "topic_health": False,
-        "topic_hobby": False,
-        "topic_humour": False,
-        "topic_knowledge": False,
-        "topic_lifestyle": False,
-        "topic_music": False,
-        "topic_pet": False,
-        "topic_politics": False,
-        "topic_religion": False,
-        "topic_society": False,
-        "topic_sports": False,
-        "topic_technology": False,
-        "topic_tourism": False,
-        "topic_vehicle": False,
-        "topic_missing": True,
+    labels = canonical_topic_labels(topic_urls)
+    features: dict[str, Any] = {
+        "topic_" + topic.casefold().replace(" ", "_"): topic in labels
+        for topic in MODEL_TOPIC_LABELS
     }
+    features["topic_missing"] = not labels
+    return features
 
 
 def _extract_val(obj: Any, keys: list[str]) -> Any:
@@ -287,8 +342,10 @@ def build_candidate_feature_frame(
     raw_is_short = _extract_val(request, ["isShort", "is_short"])
     is_short = derive_is_short(duration_seconds=duration_seconds, raw_is_short=raw_is_short)
 
-    # 6. Topic features (unresolved candidate v1 -> missing)
-    topic_dict = derive_topic_features()
+    # 6. Topic features, from the channel lookup that already happened
+    topic_dict = derive_topic_features(
+        _extract_val(channel_stats, ["topicCategories", "topic_categories"])
+    )
 
     # Construct complete dictionary of fields
     row_dict = {

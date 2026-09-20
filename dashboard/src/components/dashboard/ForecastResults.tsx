@@ -1,3 +1,4 @@
+import { formatForecastViews } from "@/lib/forecast-format";
 import type { ForecastRequest, ForecastResponse } from "@/types/forecast";
 import DegradedNotice from "./DegradedNotice";
 import ForecastChart from "./ForecastChart";
@@ -82,7 +83,7 @@ export default function ForecastResults({
             {response.personalization.sharedEstimates.map((estimate) => (
               <li key={estimate.horizonDays}>
                 Day {estimate.horizonDays}:{" "}
-                {estimate.cumulativeViews.toLocaleString("en-US")} shared views
+                {formatForecastViews(estimate.cumulativeViews)} shared views
               </li>
             ))}
           </ul>

@@ -9,5 +9,9 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Windows workers intermittently exceed the default teardown timeout when
+    // the files run in parallel, which reports passing tests as failures. The
+    // suite takes about a minute either way, so it runs serially.
+    fileParallelism: false,
   },
 });

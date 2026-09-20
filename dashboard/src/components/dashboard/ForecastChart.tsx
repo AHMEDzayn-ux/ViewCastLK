@@ -1,5 +1,6 @@
 "use client";
 
+import { formatForecastViews } from "@/lib/forecast-format";
 import {
   CartesianGrid,
   Line,
@@ -106,7 +107,7 @@ export default function ForecastChart({ estimates }: ForecastChartProps) {
           {estimates.map((estimate) => (
             <tr key={estimate.horizonDays}>
               <td>Day {estimate.horizonDays}</td>
-              <td>{estimate.cumulativeViews.toLocaleString("en-LK")}</td>
+              <td>{formatForecastViews(estimate.cumulativeViews)}</td>
             </tr>
           ))}
         </tbody>

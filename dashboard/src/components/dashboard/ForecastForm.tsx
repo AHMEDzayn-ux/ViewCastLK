@@ -8,6 +8,7 @@ import type {
   ForecastRequest,
   ForecastValidationErrors,
   PublishDay,
+  VideoFormatSelection,
   YoutubeCategory,
 } from "@/types/forecast";
 import {
@@ -74,6 +75,7 @@ const INITIAL_VALUES: ForecastFormValues = {
   category: "",
   durationMinutes: "",
   durationSeconds: "",
+  videoFormat: "",
   audioLanguage: "",
   channelIdentifier: "",
   plannedPublishDay: "",
@@ -86,6 +88,7 @@ const DRAFT_FIELDS = [
   "category",
   "durationMinutes",
   "durationSeconds",
+  "videoFormat",
   "audioLanguage",
   "channelIdentifier",
   "plannedPublishDay",
@@ -134,6 +137,7 @@ const ERROR_FOCUS_TARGETS: Record<
   title: "title",
   category: "category",
   duration: "durationMinutes",
+  videoFormat: "videoFormat-short",
   audioLanguage: "audioLanguage",
   channelIdentifier: "channelIdentifier",
   plannedPublishDay: "plannedPublishDay",
@@ -439,6 +443,58 @@ export default function ForecastForm({
             </label>
           </div>
         </Field>
+
+        <fieldset
+          className="field"
+          aria-invalid={Boolean(errors.videoFormat)}
+          aria-describedby={[
+            "videoFormat-hint",
+            errors.videoFormat ? "videoFormat-error" : null,
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          <div className="field__heading">
+            <legend className="field__label">Video format</legend>
+            <span className="field__requirement field__requirement--required">
+              Required
+            </span>
+          </div>
+          <p className="field__hint" id="videoFormat-hint">
+            Choose the YouTube publishing format. Duration alone cannot identify
+            a Short reliably.
+          </p>
+          <div className="choice-group">
+            {[
+              { value: "short", label: "YouTube Short" },
+              { value: "standard", label: "Standard video" },
+            ].map((option) => (
+              <label className="choice-control" key={option.value}>
+                <input
+                  id={"videoFormat-" + option.value}
+                  type="radio"
+                  name="videoFormat"
+                  value={option.value}
+                  checked={values.videoFormat === option.value}
+                  disabled={isLoading}
+                  onChange={(event) =>
+                    setValue(
+                      "videoFormat",
+                      event.target.value as VideoFormatSelection,
+                      "videoFormat",
+                    )
+                  }
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+          {errors.videoFormat && (
+            <p className="field__error" id="videoFormat-error" role="alert">
+              {errors.videoFormat}
+            </p>
+          )}
+        </fieldset>
 
         <Field
           id="audioLanguage"

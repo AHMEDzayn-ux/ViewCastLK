@@ -283,8 +283,8 @@ def build_candidate_feature_frame(
     tier_series = subscriber_tier_from_count(pd.Series([ch_subs_at_publish]))
     subscriber_tier = str(tier_series.iloc[0])
 
-    # 5. Is short derivation (unresolved candidate v1 -> missing)
-    raw_is_short = _extract_val(request, ["is_short"])
+    # 5. Use the creator's chosen format when supplied.
+    raw_is_short = _extract_val(request, ["isShort", "is_short"])
     is_short = derive_is_short(duration_seconds=duration_seconds, raw_is_short=raw_is_short)
 
     # 6. Topic features (unresolved candidate v1 -> missing)

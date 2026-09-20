@@ -211,3 +211,48 @@ def test_personalization_is_scoped_to_authenticated_user_and_current_model(mock_
         user_id="test-authenticated-user",
         model_version="viewcastlk_monotonic_trajectory_experimental_v1",
     )
+
+
+@patch("app.main.fetch_channel_stats")
+def test_duration_format_fallback_is_used_when_is_short_is_absent(mock_fetch):
+    mock_fetch.return_value = MOCK_CHANNEL_STATS
+    payload = dict(VALID_FORECAST_PAYLOAD)
+    payload["durationSeconds"] = 45.0
+
+    response = client.post("/forecast", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["personalization"]["format"] == "short"
+
+
+@patch("app.main.fetch_channel_stats")
+def test_creator_format_selects_matching_personal_adjustment(mock_fetch):
+    mock_fetch.return_value = MOCK_CHANNEL_STATS
+    payload = dict(VALID_FORECAST_PAYLOAD)
+    payload["durationSeconds"] = 30.0
+    payload["isShort"] = False
+    adjustment_rows = [
+        {
+            "horizon": horizon,
+            "format": format_name,
+            "factor": factor,
+            "n_videos": 8,
+            "model_version": "viewcastlk_monotonic_trajectory_experimental_v1",
+        }
+        for horizon in (7, 14, 21, 30)
+        for format_name, factor in (("short", 1.5), ("long", 1.25))
+    ]
+    with patch.object(
+        main_module.creator_store,
+        "get_active_adjustments",
+        new=AsyncMock(return_value=adjustment_rows),
+    ):
+        response = client.post("/forecast", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["personalization"]["format"] == "long"
+    assert {row["format"] for row in body["personalization"]["adjustments"]} == {"long"}
+    assert body["estimates"][0]["cumulativeViews"] == round(
+        body["personalization"]["sharedEstimates"][0]["cumulativeViews"] * 1.25
+    )

@@ -37,6 +37,8 @@ dashboard/.next/
 training_data/
 Dataset/viewcastlk_training_table.csv
 Dataset/viewcastlk_training_table.parquet
+Dataset/Dataset NEW/
+Dataset/Dataset latest/
 
 # Local editor settings and reproducible model-search outputs
 .vscode/

@@ -390,7 +390,10 @@ async def create_forecast(
         # Personalization is optional. A creator-store outage must not prevent
         # the authenticated user from receiving the unchanged shared forecast.
         adjustment_rows = []
-    requested_format = "short" if payload.durationSeconds <= 60 else "long"
+    is_short = payload.isShort
+    if is_short is None:
+        is_short = payload.durationSeconds <= 60
+    requested_format = "short" if is_short else "long"
     displayed_predictions, personalization_payload = apply_forecast_adjustments(
         shared_predictions=shared_rounded,
         adjustment_rows=adjustment_rows,

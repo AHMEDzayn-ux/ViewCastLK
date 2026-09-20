@@ -7,6 +7,7 @@ pyarrow
 matplotlib>=3.9,<4
 scikit-learn>=1.5,<2
 xgboost>=3,<4
+lightgbm>=4.7,<5
 joblib>=1.4,<2
 google-genai==2.11.0
 pydantic>=2,<3

@@ -1,0 +1,50 @@
+{
+  "status": "development_only_feature_ablation_complete",
+  "selection_metric": "mean channel-grouped out-of-fold RMSLE",
+  "profiles": [
+    {
+      "name": "current_v4",
+      "include_enhanced_features": false,
+      "collapse_rare_categories": false,
+      "rare_category_min_count": 100,
+      "drop_features": []
+    },
+    {
+      "name": "compact_v4",
+      "include_enhanced_features": false,
+      "collapse_rare_categories": true,
+      "rare_category_min_count": 100,
+      "drop_features": []
+    },
+    {
+      "name": "enhanced_v5",
+      "include_enhanced_features": true,
+      "collapse_rare_categories": true,
+      "rare_category_min_count": 100,
+      "drop_features": []
+    },
+    {
+      "name": "enhanced_pruned_v5",
+      "include_enhanced_features": true,
+      "collapse_rare_categories": true,
+      "rare_category_min_count": 100,
+      "drop_features": [
+        "publish_dow_sin",
+        "publish_dow_cos",
+        "title_has_question",
+        "topic_technology"
+      ]
+    }
+  ],
+  "folds": 5,
+  "development_rows": 28616,
+  "development_channels": 1595,
+  "complete_rows": 36256,
+  "naturally_monotone_rows": 35648,
+  "locked_test_rows_excluded": 7032,
+  "locked_test_channels_excluded": 480,
+  "locked_test_selection_seed": 781,
+  "locked_test_evaluated_during_ablation": false,
+  "source_training_table_sha256": "1cdc3a21c56aafdf0e084309ded63876eb2f428418f1fd8da6f499549e0f9f84",
+  "selected_profile": "enhanced_pruned_v5"
+}

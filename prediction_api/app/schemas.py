@@ -78,6 +78,9 @@ class ForecastRequest(BaseModel):
     durationSeconds: float = Field(
         ..., description="Planned video duration in seconds (must be > 0)"
     )
+    isShort: bool | None = Field(
+        None, description="Creator's own choice of Short or standard video format"
+    )
     audioLanguage: str = Field(
         ..., description="Primary audio language (e.g. English, Sinhala, Tamil)"
     )

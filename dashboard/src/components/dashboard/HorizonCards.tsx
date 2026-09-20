@@ -1,11 +1,8 @@
+import { formatForecastViews } from "@/lib/forecast-format";
 import type { ForecastEstimate } from "@/types/forecast";
 
 interface HorizonCardsProps {
   estimates: ForecastEstimate[];
-}
-
-function formatViews(value: number): string {
-  return new Intl.NumberFormat("en-LK").format(value);
 }
 
 export default function HorizonCards({ estimates }: HorizonCardsProps) {
@@ -25,7 +22,7 @@ export default function HorizonCards({ estimates }: HorizonCardsProps) {
             <span className="horizon-item__day">
               Day {estimate.horizonDays}
             </span>
-            <strong>{formatViews(estimate.cumulativeViews)}</strong>
+            <strong>{formatForecastViews(estimate.cumulativeViews)}</strong>
             <span>cumulative views</span>
           </li>
         ))}

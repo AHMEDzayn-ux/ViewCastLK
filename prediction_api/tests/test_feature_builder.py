@@ -175,6 +175,12 @@ def test_24_unresolved_is_short_candidate_behavior():
     assert pd.isna(val)
 
 
+@pytest.mark.parametrize("is_short", [True, False])
+def test_supplied_is_short_reaches_candidate_feature_frame(is_short):
+    df = build_candidate_feature_frame({"durationSeconds": 600.0, "isShort": is_short})
+    assert df["is_short"].iloc[0] == is_short
+
+
 def test_25_output_column_names_exactly_match_manifest():
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
     expected = manifest["input_schema"]["expected_columns"]

@@ -63,6 +63,8 @@ COLUMN_CASTS = {
     "live_concurrent_viewers": "bigint",
     "hidden_subscriber_count": "boolean",
     "made_for_kids": "boolean",
+    "player_width": "integer",
+    "player_height": "integer",
 }
 
 

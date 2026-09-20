@@ -31,18 +31,72 @@ LLM_SCORE_COLUMNS = (
     "title_curiosity_gap",
 )
 
+RARE_CATEGORY = "__OTHER__"
+RARE_COLLAPSE_COLUMNS = (
+    "default_language",
+    "title_script",
+)
+
 SUPPORTED_RAW_NUMERIC_COLUMNS = (
     "duration_seconds",
     "ch_subs_at_publish",
     "ch_avg_views_per_video_at_publish",
     "ch_videos_at_publish",
     "channel_age_days_at_publish",
+    "publish_hour_sin",
+    "publish_hour_cos",
+    "publish_dow_sin",
+    "publish_dow_cos",
+    "title_length",
+    "title_word_count",
+    "title_upper_ratio",
+    "tag_count",
+    "description_length",
+    "prior_channel_video_count",
+    "uploads_previous_7d",
+    "uploads_previous_30d",
+    "days_since_previous_upload",
+    "prior_d7_view_count",
+    "prior_d7_median_views",
+    "prior_d7_mean_log_views",
+    "prior_d7_std_log_views",
+    "prior_d7_last_views",
+    "prior_d7_recent5_median_views",
+    "prior_same_category_d7_count",
+    "prior_same_category_d7_median_views",
+    "prior_d30_view_count",
+    "prior_d30_median_views",
+    "prior_d30_mean_log_views",
+)
+
+ENHANCED_SOURCE_NUMERIC_COLUMNS = (
+    "prior_d7_recent_log_trend",
+    "prior_same_format_d7_count",
+    "prior_same_format_d7_median_views",
 )
 
 RAW_NUMERIC_COLUMNS = SUPPORTED_RAW_NUMERIC_COLUMNS
 
 ENGINEERED_NUMERIC_COLUMNS = (
     "ch_videos_per_day",
+)
+
+ENHANCED_ENGINEERED_NUMERIC_COLUMNS = (
+    "prior_d7_recent_to_all_log_ratio",
+    "prior_d7_last_to_all_log_ratio",
+    "prior_same_category_to_channel_log_ratio",
+    "prior_same_format_to_channel_log_ratio",
+    "prior_d7_views_per_subscriber_log_ratio",
+    "channel_avg_views_per_subscriber_log_ratio",
+    "upload_rate_7d_to_30d_log_ratio",
+)
+
+ENHANCED_BOOLEAN_COLUMNS = (
+    "has_prior_d7_history",
+    "has_prior_d30_history",
+    "has_prior_same_category_d7_history",
+    "has_prior_same_format_d7_history",
+    "channel_average_missing",
 )
 
 TOPIC_COLUMNS = (
@@ -70,6 +124,9 @@ TOPIC_COLUMNS = (
 BOOLEAN_COLUMNS = (
     "is_short",
     "publish_is_weekend",
+    "title_has_number",
+    "title_has_question",
+    "title_has_exclaim",
 ) + TOPIC_COLUMNS
 
 CATEGORICAL_COLUMNS_LEGACY = (
@@ -79,6 +136,7 @@ CATEGORICAL_COLUMNS_LEGACY = (
 
 CATEGORICAL_COLUMNS = CATEGORICAL_COLUMNS_LEGACY + (
     "subscriber_tier",
+    "title_script",
 )
 
 SUBSCRIBER_TIER_ORDER = (
@@ -102,26 +160,26 @@ EXCLUDED_MODEL_COLUMNS = (
     "made_for_kids",
     "publish_hour_slt",
     "publish_dow_slt",
-    "tag_count",
-    "description_length",
-    "title_length",
-    "title_word_count",
-    "title_has_number",
-    "title_has_question",
-    "title_has_exclaim",
-    "title_upper_ratio",
-    "title_script",
     "ch_views_at_publish",
     "video_id",
     "channel_id",
     "published_at",
 )
 
+# Keep the original serving contract mandatory. New history/title fields are
+# optional at inference so channels without a warehouse history can still be
+# scored in degraded mode.
 REQUIRED_TRAINING_COLUMNS = (
-    (TARGET_ENCODED_COLUMN,)
-    + RAW_NUMERIC_COLUMNS
-    + BOOLEAN_COLUMNS
-    + CATEGORICAL_COLUMNS
+    TARGET_ENCODED_COLUMN,
+    "duration_seconds",
+    "ch_subs_at_publish",
+    "ch_avg_views_per_video_at_publish",
+    "ch_videos_at_publish",
+    "channel_age_days_at_publish",
+    "is_short",
+    "publish_is_weekend",
+    *TOPIC_COLUMNS,
+    *CATEGORICAL_COLUMNS_LEGACY,
 )
 
 
@@ -150,6 +208,25 @@ def _safe_upload_rate(frame: pd.DataFrame) -> pd.Series:
         frame["channel_age_days_at_publish"], errors="coerce"
     ).where(lambda values: values > 0)
     return (videos / age).replace([np.inf, -np.inf], np.nan)
+
+
+def _numeric_source(frame: pd.DataFrame, column: str) -> pd.Series:
+    source = (
+        frame[column]
+        if column in frame
+        else pd.Series(np.nan, index=frame.index)
+    )
+    return pd.to_numeric(source, errors="coerce")
+
+
+def _safe_log_ratio(numerator: pd.Series, denominator: pd.Series) -> pd.Series:
+    valid = numerator.notna() & denominator.notna()
+    result = pd.Series(np.nan, index=numerator.index, dtype=float)
+    result.loc[valid] = (
+        np.log1p(numerator.loc[valid].clip(lower=0))
+        - np.log1p(denominator.loc[valid].clip(lower=0))
+    )
+    return result.replace([np.inf, -np.inf], np.nan)
 
 
 def subscriber_tier_from_count(series: pd.Series) -> pd.Series:
@@ -184,9 +261,17 @@ class HorizonDatasetPreprocessor(BaseEstimator, TransformerMixin):
         self,
         category_smoothing: float = 10.0,
         include_llm_scores: bool = False,
+        include_enhanced_features: bool = False,
+        collapse_rare_categories: bool = False,
+        rare_category_min_count: int = 100,
+        drop_features: tuple[str, ...] = (),
     ):
         self.category_smoothing = category_smoothing
         self.include_llm_scores = include_llm_scores
+        self.include_enhanced_features = include_enhanced_features
+        self.collapse_rare_categories = collapse_rare_categories
+        self.rare_category_min_count = rare_category_min_count
+        self.drop_features = drop_features
 
     def _validate_training_frame(self, frame: pd.DataFrame) -> None:
         if not isinstance(frame, pd.DataFrame):
@@ -260,15 +345,24 @@ class HorizonDatasetPreprocessor(BaseEstimator, TransformerMixin):
                 result[column] = MISSING_CATEGORY
         return result
 
+    def _compact_categorical_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
+        if not getattr(self, "collapse_rare_categories", False):
+            return frame
+        frequent_categories = getattr(self, "frequent_categories_", {})
+        result = frame.copy()
+        for column, frequent in frequent_categories.items():
+            if column in result:
+                result[column] = result[column].where(
+                    result[column].isin(frequent), RARE_CATEGORY
+                )
+        return result
+
     def _deterministic_frame(self, frame: pd.DataFrame) -> pd.DataFrame:
         result = pd.DataFrame(index=frame.index)
-        for column in SUPPORTED_RAW_NUMERIC_COLUMNS:
-            source = (
-                frame[column]
-                if column in frame
-                else pd.Series(np.nan, index=frame.index)
-            )
-            result[column] = pd.to_numeric(source, errors="coerce")
+        for column in (
+            SUPPORTED_RAW_NUMERIC_COLUMNS + ENHANCED_SOURCE_NUMERIC_COLUMNS
+        ):
+            result[column] = _numeric_source(frame, column)
 
         if {
             "ch_videos_at_publish",
@@ -286,6 +380,51 @@ class HorizonDatasetPreprocessor(BaseEstimator, TransformerMixin):
             )
             result[column] = _binary_as_float(source)
 
+        d7_count = _numeric_source(frame, "prior_d7_view_count")
+        d30_count = _numeric_source(frame, "prior_d30_view_count")
+        same_category_count = _numeric_source(
+            frame, "prior_same_category_d7_count"
+        )
+        same_format_count = _numeric_source(frame, "prior_same_format_d7_count")
+        d7_median = _numeric_source(frame, "prior_d7_median_views")
+        result["prior_d7_recent_to_all_log_ratio"] = _safe_log_ratio(
+            _numeric_source(frame, "prior_d7_recent5_median_views"), d7_median
+        )
+        result["prior_d7_last_to_all_log_ratio"] = _safe_log_ratio(
+            _numeric_source(frame, "prior_d7_last_views"), d7_median
+        )
+        result["prior_same_category_to_channel_log_ratio"] = _safe_log_ratio(
+            _numeric_source(frame, "prior_same_category_d7_median_views"),
+            d7_median,
+        )
+        result["prior_same_format_to_channel_log_ratio"] = _safe_log_ratio(
+            _numeric_source(frame, "prior_same_format_d7_median_views"),
+            d7_median,
+        )
+        subscribers = _numeric_source(frame, "ch_subs_at_publish")
+        result["prior_d7_views_per_subscriber_log_ratio"] = _safe_log_ratio(
+            d7_median, subscribers
+        )
+        channel_average = _numeric_source(
+            frame, "ch_avg_views_per_video_at_publish"
+        )
+        result["channel_avg_views_per_subscriber_log_ratio"] = _safe_log_ratio(
+            channel_average, subscribers
+        )
+        result["upload_rate_7d_to_30d_log_ratio"] = _safe_log_ratio(
+            _numeric_source(frame, "uploads_previous_7d") / 7.0,
+            _numeric_source(frame, "uploads_previous_30d") / 30.0,
+        )
+        result["has_prior_d7_history"] = d7_count.gt(0).astype(float)
+        result["has_prior_d30_history"] = d30_count.gt(0).astype(float)
+        result["has_prior_same_category_d7_history"] = (
+            same_category_count.gt(0).astype(float)
+        )
+        result["has_prior_same_format_d7_history"] = (
+            same_format_count.gt(0).astype(float)
+        )
+        result["channel_average_missing"] = channel_average.isna().astype(float)
+
         if self.include_llm_scores:
             for column in LLM_SCORE_COLUMNS:
                 source = (
@@ -298,6 +437,8 @@ class HorizonDatasetPreprocessor(BaseEstimator, TransformerMixin):
 
     def fit(self, X: pd.DataFrame, y):
         self._validate_training_frame(X)
+        if int(self.rare_category_min_count) < 1:
+            raise ValueError("rare_category_min_count must be at least 1")
         target = np.asarray(y, dtype=float).reshape(-1)
         if len(X) != len(target):
             raise ValueError("X and y must contain the same number of rows")
@@ -310,11 +451,21 @@ class HorizonDatasetPreprocessor(BaseEstimator, TransformerMixin):
         ).fit(X[TARGET_ENCODED_COLUMN], target)
 
         self.subscriber_tier_scheme_ = "refined_v2"
+        categorical_frame = self._categorical_frame(X, CATEGORICAL_COLUMNS)
+        self.frequent_categories_ = {}
+        if self.collapse_rare_categories:
+            for column in RARE_COLLAPSE_COLUMNS:
+                counts = categorical_frame[column].value_counts(dropna=False)
+                self.frequent_categories_[column] = frozenset(
+                    counts[counts >= self.rare_category_min_count]
+                    .index.astype(str)
+                )
+        categorical_frame = self._compact_categorical_frame(categorical_frame)
         self.one_hot_encoder_ = OneHotEncoder(
             handle_unknown="ignore",
             sparse_output=False,
             dtype=np.float64,
-        ).fit(self._categorical_frame(X, CATEGORICAL_COLUMNS))
+        ).fit(categorical_frame)
         self.categorical_columns_ = list(CATEGORICAL_COLUMNS)
 
         deterministic_columns = (
@@ -322,8 +473,18 @@ class HorizonDatasetPreprocessor(BaseEstimator, TransformerMixin):
             + list(ENGINEERED_NUMERIC_COLUMNS)
             + list(BOOLEAN_COLUMNS)
         )
+        if self.include_enhanced_features:
+            deterministic_columns += (
+                list(ENHANCED_SOURCE_NUMERIC_COLUMNS)
+                + list(ENHANCED_ENGINEERED_NUMERIC_COLUMNS)
+                + list(ENHANCED_BOOLEAN_COLUMNS)
+            )
         if self.include_llm_scores:
             deterministic_columns += list(LLM_SCORE_COLUMNS)
+        dropped = set(self.drop_features)
+        deterministic_columns = [
+            column for column in deterministic_columns if column not in dropped
+        ]
 
         one_hot_names = self.one_hot_encoder_.get_feature_names_out(
             self.categorical_columns_
@@ -370,6 +531,7 @@ class HorizonDatasetPreprocessor(BaseEstimator, TransformerMixin):
         categorical_frame = self._categorical_frame(
             X, categorical_columns
         )
+        categorical_frame = self._compact_categorical_frame(categorical_frame)
         one_hot_values = self.one_hot_encoder_.transform(categorical_frame)
         one_hot = pd.DataFrame(
             one_hot_values,
@@ -415,5 +577,24 @@ class HorizonDatasetPreprocessor(BaseEstimator, TransformerMixin):
             ),
             "llm_scores_available_for_later": list(LLM_SCORE_COLUMNS),
             "llm_scores_enabled": bool(self.include_llm_scores),
+            "enhanced_features_enabled": bool(
+                getattr(self, "include_enhanced_features", False)
+            ),
+            "enhanced_source_numeric": list(ENHANCED_SOURCE_NUMERIC_COLUMNS),
+            "enhanced_engineered_numeric": list(
+                ENHANCED_ENGINEERED_NUMERIC_COLUMNS
+            ),
+            "enhanced_boolean": list(ENHANCED_BOOLEAN_COLUMNS),
+            "rare_category_compaction": {
+                "enabled": bool(
+                    getattr(self, "collapse_rare_categories", False)
+                ),
+                "minimum_count": int(
+                    getattr(self, "rare_category_min_count", 100)
+                ),
+                "columns": list(RARE_COLLAPSE_COLUMNS),
+                "replacement": RARE_CATEGORY,
+            },
+            "dropped_features": list(getattr(self, "drop_features", ())),
             "explicitly_excluded": list(EXCLUDED_MODEL_COLUMNS),
         }

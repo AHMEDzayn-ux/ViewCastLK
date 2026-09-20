@@ -28,6 +28,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from viewcastlk_ml.horizon_preprocessing import (  # noqa: E402
     BOOLEAN_COLUMNS,
     CATEGORICAL_COLUMNS,
+    ENHANCED_SOURCE_NUMERIC_COLUMNS,
     EXCLUDED_MODEL_COLUMNS,
     LLM_SCORE_COLUMNS,
     RAW_NUMERIC_COLUMNS,
@@ -151,30 +152,47 @@ def installed_runtime_versions() -> dict[str, str]:
     }
 
 
-def input_schema() -> dict[str, Any]:
-    expected = (
-        [TARGET_ENCODED_COLUMN]
-        + list(RAW_NUMERIC_COLUMNS)
-        + list(BOOLEAN_COLUMNS)
-        + list(CATEGORICAL_COLUMNS)
-    )
+def input_schema(preprocessor: Any | None = None) -> dict[str, Any]:
+    dropped = set(getattr(preprocessor, "drop_features", ()))
+    numeric_columns = list(RAW_NUMERIC_COLUMNS)
+    if getattr(preprocessor, "include_enhanced_features", False):
+        numeric_columns += list(ENHANCED_SOURCE_NUMERIC_COLUMNS)
+    if getattr(preprocessor, "include_llm_scores", False):
+        numeric_columns += list(LLM_SCORE_COLUMNS)
+    numeric_columns = [
+        column for column in numeric_columns if column not in dropped
+    ]
+    boolean_columns = [
+        column for column in BOOLEAN_COLUMNS if column not in dropped
+    ]
+    categorical_columns = [TARGET_ENCODED_COLUMN, *CATEGORICAL_COLUMNS]
+    expected = numeric_columns + boolean_columns + categorical_columns
     return {
         "expected_columns": expected,
-        "numeric_columns": list(RAW_NUMERIC_COLUMNS),
-        "boolean_columns": list(BOOLEAN_COLUMNS),
-        "categorical_columns": [TARGET_ENCODED_COLUMN, *CATEGORICAL_COLUMNS],
+        "numeric_columns": numeric_columns,
+        "boolean_columns": boolean_columns,
+        "categorical_columns": categorical_columns,
         "missing_values": "Allowed in values, but every expected column must exist.",
         "subscriber_tier_note": (
             "Use the exported tier if available. It can also be derived from "
             "ch_subs_at_publish with the boundaries documented in the model code."
         ),
         "future_optional_llm_score_columns": list(LLM_SCORE_COLUMNS),
-        "llm_scores_enabled_in_this_artifact": False,
+        "llm_scores_enabled_in_this_artifact": bool(
+            getattr(preprocessor, "include_llm_scores", False)
+        ),
+        "enhanced_history_features_enabled": bool(
+            getattr(preprocessor, "include_enhanced_features", False)
+        ),
+        "rare_category_compaction_enabled": bool(
+            getattr(preprocessor, "collapse_rare_categories", False)
+        ),
+        "dropped_features": sorted(dropped),
         "explicitly_excluded_columns": list(EXCLUDED_MODEL_COLUMNS),
     }
 
 
-def sample_input_frame() -> pd.DataFrame:
+def sample_input_frame(preprocessor: Any | None = None) -> pd.DataFrame:
     values: dict[str, object] = {
         TARGET_ENCODED_COLUMN: "Music",
         "duration_seconds": 300.0,
@@ -185,10 +203,29 @@ def sample_input_frame() -> pd.DataFrame:
         "default_language": "en",
         "publish_time_bucket": "evening",
         "subscriber_tier": "100k_to_250k",
+        "prior_channel_video_count": 500.0,
+        "uploads_previous_7d": 2.0,
+        "uploads_previous_30d": 8.0,
+        "days_since_previous_upload": 3.0,
+        "prior_d7_view_count": 80.0,
+        "prior_d7_median_views": 8_000.0,
+        "prior_d7_mean_log_views": float(np.log1p(8_500.0)),
+        "prior_d7_std_log_views": 0.8,
+        "prior_d7_last_views": 9_000.0,
+        "prior_d7_recent5_median_views": 8_750.0,
+        "prior_same_category_d7_count": 20.0,
+        "prior_same_category_d7_median_views": 9_500.0,
+        "prior_d30_view_count": 50.0,
+        "prior_d30_median_views": 12_000.0,
+        "prior_d30_mean_log_views": float(np.log1p(12_500.0)),
+        "prior_d7_recent_log_trend": 0.05,
+        "prior_same_format_d7_count": 60.0,
+        "prior_same_format_d7_median_views": 8_500.0,
     }
     for column in BOOLEAN_COLUMNS:
         values[column] = column == "topic_music"
-    return pd.DataFrame([values], columns=input_schema()["expected_columns"])
+    schema = input_schema(preprocessor)
+    return pd.DataFrame([values], columns=schema["expected_columns"])
 
 
 def model_card(manifest: dict[str, Any]) -> str:

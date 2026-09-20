@@ -1,10 +1,10 @@
-"""Train an experimental monotonic day-7/14/21/30 trajectory model.
+"""Train and evaluate a monotonic day-7/14/21/30 trajectory model.
 
-The frozen dataset contains no video with all four targets. This checkpoint
-therefore learns a day-7 base from every available day-7 development row and
-three nonnegative growth models from adjacent-horizon overlaps. One common
-channel holdout is used across every component so the chained evaluation does
-not inherit the incompatible horizon-specific partitions.
+This checkpoint learns a day-7 base and three nonnegative growth models from
+adjacent-horizon overlaps. One common channel holdout is used across every
+component so the chained evaluation does not inherit incompatible
+horizon-specific partitions. When complete four-horizon rows are available,
+the full trajectory is evaluated end to end on held-out channels.
 
 The saved bundle predicts:
 
@@ -14,9 +14,6 @@ The saved bundle predicts:
     day 30 = day 21 + nonnegative 21->30 increment
 
 This guarantees a nondecreasing cumulative-view trajectory by construction.
-Day-30 end-to-end accuracy cannot be measured until a cohort has all four
-labels, so this artifact is experimental and must not replace the product
-candidate without later complete-trajectory validation.
 """
 
 from __future__ import annotations
@@ -51,6 +48,7 @@ from viewcastlk_ml.modeling import (  # noqa: E402
     HorizonModelBundle,
     MonotonicTrajectoryModelBundle,
     NonnegativeIncrementModelBundle,
+    ReconciledIndependentTrajectoryModelBundle,
     build_xgb_regressor,
     regression_metrics,
 )
@@ -235,6 +233,7 @@ def fit_log_target_components(
     channels: pd.Series,
     max_estimators: int,
     n_jobs: int,
+    preprocessor_options: dict[str, Any] | None = None,
 ) -> tuple[HorizonDatasetPreprocessor, Any, int]:
     target = np.asarray(target_views, dtype=float)
     if len(X) != len(target) or len(X) != len(channels):
@@ -243,9 +242,11 @@ def fit_log_target_components(
         raise ValueError("Target must be finite, nonnegative, and nonempty")
     target_log = np.log1p(target)
     train, validation = inner_validation_positions(X, channels.reset_index(drop=True))
+    options = dict(preprocessor_options or {})
 
     selection_preprocessor = HorizonDatasetPreprocessor(
-        category_smoothing=CATEGORY_SMOOTHING
+        category_smoothing=CATEGORY_SMOOTHING,
+        **options,
     )
     transformed_train = selection_preprocessor.fit_transform(
         X.iloc[train], target_log[train]
@@ -266,7 +267,8 @@ def fit_log_target_components(
     selected_estimators = max(1, int(selection_model.best_iteration) + 1)
 
     final_preprocessor = HorizonDatasetPreprocessor(
-        category_smoothing=CATEGORY_SMOOTHING
+        category_smoothing=CATEGORY_SMOOTHING,
+        **options,
     )
     transformed = final_preprocessor.fit_transform(X, target_log)
     final_model = build_xgb_regressor(
@@ -286,6 +288,7 @@ def fit_horizon_model(
     channels: pd.Series,
     max_estimators: int,
     n_jobs: int,
+    preprocessor_options: dict[str, Any] | None = None,
 ) -> HorizonModelBundle:
     preprocessor, model, selected = fit_log_target_components(
         X=X,
@@ -293,6 +296,7 @@ def fit_horizon_model(
         channels=channels,
         max_estimators=max_estimators,
         n_jobs=n_jobs,
+        preprocessor_options=preprocessor_options,
     )
     return HorizonModelBundle(
         horizon_days=horizon,
@@ -314,6 +318,7 @@ def fit_increment_model(
     training_mask: np.ndarray,
     max_estimators: int,
     n_jobs: int,
+    preprocessor_options: dict[str, Any] | None = None,
 ) -> NonnegativeIncrementModelBundle:
     valid_training = training_mask & transition.valid_growth
     X = transition.X.loc[valid_training].reset_index(drop=True)
@@ -327,6 +332,7 @@ def fit_increment_model(
         channels=channels,
         max_estimators=max_estimators,
         n_jobs=n_jobs,
+        preprocessor_options=preprocessor_options,
     )
     return NonnegativeIncrementModelBundle(
         from_horizon_days=transition.from_day,
@@ -372,6 +378,23 @@ def metric_row(scope: str, method: str, actual, predicted) -> dict[str, Any]:
     }
 
 
+def component_feature_importance(
+    component: str, bundle: HorizonModelBundle | NonnegativeIncrementModelBundle
+) -> list[dict[str, Any]]:
+    names = bundle.preprocessor.get_feature_names_out()
+    importance = np.asarray(bundle.regressor.feature_importances_, dtype=float)
+    if len(names) != len(importance):
+        raise AssertionError(f"{component}: feature importance shape mismatch")
+    return [
+        {
+            "component": component,
+            "feature": str(name),
+            "importance": float(value),
+        }
+        for name, value in zip(names, importance)
+    ]
+
+
 def sample_triple_predictions(
     metadata: pd.DataFrame,
     targets: dict[int, np.ndarray],
@@ -395,8 +418,10 @@ def run_training(
     *,
     project_root: Path = PROJECT_ROOT,
     output_dir: Path | None = None,
+    artifact_version: str = "checkpoint12_monotonic_trajectory",
     max_estimators: int = 1_000,
     n_jobs: int = 4,
+    preprocessor_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     output_dir = output_dir or (
         project_root / "artifacts" / "checkpoint12_monotonic_trajectory"
@@ -418,6 +443,7 @@ def run_training(
 
     horizon_models: dict[int, HorizonModelBundle] = {}
     model_rows: list[dict[str, Any]] = []
+    feature_importance_rows: list[dict[str, Any]] = []
     for horizon in HORIZONS:
         horizon_data = loaded[horizon]
         development = ~horizon_data.assignments["channel_id"].astype(str).isin(
@@ -440,6 +466,7 @@ def run_training(
             channels=channels,
             max_estimators=max_estimators,
             n_jobs=n_jobs,
+            preprocessor_options=preprocessor_options,
         )
         horizon_models[horizon] = bundle
         model_rows.append(
@@ -447,6 +474,9 @@ def run_training(
                 "component": f"day_{horizon}_independent",
                 **bundle.training_metadata,
             }
+        )
+        feature_importance_rows.extend(
+            component_feature_importance(f"day_{horizon}_independent", bundle)
         )
 
     increment_models: list[NonnegativeIncrementModelBundle] = []
@@ -464,6 +494,7 @@ def run_training(
             training_mask=development,
             max_estimators=max_estimators,
             n_jobs=n_jobs,
+            preprocessor_options=preprocessor_options,
         )
         increment_models.append(bundle)
         model_rows.append(
@@ -471,6 +502,11 @@ def run_training(
                 "component": f"day_{pair[0]}_to_{pair[1]}_increment",
                 **bundle.training_metadata,
             }
+        )
+        feature_importance_rows.extend(
+            component_feature_importance(
+                f"day_{pair[0]}_to_{pair[1]}_increment", bundle
+            )
         )
 
     trajectory = MonotonicTrajectoryModelBundle(
@@ -485,6 +521,19 @@ def run_training(
     model_path = models_dir / "monotonic_trajectory.joblib"
     joblib.dump(trajectory, model_path)
     loaded_trajectory = joblib.load(model_path)
+    independent_trajectory = ReconciledIndependentTrajectoryModelBundle(
+        horizon_models=[horizon_models[horizon] for horizon in HORIZONS],
+        training_metadata={
+            "construction": "four independent horizons plus cumulative maximum",
+            "common_channel_holdout_seed": split_seed,
+            "test_channel_count": len(test_channels),
+        },
+    )
+    independent_model_path = (
+        models_dir / "independent_monotonic_trajectory.joblib"
+    )
+    joblib.dump(independent_trajectory, independent_model_path)
+    loaded_independent_trajectory = joblib.load(independent_model_path)
 
     metric_rows: list[dict[str, Any]] = []
     for pair, increment_model in zip(TRANSITIONS, increment_models):
@@ -544,9 +593,20 @@ def run_training(
     triple_eval = triple_test & triple_monotone
     triple_test_X = triple_X.loc[triple_eval].reset_index(drop=True)
     trajectory_predictions = loaded_trajectory.predict_views(triple_test_X)
+    independent_trajectory_predictions = (
+        loaded_independent_trajectory.predict_views(triple_test_X)
+    )
     triple_metric_rows: list[dict[str, Any]] = []
     for column, horizon in enumerate((7, 14, 21)):
         actual = triple_targets[horizon][triple_eval]
+        triple_metric_rows.append(
+            metric_row(
+                f"complete_day_7_14_21_day_{horizon}",
+                "independent_cumulative_max",
+                actual,
+                independent_trajectory_predictions[:, column],
+            )
+        )
         triple_metric_rows.append(
             metric_row(
                 f"complete_day_7_14_21_day_{horizon}",
@@ -564,13 +624,67 @@ def run_training(
             )
         )
 
+    complete_X, complete_targets, complete_metadata = complete_subset(
+        loaded, HORIZONS
+    )
+    complete_test = complete_metadata["channel_id"].astype(str).isin(
+        test_channels
+    ).to_numpy()
+    complete_actual = np.column_stack(
+        [complete_targets[horizon] for horizon in HORIZONS]
+    )
+    complete_monotone = (np.diff(complete_actual, axis=1) >= 0).all(axis=1)
+    complete_eval = complete_test & complete_monotone
+    complete_test_X = complete_X.loc[complete_eval].reset_index(drop=True)
+    complete_predictions = loaded_trajectory.predict_views(complete_test_X)
+    complete_independent_predictions = (
+        loaded_independent_trajectory.predict_views(complete_test_X)
+    )
+    complete_metric_rows: list[dict[str, Any]] = []
+    for column, horizon in enumerate(HORIZONS):
+        actual = complete_targets[horizon][complete_eval]
+        complete_metric_rows.append(
+            metric_row(
+                f"complete_day_7_14_21_30_day_{horizon}",
+                "independent_cumulative_max",
+                actual,
+                complete_independent_predictions[:, column],
+            )
+        )
+        complete_metric_rows.append(
+            metric_row(
+                f"complete_day_7_14_21_30_day_{horizon}",
+                "monotonic_trajectory",
+                actual,
+                complete_predictions[:, column],
+            )
+        )
+        complete_metric_rows.append(
+            metric_row(
+                f"complete_day_7_14_21_30_day_{horizon}",
+                "independent_horizon",
+                actual,
+                horizon_models[horizon].predict_views(complete_test_X),
+            )
+        )
+
     all_day7_predictions = loaded_trajectory.predict_views(loaded[7].X)
+    all_independent_predictions = loaded_independent_trajectory.predict_views(
+        loaded[7].X
+    )
     monotonic_ok = bool(
         (np.diff(all_day7_predictions, axis=1) >= -1e-12).all()
     )
     finite_ok = bool(
         np.isfinite(all_day7_predictions).all()
         and (all_day7_predictions >= 0).all()
+    )
+    independent_monotonic_ok = bool(
+        (np.diff(all_independent_predictions, axis=1) >= -1e-12).all()
+    )
+    independent_finite_ok = bool(
+        np.isfinite(all_independent_predictions).all()
+        and (all_independent_predictions >= 0).all()
     )
     validation = pd.DataFrame(
         [
@@ -587,8 +701,16 @@ def run_training(
                 "status": "PASS" if finite_ok else "FAIL",
             },
             {
-                "test": "complete four-horizon label count recorded as zero",
-                "status": "PASS",
+                "test": "complete four-horizon holdout is testable",
+                "status": "PASS" if int(complete_eval.sum()) > 0 else "FAIL",
+            },
+            {
+                "test": "independent reconciled trajectories nondecreasing",
+                "status": "PASS" if independent_monotonic_ok else "FAIL",
+            },
+            {
+                "test": "independent reconciled predictions finite and nonnegative",
+                "status": "PASS" if independent_finite_ok else "FAIL",
             },
         ]
     )
@@ -616,22 +738,31 @@ def run_training(
             },
             {
                 "labels": "day_7_14_21_30",
-                "rows": 0,
-                "channels": 0,
-                "negative_growth_rows": 0,
+                "rows": len(complete_X),
+                "channels": complete_metadata["channel_id"].nunique(),
+                "negative_growth_rows": int((~complete_monotone).sum()),
             },
         ]
     )
 
     transition_metrics = pd.DataFrame(metric_rows)
     triple_metrics = pd.DataFrame(triple_metric_rows)
+    complete_metrics = pd.DataFrame(complete_metric_rows)
     samples = sample_triple_predictions(
-        triple_metadata.loc[triple_eval].reset_index(drop=True),
+        complete_metadata.loc[complete_eval].reset_index(drop=True),
         {
-            horizon: values[triple_eval]
-            for horizon, values in triple_targets.items()
+            horizon: values[complete_eval]
+            for horizon, values in complete_targets.items()
         },
-        trajectory_predictions,
+        complete_predictions,
+    )
+    independent_samples = sample_triple_predictions(
+        complete_metadata.loc[complete_eval].reset_index(drop=True),
+        {
+            horizon: values[complete_eval]
+            for horizon, values in complete_targets.items()
+        },
+        complete_independent_predictions,
     )
     transition_metrics.to_csv(
         output_dir / "transition_test_metrics.csv", index=False
@@ -639,7 +770,13 @@ def run_training(
     triple_metrics.to_csv(
         output_dir / "triple_horizon_test_metrics.csv", index=False
     )
+    complete_metrics.to_csv(
+        output_dir / "complete_trajectory_test_metrics.csv", index=False
+    )
     samples.to_csv(output_dir / "sample_predictions.csv", index=False)
+    independent_samples.to_csv(
+        output_dir / "independent_sample_predictions.csv", index=False
+    )
     validation.to_csv(output_dir / "validation_tests.csv", index=False)
     pd.DataFrame(overlap_rows).to_csv(
         output_dir / "overlap_summary.csv", index=False
@@ -647,12 +784,33 @@ def run_training(
     pd.DataFrame(model_rows).to_csv(
         output_dir / "trained_components.csv", index=False
     )
+    pd.DataFrame(feature_importance_rows).sort_values(
+        ["component", "importance"], ascending=[True, False]
+    ).to_csv(output_dir / "feature_importance.csv", index=False)
 
     manifest = {
-        "artifact_version": "checkpoint12_monotonic_trajectory",
-        "status": "experimental_test_evaluated_no_complete_four_horizon_labels",
+        "artifact_version": artifact_version,
+        "status": "complete_trajectory_test_evaluated",
+        "source_training_table": {
+            "path": "Dataset/viewcastlk_training_table.csv",
+            "sha256": sha256_file(
+                project_root / "Dataset" / "viewcastlk_training_table.csv"
+            ),
+        },
         "model_path": model_path.relative_to(output_dir).as_posix(),
         "model_sha256": sha256_file(model_path),
+        "candidate_models": [
+            {
+                "method": "chained_nonnegative_increments",
+                "path": model_path.relative_to(output_dir).as_posix(),
+                "sha256": sha256_file(model_path),
+            },
+            {
+                "method": "independent_cumulative_max",
+                "path": independent_model_path.relative_to(output_dir).as_posix(),
+                "sha256": sha256_file(independent_model_path),
+            },
+        ],
         "horizons": list(HORIZONS),
         "construction": "day-7 base plus three predicted nonnegative increments",
         "common_split": {
@@ -669,13 +827,15 @@ def run_training(
         },
         "max_estimators_during_selection": max_estimators,
         "components": model_rows,
-        "complete_four_horizon_rows": 0,
-        "end_to_end_day_30_testable": False,
+        "feature_contract": horizon_models[7].preprocessor.feature_contract(),
+        "preprocessor_options": dict(preprocessor_options or {}),
+        "complete_four_horizon_rows": int(len(complete_X)),
+        "complete_four_horizon_test_rows": int(complete_test.sum()),
+        "complete_monotone_four_horizon_test_rows": int(complete_eval.sum()),
+        "end_to_end_day_30_testable": True,
         "limitations": [
-            "No video has all four labels in the frozen dataset.",
-            "Only 650 videos have both day-21 and day-30 labels.",
-            "Day-30 end-to-end chain accuracy is not measurable yet.",
-            "The common experimental test split has now been evaluated.",
+            "Evaluation excludes rows whose observed cumulative views decrease between horizons.",
+            "The common channel-grouped test split has been evaluated and must not be used for tuning.",
         ],
         "explicitly_excluded_model_columns": list(EXCLUDED_MODEL_COLUMNS),
     }
@@ -687,14 +847,18 @@ def run_training(
     print(transition_metrics.to_string(index=False))
     print("\nComplete day-7/14/21 test metrics:")
     print(triple_metrics.to_string(index=False))
-    print("\nSample complete day-7/14/21 predictions:")
+    print("\nComplete day-7/14/21/30 test metrics:")
+    print(complete_metrics.to_string(index=False))
+    print("\nSample complete day-7/14/21/30 predictions:")
     print(samples.round(0).to_string(index=False))
-    print(f"\nSaved experimental artifact to {output_dir}")
+    print(f"\nSaved retrained artifact to {output_dir}")
     return {
         "manifest": manifest,
         "transition_metrics": transition_metrics,
         "triple_metrics": triple_metrics,
+        "complete_metrics": complete_metrics,
         "samples": samples,
+        "independent_samples": independent_samples,
         "validation": validation,
     }
 
@@ -710,6 +874,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--max-estimators", type=int, default=1_000)
     parser.add_argument("--n-jobs", type=int, default=4)
+    parser.add_argument(
+        "--artifact-version", default="checkpoint12_monotonic_trajectory"
+    )
+    parser.add_argument("--enhanced-features", action="store_true")
+    parser.add_argument("--compact-categories", action="store_true")
+    parser.add_argument("--rare-category-min-count", type=int, default=100)
+    parser.add_argument("--drop-feature", action="append", default=[])
     return parser.parse_args()
 
 
@@ -717,8 +888,15 @@ def main() -> None:
     args = parse_args()
     run_training(
         output_dir=args.output_dir,
+        artifact_version=args.artifact_version,
         max_estimators=args.max_estimators,
         n_jobs=args.n_jobs,
+        preprocessor_options={
+            "include_enhanced_features": args.enhanced_features,
+            "collapse_rare_categories": args.compact_categories,
+            "rare_category_min_count": args.rare_category_min_count,
+            "drop_features": tuple(args.drop_feature),
+        },
     )
 
 

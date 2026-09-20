@@ -217,7 +217,9 @@ def discover_channel_candidates(keyword: str, max_results: int = 25) -> list[str
     return [item["snippet"]["channelId"] for item in response.get("items", [])]
 
 
-VIDEO_PARTS = "snippet,statistics,contentDetails,status,liveStreamingDetails"
+VIDEO_PARTS = (
+    "snippet,statistics,contentDetails,status,liveStreamingDetails,player"
+)
 
 
 def get_video_details(video_ids: list[str]) -> list[dict]:
@@ -296,6 +298,7 @@ def flatten_video_identity(v: dict, category_names: dict[str, str] = None) -> di
     category_names = category_names or {}
     snippet = v.get("snippet", {})
     content_details = v.get("contentDetails", {})
+    player = v.get("player", {})
     category_id = snippet.get("categoryId", "")
     thumbnails = snippet.get("thumbnails", {})
     thumbnail = thumbnails.get("high") or thumbnails.get("default") or {}
@@ -315,6 +318,8 @@ def flatten_video_identity(v: dict, category_names: dict[str, str] = None) -> di
         "default_language": snippet.get("defaultLanguage", ""),
         "thumbnail_url": thumbnail.get("url", ""),
         "made_for_kids": v.get("status", {}).get("madeForKids", ""),
+        "player_width": player.get("embedWidth", ""),
+        "player_height": player.get("embedHeight", ""),
     }
 
 

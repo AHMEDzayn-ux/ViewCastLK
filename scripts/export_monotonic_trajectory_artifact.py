@@ -55,6 +55,7 @@ EVALUATION_FILES = (
     "validation_tests.csv",
     "sample_predictions.csv",
 )
+COMPLETE_EVALUATION_FILE = "complete_trajectory_test_metrics.csv"
 
 
 PREDICT_CLI = '''"""Predict one monotonic ViewCastLK view trajectory from CSV rows."""
@@ -131,19 +132,30 @@ def json_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
 
 
 def model_card(manifest: dict[str, Any]) -> str:
+    end_to_end = manifest["evaluation"]["end_to_end_day_30_testable"]
+    status_lines = (
+        [
+            "The model has been evaluated end to end through day 30 on a",
+            "channel-grouped holdout with complete four-horizon labels.",
+        ]
+        if end_to_end
+        else [
+            "Experimental only. No video in the frozen training dataset has all",
+            "four labels, so end-to-end day-30 accuracy is not measurable yet.",
+        ]
+    )
     return "\n".join(
         [
             "# ViewCastLK monotonic trajectory — experimental artifact",
             "",
             "This artifact predicts cumulative view totals for days 7, 14, 21,",
-            "and 30 in one call. Its day-7 base plus nonnegative growth",
-            "parameterization guarantees a nondecreasing trajectory.",
+            "and 30 in one call. Its reconciliation strategy guarantees a",
+            "nondecreasing trajectory.",
             "",
             "## Status",
             "",
-            "Experimental only. No video in the frozen training dataset has all",
-            "four labels, so end-to-end day-30 accuracy is not measurable yet.",
-            "The included experimental channel holdout has already been evaluated.",
+            *status_lines,
+            "The included channel holdout has already been evaluated.",
             "",
             "## Usage",
             "",
@@ -193,25 +205,39 @@ def export_artifact(
     source_manifest = json.loads(
         source_manifest_path.read_text(encoding="utf-8")
     )
-    if source_manifest.get("artifact_version") != (
-        "checkpoint12_monotonic_trajectory"
-    ):
-        raise ValueError("Source is not a monotonic trajectory checkpoint")
-    if source_manifest.get("complete_four_horizon_rows") != 0:
-        raise ValueError("Unexpected complete-label count in source manifest")
-
+    if source_manifest.get("horizons") != [7, 14, 21, 30]:
+        raise ValueError("Source is not a four-horizon trajectory checkpoint")
     source_model = source_dir / source_manifest["model_path"]
     if sha256_file(source_model) != source_manifest["model_sha256"]:
         raise RuntimeError("Source trajectory model checksum mismatch")
     for filename in EVALUATION_FILES:
         if not (source_dir / filename).is_file():
             raise FileNotFoundError(f"Missing source artifact file: {filename}")
+    end_to_end_testable = bool(
+        source_manifest.get("end_to_end_day_30_testable", False)
+    )
+    evaluation_files = list(EVALUATION_FILES)
+    if end_to_end_testable:
+        complete_path = source_dir / COMPLETE_EVALUATION_FILE
+        if not complete_path.is_file():
+            raise FileNotFoundError(
+                f"Missing source artifact file: {COMPLETE_EVALUATION_FILE}"
+            )
+        evaluation_files.append(COMPLETE_EVALUATION_FILE)
+    for optional_filename in ("feature_importance.csv",):
+        if (source_dir / optional_filename).is_file():
+            evaluation_files.append(optional_filename)
 
     transition_metrics = pd.read_csv(
         source_dir / "transition_test_metrics.csv"
     )
     triple_metrics = pd.read_csv(
         source_dir / "triple_horizon_test_metrics.csv"
+    )
+    complete_metrics = (
+        pd.read_csv(source_dir / COMPLETE_EVALUATION_FILE)
+        if end_to_end_testable
+        else pd.DataFrame()
     )
 
     with tempfile.TemporaryDirectory(
@@ -232,11 +258,16 @@ def export_artifact(
                 PROJECT_ROOT / "viewcastlk_ml" / module_name,
                 runtime_dir / module_name,
             )
-        for filename in EVALUATION_FILES:
+        for filename in evaluation_files:
             shutil.copy2(source_dir / filename, evaluation_dir / filename)
 
-        sample = sample_input_frame()
         bundle = joblib.load(destination_model)
+        preprocessor = (
+            bundle.horizon_models[0].preprocessor
+            if hasattr(bundle, "horizon_models")
+            else bundle.base_model.preprocessor
+        )
+        sample = sample_input_frame(preprocessor)
         smoke = np.asarray(bundle.predict_views(sample), dtype=float)
         if smoke.shape != (1, 4):
             raise RuntimeError("Exported model failed trajectory shape smoke test")
@@ -269,7 +300,7 @@ def export_artifact(
             ),
             "source_git_commit": source_git_commit(PROJECT_ROOT),
             "runtime_versions_used_for_export": installed_runtime_versions(),
-            "input_schema": input_schema(),
+            "input_schema": input_schema(preprocessor),
             "model": {
                 "model_path": destination_model.relative_to(staging).as_posix(),
                 "sha256": sha256_file(destination_model),
@@ -280,11 +311,22 @@ def export_artifact(
             "evaluation": {
                 "common_split": source_manifest["common_split"],
                 "experimental_test_used": True,
-                "complete_four_horizon_rows": 0,
-                "end_to_end_day_30_testable": False,
+                "complete_four_horizon_rows": source_manifest.get(
+                    "complete_four_horizon_rows", 0
+                ),
+                "complete_four_horizon_test_rows": source_manifest.get(
+                    "complete_four_horizon_test_rows", 0
+                ),
+                "complete_monotone_four_horizon_test_rows": source_manifest.get(
+                    "complete_monotone_four_horizon_test_rows", 0
+                ),
+                "end_to_end_day_30_testable": end_to_end_testable,
                 "transition_test_metrics": json_records(transition_metrics),
                 "complete_day_7_14_21_test_metrics": json_records(
                     triple_metrics
+                ),
+                "complete_day_7_14_21_30_test_metrics": json_records(
+                    complete_metrics
                 ),
                 "limitations": source_manifest["limitations"],
             },

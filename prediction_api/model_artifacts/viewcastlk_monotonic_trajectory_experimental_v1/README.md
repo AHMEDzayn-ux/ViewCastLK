@@ -10,6 +10,11 @@ Experimental only. No video in the frozen training dataset has all
 four labels, so end-to-end day-30 accuracy is not measurable yet.
 The included experimental channel holdout has already been evaluated.
 
+`training_video_ids.txt` contains the exact, verified union of video IDs used
+by the current artifact's recorded fitted components. Creator personalization
+must exclude these IDs so private adjustments are computed only from videos
+the current shared model never trained on.
+
 ## Usage
 
 ```text

@@ -8,12 +8,14 @@ interface ForecastResultsProps {
   response: ForecastResponse;
   request: ForecastRequest;
   onChangeInputs: () => void;
+  historySaveNotice?: string;
 }
 
 export default function ForecastResults({
   response,
   request,
   onChangeInputs,
+  historySaveNotice,
 }: ForecastResultsProps) {
   const generatedAt = new Date(response.model.generatedAt).toLocaleString(
     "en-LK",
@@ -51,8 +53,41 @@ export default function ForecastResults({
       </header>
 
       <DegradedNotice completeness={response.completeness} />
+      {response.personalization?.applied && (
+        <section className="personalization-notice" role="status">
+          <div>
+            <p className="section-kicker">Creator-specific result</p>
+            <h3>Personalised using your channel history</h3>
+            <p>
+              The shared model forecast was adjusted with mature videos that
+              this model did not train on.
+            </p>
+          </div>
+          <span className="status-tag status-tag--personalized">
+            Personalised forecast
+          </span>
+        </section>
+      )}
+      {historySaveNotice && (
+        <div className="history-save-notice" role="status">
+          {historySaveNotice}
+        </div>
+      )}
       <HorizonCards estimates={response.estimates} />
       <ForecastChart estimates={response.estimates} />
+      {response.personalization?.applied && (
+        <details className="personalization-details">
+          <summary>Compare with the shared model forecast</summary>
+          <ul>
+            {response.personalization.sharedEstimates.map((estimate) => (
+              <li key={estimate.horizonDays}>
+                Day {estimate.horizonDays}:{" "}
+                {estimate.cumulativeViews.toLocaleString("en-US")} shared views
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       <RecommendationCards
         recommendations={response.recommendations}
         unavailableRecommendations={response.unavailableRecommendations}

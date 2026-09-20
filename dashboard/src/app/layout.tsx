@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import Link from "next/link";
+import AuthProvider from "@/components/auth/AuthProvider";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import "./globals.css";
 
@@ -20,22 +22,27 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <a className="skip-link" href="#main-content">
-          Skip to main content
-        </a>
-        <DashboardHeader />
-        <div id="main-content" className="site-content" tabIndex={-1}>
-          {children}
-        </div>
-        <footer className="site-footer">
-          <div>
-            <p>
-              <strong>ViewCastLK</strong> · University project for Sri Lankan
-              creator forecasting
-            </p>
-            <p>Not affiliated with or endorsed by YouTube or Google.</p>
+        <AuthProvider>
+          <a className="skip-link" href="#main-content">
+            Skip to main content
+          </a>
+          <DashboardHeader />
+          <div id="main-content" className="site-content" tabIndex={-1}>
+            {children}
           </div>
-        </footer>
+          <footer className="site-footer">
+            <div>
+              <p>
+                <strong>ViewCastLK</strong> · University project for Sri Lankan
+                creator forecasting
+              </p>
+              <p>
+                Not affiliated with or endorsed by YouTube or Google. ·{" "}
+                <Link href="/privacy">Privacy</Link>
+              </p>
+            </div>
+          </footer>
+        </AuthProvider>
       </body>
     </html>
   );

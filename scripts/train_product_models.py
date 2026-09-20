@@ -35,6 +35,10 @@ from viewcastlk_ml.modeling import (  # noqa: E402
     regression_metrics,
     views_from_log_predictions,
 )
+from viewcastlk_ml.training_ids import (  # noqa: E402
+    TRAINING_VIDEO_IDS_FILENAME,
+    write_training_video_ids,
+)
 from viewcastlk_ml.preprocessing import (  # noqa: E402
     RAW_INPUT_COLUMNS,
     USER_REMOVED_FEATURES,
@@ -373,6 +377,7 @@ def main() -> None:
     holdout_rows = []
     feature_importance_rows = []
     artifact_records = []
+    training_video_ids: set[str] = set()
 
     for horizon in VALID_HORIZONS:
         print(f"\nTraining independent day-{horizon} model")
@@ -418,6 +423,12 @@ def main() -> None:
             y_development=y_development,
             selected_n_estimators=selected_n_estimators,
             model_overrides=model_overrides,
+        )
+        inlier_mask, _, _ = log_target_inlier_mask(
+            np.log1p(y_development.astype(float)), sigma=OUTLIER_SIGMA
+        )
+        training_video_ids.update(
+            metadata_development.iloc[np.flatnonzero(inlier_mask)]["video_id"].astype(str)
         )
         artifact_path = models_dir / f"day_{horizon}_model.joblib"
         joblib.dump(bundle, artifact_path)
@@ -470,6 +481,9 @@ def main() -> None:
     feature_importance.to_csv(
         args.output_dir / "feature_importance_gain.csv", index=False
     )
+    training_video_id_count = write_training_video_ids(
+        training_video_ids, args.output_dir / TRAINING_VIDEO_IDS_FILENAME
+    )
 
     manifest = {
         "artifact_version": args.artifact_version,
@@ -488,6 +502,10 @@ def main() -> None:
         "model_configuration": model_overrides,
         "metric_note": "MAPE excludes zero targets because percentage error is undefined at zero; zero counts are reported separately.",
         "models": artifact_records,
+        "training_video_ids": {
+            "path": TRAINING_VIDEO_IDS_FILENAME,
+            "count": training_video_id_count,
+        },
     }
     (args.output_dir / "training_manifest.json").write_text(
         json.dumps(manifest, indent=2), encoding="utf-8"

@@ -248,6 +248,48 @@ def load_known_ids(table: str, id_column: str) -> set[str]:
         conn.close()
 
 
+def load_roster_request_channel_ids() -> list[str]:
+    """Return the durable creator-requested supplement to channel_handles.txt.
+
+    Fulfilled requests remain in this list so scheduled full refreshes continue
+    to cover these channels without mutating a checked-in roster from CI.
+    """
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "select channel_id from roster_requests order by requested_at"
+            )
+            return [row[0] for row in cur.fetchall()]
+    except psycopg2.errors.UndefinedTable:
+        conn.rollback()
+        print("  roster_requests is not deployed; continuing with the file roster")
+        return []
+    finally:
+        conn.close()
+
+
+def mark_roster_requests_fulfilled(channel_ids: set[str]) -> None:
+    if not channel_ids:
+        return
+    conn = _connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                update roster_requests
+                set status = 'fulfilled', fulfilled_at = coalesce(fulfilled_at, now())
+                where channel_id = any(%s)
+                """,
+                (list(channel_ids),),
+            )
+        conn.commit()
+    except psycopg2.errors.UndefinedTable:
+        conn.rollback()
+    finally:
+        conn.close()
+
+
 def ensure_snapshot_partitions(days_ahead: int = 14) -> int:
     """Creates any missing daily partitions of video_snapshots, up to days_ahead.
 

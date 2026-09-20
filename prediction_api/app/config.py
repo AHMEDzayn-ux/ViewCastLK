@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "").strip()
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip()
+SUPABASE_PUBLISHABLE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY", "").strip()
 DASHBOARD_ORIGIN_RAW = os.getenv("DASHBOARD_ORIGIN", "http://localhost:3000").strip()
 ALLOWED_ORIGINS = [
     origin.strip() for origin in DASHBOARD_ORIGIN_RAW.split(",") if origin.strip()
@@ -13,6 +15,22 @@ if not ALLOWED_ORIGINS:
 DASHBOARD_ORIGIN = ALLOWED_ORIGINS[0]
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip()
+SUPABASE_AUTH_DB_URL = os.getenv("SUPABASE_AUTH_DB_URL", "").strip()
+# Separate public warehouse connection. Creator-private Analytics must never be
+# written through this connection; it is used only for the channel roster hook.
+SUPABASE_WAREHOUSE_DB_URL = os.getenv("SUPABASE_WAREHOUSE_DB_URL", "").strip()
+GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+GOOGLE_OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
+GOOGLE_OAUTH_REDIRECT_URI = os.getenv(
+    "GOOGLE_OAUTH_REDIRECT_URI", "http://localhost:8000/auth/youtube/callback"
+).strip()
+TOKEN_ENCRYPTION_KEY = os.getenv("TOKEN_ENCRYPTION_KEY", "").strip()
+CREATOR_HISTORY_VIDEO_LIMIT = max(
+    1, int(os.getenv("CREATOR_HISTORY_VIDEO_LIMIT", "200"))
+)
+YOUTUBE_ANALYTICS_BATCH_SIZE = max(
+    1, min(10, int(os.getenv("YOUTUBE_ANALYTICS_BATCH_SIZE", "10")))
+)
 
 # Keep the primary model separately for backwards-compatible deployments. The
 # fallback list is ordered for the free-tier quotas currently available to this

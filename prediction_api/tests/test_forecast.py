@@ -1,14 +1,16 @@
 """Automated tests for POST /forecast endpoint."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+import app.main as main_module
 from app.schemas import ChannelStatsResponse
 from app.youtube import ChannelLookupException
 
 client = TestClient(app)
+pytestmark = pytest.mark.usefixtures("authenticated_api")
 
 MOCK_CHANNEL_STATS = ChannelStatsResponse(
     subscriberCount=125000,
@@ -176,3 +178,36 @@ def test_16_forecast_trajectory_is_monotonic(mock_fetch):
     cumulative_views = [estimate["cumulativeViews"] for estimate in data["estimates"]]
     assert cumulative_views == sorted(cumulative_views)
     assert data["model"]["trajectoryMonotonic"] is True
+
+
+@patch("app.main.fetch_channel_stats")
+def test_personalization_is_scoped_to_authenticated_user_and_current_model(mock_fetch):
+    mock_fetch.return_value = MOCK_CHANNEL_STATS
+    adjustment_rows = [
+        {
+            "horizon": horizon,
+            "format": "all",
+            "factor": 1.25,
+            "n_videos": 12,
+            "model_version": "viewcastlk_monotonic_trajectory_experimental_v1",
+        }
+        for horizon in (7, 14, 21, 30)
+    ]
+    with patch.object(
+        main_module.creator_store,
+        "get_active_adjustments",
+        new=AsyncMock(return_value=adjustment_rows),
+    ) as get_adjustments:
+        response = client.post("/forecast", json=VALID_FORECAST_PAYLOAD)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["personalization"]["applied"] is True
+    assert body["personalization"]["format"] == "long"
+    assert body["estimates"][0]["cumulativeViews"] == round(
+        body["personalization"]["sharedEstimates"][0]["cumulativeViews"] * 1.25
+    )
+    get_adjustments.assert_awaited_once_with(
+        user_id="test-authenticated-user",
+        model_version="viewcastlk_monotonic_trajectory_experimental_v1",
+    )

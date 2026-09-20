@@ -19,8 +19,10 @@ Versions below match `package.json`:
 
 | Technology | Version / usage |
 | --- | --- |
-| Next.js | `16.2.12` |
+| Next.js | `16.3.5` |
 | React / React DOM | `19.2.4` |
+| Supabase JS | `^2.116.0` |
+| React Turnstile | `^1.6.1` |
 | TypeScript | `^5` |
 | Tailwind CSS | `^4` |
 | Recharts | `^3.10.1` |
@@ -35,45 +37,10 @@ Versions below match `package.json`:
   baseline.
 - `/methodology` — creator-friendly methodology and limitations.
 - `/about` — redirects to `/methodology`.
-
-## Forecast Inputs
-# ViewCastLK Dashboard
-
-ViewCastLK is a pre-publication forecasting tool for Sri Lankan YouTube
-creators. The dashboard lets a creator:
-
-- describe a planned video;
-- receive cumulative view forecasts for Day 7, 14, 21, and 30;
-- review evidence-backed publishing guidance;
-- view published model accuracy; and
-- read the methodology and limitations.
-
-The dashboard is the presentation layer. It communicates with the Prediction
-API abstraction and does not perform data collection or model execution in the
-browser.
-
-## Tech Stack
-
-Versions below match `package.json`:
-
-| Technology | Version / usage |
-| --- | --- |
-| Next.js | `16.2.12` |
-| React / React DOM | `19.2.4` |
-| TypeScript | `^5` |
-| Tailwind CSS | `^4` |
-| Recharts | `^3.10.1` |
-| Routing | Next.js App Router |
-
-## Dashboard Routes
-
-- `/forecast` — forecast request form, cumulative forecast result, trajectory,
-  and recommendations.
-- `/accuracy` — combined model evaluation plus Day 7, 14, 21, and 30 views,
-  each comparing the published ViewCastLK model with the naive category
-  baseline.
-- `/methodology` — creator-friendly methodology and limitations.
-- `/about` — redirects to `/methodology`.
+- `/signup` — email/password registration with Turnstile verification.
+- `/login` — verified account sign-in with Turnstile verification.
+- `/forgot-password` — generic, anti-enumeration reset requests.
+- `/reset-password` — recovery-link-only password updates.
 
 ## Forecast Inputs
 
@@ -134,6 +101,9 @@ public variables:
 ```dotenv
 NEXT_PUBLIC_USE_MOCK_API=true
 NEXT_PUBLIC_PREDICTION_API_URL=
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=
 ```
 
 - `NEXT_PUBLIC_USE_MOCK_API=true` explicitly enables mock mode.
@@ -146,13 +116,18 @@ NEXT_PUBLIC_PREDICTION_API_URL=
 - Mock accuracy numbers are not invented. Combined and per-horizon values stay
   **Not published** until approved evaluation results are supplied.
 
-Never put private credentials or real service secrets in `NEXT_PUBLIC_`
-variables; they are included in browser JavaScript.
+The Supabase URL, Supabase publishable key, and Turnstile site key are public
+browser configuration. Never put a Supabase service-role/secret key, a
+Turnstile secret, database credentials, or another private credential in a
+`NEXT_PUBLIC_` variable; these values are frozen into browser JavaScript at
+build time.
 
 ## Prediction API Integration
 
-Browser code communicates only through `src/lib/api/forecast.ts`. It must not
-directly access Supabase, the YouTube Data API, Gemini, or model artefacts.
+Forecast browser code communicates only through `src/lib/api/forecast.ts`.
+Authentication uses the public Supabase browser client; browser code must not
+receive a Supabase service-role key, database credentials, YouTube or Gemini
+keys, or model artefacts.
 
 The frontend currently expects these API contracts:
 

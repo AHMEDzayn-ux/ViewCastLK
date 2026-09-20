@@ -14,6 +14,12 @@
   "source_checkpoint": "checkpoint12_monotonic_trajectory",
   "source_checkpoint_manifest_sha256": "e6d320914b4013b3681c1806f1b943c6d32811db68bf59bbf11068cbf5b670e5",
   "source_git_commit": "0870f25e27bd521fcb89eb87adc0b630dfc92311",
+  "training_video_ids": {
+    "path": "training_video_ids.txt",
+    "count": 40851,
+    "sha256": "1dc5486e97634ada92d2236399b6b9862a246bd3fa0b5761b80d6e72748d65ef",
+    "derivation": "Verified union of every development video used by the seven recorded training components after reproducing common split seed 241 and all manifest row counts."
+  },
   "runtime_versions_used_for_export": {
     "python": "3.11.9",
     "numpy": "2.4.4",

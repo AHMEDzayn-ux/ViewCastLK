@@ -51,6 +51,23 @@ class ErrorResponse(BaseModel):
     code: str
 
 
+class YouTubeAuthorizationResponse(BaseModel):
+    authorizationUrl: str
+
+
+class YouTubeConnectionResponse(BaseModel):
+    isConnected: bool
+    channelId: Optional[str] = None
+    channelTitle: Optional[str] = None
+    status: Optional[str] = None
+    connectedAt: Optional[str] = None
+    lastRefreshOkAt: Optional[str] = None
+
+
+class YouTubeDisconnectResponse(BaseModel):
+    disconnected: Literal[True] = True
+
+
 class ForecastRequest(BaseModel):
     title: str = Field(
         ..., description="Pre-publication video title (non-empty)"
@@ -117,6 +134,21 @@ class ForecastEstimate(BaseModel):
     )
 
 
+class PersonalizationAdjustment(BaseModel):
+    horizonDays: Literal[7, 14, 21, 30]
+    format: Literal["all", "short", "long"]
+    factor: float
+    nVideos: int
+
+
+class ForecastPersonalization(BaseModel):
+    applied: bool
+    format: Literal["short", "long"]
+    modelVersion: str
+    sharedEstimates: List[ForecastEstimate]
+    adjustments: List[PersonalizationAdjustment] = Field(default_factory=list)
+
+
 class UnavailableRecommendation(BaseModel):
     type: str = Field(..., description="Recommendation category type")
     reason: str = Field(..., description="Reason recommendation is unavailable")
@@ -161,6 +193,7 @@ class ForecastResponse(BaseModel):
     estimates: List[ForecastEstimate] = Field(
         ..., description="Forecast estimates for horizons 7, 14, 21, 30"
     )
+    personalization: ForecastPersonalization
     channelStats: Optional[ChannelStatsResponse] = Field(
         None, description="Resolved channel statistics"
     )

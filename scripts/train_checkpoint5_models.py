@@ -39,6 +39,10 @@ from viewcastlk_ml.modeling import (  # noqa: E402
     regression_metrics,
     views_from_log_predictions,
 )
+from viewcastlk_ml.training_ids import (  # noqa: E402
+    TRAINING_VIDEO_IDS_FILENAME,
+    write_training_video_ids,
+)
 
 
 HORIZONS = (7, 14, 21, 30)
@@ -549,6 +553,7 @@ def train_all_horizons(
     artifact_records: list[dict[str, Any]] = []
     dataset_records: list[dict[str, Any]] = []
     loaded_assignments: dict[int, pd.DataFrame] = {}
+    training_video_ids: set[str] = set()
 
     for horizon in HORIZONS:
         print(f"\nTraining independent day-{horizon} model")
@@ -581,6 +586,14 @@ def train_all_horizons(
             selected_n_estimators=selected_n_estimators,
             n_jobs=n_jobs,
             include_llm_scores=include_llm_scores,
+        )
+        development_rows = assignments.loc[assignments["partition"].eq("development")]
+        development_positions = development_rows["horizon_row_position"].astype(int).to_numpy()
+        inlier_mask, _, _ = log_target_inlier_mask(
+            np.log1p(y.iloc[development_positions]), sigma=OUTLIER_SIGMA
+        )
+        training_video_ids.update(
+            development_rows.iloc[np.flatnonzero(inlier_mask)]["video_id"].astype(str)
         )
 
         model_path = models_dir / f"day_{horizon}_model.joblib"
@@ -655,6 +668,9 @@ def train_all_horizons(
     feature_importance.to_csv(
         output_dir / "feature_importance_gain.csv", index=False
     )
+    training_video_id_count = write_training_video_ids(
+        training_video_ids, output_dir / TRAINING_VIDEO_IDS_FILENAME
+    )
 
     first_bundle = joblib.load(
         output_dir / artifact_records[0]["model_path"]
@@ -710,6 +726,10 @@ def train_all_horizons(
         },
         "datasets": dataset_records,
         "models": artifact_records,
+        "training_video_ids": {
+            "path": TRAINING_VIDEO_IDS_FILENAME,
+            "count": training_video_id_count,
+        },
     }
     (output_dir / "training_manifest.json").write_text(
         json.dumps(manifest, indent=2), encoding="utf-8"

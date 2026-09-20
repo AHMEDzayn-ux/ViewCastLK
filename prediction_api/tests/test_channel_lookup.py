@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 from fastapi.testclient import TestClient
+import pytest
 import sys
 import os
 
@@ -9,6 +10,7 @@ from app.main import app
 from app.youtube import fetch_channel_stats
 
 client = TestClient(app)
+pytestmark = pytest.mark.usefixtures("authenticated_api")
 
 
 def test_channel_lookup_success_by_handle():

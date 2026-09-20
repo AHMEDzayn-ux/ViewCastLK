@@ -74,6 +74,21 @@ export interface ForecastEstimate {
   cumulativeViews: number;
 }
 
+export interface PersonalizationAdjustment {
+  horizonDays: ForecastHorizon;
+  format: "all" | "short" | "long";
+  factor: number;
+  nVideos: number;
+}
+
+export interface ForecastPersonalization {
+  applied: boolean;
+  format: "short" | "long";
+  modelVersion: string;
+  sharedEstimates: ForecastEstimate[];
+  adjustments: PersonalizationAdjustment[];
+}
+
 export const RECOMMENDATION_TYPES = [
   "timing",
   "duration",
@@ -152,6 +167,7 @@ export interface ForecastResponse {
     ForecastEstimate,
     ForecastEstimate,
   ];
+  personalization?: ForecastPersonalization;
   recommendations: Recommendation[];
   unavailableRecommendations: UnavailableRecommendation[];
   completeness: DataCompleteness;

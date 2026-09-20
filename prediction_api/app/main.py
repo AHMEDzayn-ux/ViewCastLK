@@ -2,11 +2,16 @@ from datetime import datetime, timezone
 import uuid
 from typing import Any
 
-from fastapi import FastAPI, Request, status
+from fastapi import Depends, FastAPI, Query, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from app.config import ALLOWED_ORIGINS, DASHBOARD_ORIGIN, YOUTUBE_API_KEY
+from app.auth import (
+    AuthenticatedUser,
+    AuthenticationException,
+    require_authenticated_user,
+)
 from app.feature_builder import build_candidate_feature_frame
 from app.model_registry import ModelRegistry
 from app.schemas import (
@@ -17,15 +22,36 @@ from app.schemas import (
     DataCompletenessIssue,
     ErrorResponse,
     ForecastEstimate,
+    ForecastPersonalization,
     ForecastRequest,
     ForecastResponse,
     HealthResponse,
     ModelMetadata,
     TitleGuidance,
     UnavailableRecommendation,
+    YouTubeAuthorizationResponse,
+    YouTubeConnectionResponse,
+    YouTubeDisconnectResponse,
 )
 from app.title_analysis import analyze_title_tone
 from app.youtube import ChannelLookupException, fetch_channel_stats
+from app.creator_store import CreatorStore, CreatorStoreUnavailable
+from app.creator_lifecycle import disconnect_creator_connection
+from app.public_roster import (
+    PublicRosterStore,
+    request_channel_collection_if_available,
+)
+from app.youtube_oauth import (
+    YouTubeOAuthException,
+    build_authorization_url,
+    encrypt_refresh_token,
+    exchange_authorization_code,
+    fetch_authenticated_channel,
+    generate_oauth_state,
+    hash_oauth_state,
+    oauth_state_expiry,
+)
+from app.personalization import apply_forecast_adjustments, synchronize_creator_history
 
 app = FastAPI(
     title="ViewCastLK Prediction API",
@@ -36,13 +62,25 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
-    allow_headers=["*"],
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_headers=["Accept", "Authorization", "Content-Type"],
 )
 
 # Global model registry singleton
 model_registry = ModelRegistry()
+creator_store = CreatorStore()
+public_roster_store = PublicRosterStore()
+
+
+@app.exception_handler(AuthenticationException)
+async def authentication_exception_handler(
+    request: Request, exc: AuthenticationException
+):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"message": exc.message, "code": exc.code},
+    )
 
 
 @app.exception_handler(ChannelLookupException)
@@ -52,6 +90,29 @@ async def channel_lookup_exception_handler(
     return JSONResponse(
         status_code=exc.status_code,
         content={"message": exc.message, "code": exc.code},
+    )
+
+
+@app.exception_handler(YouTubeOAuthException)
+async def youtube_oauth_exception_handler(
+    request: Request, exc: YouTubeOAuthException
+):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"message": exc.message, "code": exc.code},
+    )
+
+
+@app.exception_handler(CreatorStoreUnavailable)
+async def creator_store_exception_handler(
+    request: Request, exc: CreatorStoreUnavailable
+):
+    return JSONResponse(
+        status_code=503,
+        content={
+            "message": "YouTube channel connection is temporarily unavailable.",
+            "code": "creator_storage_unavailable",
+        },
     )
 
 
@@ -98,17 +159,146 @@ async def accuracy_status():
     )
 
 
+@app.get(
+    "/auth/youtube/start",
+    response_model=YouTubeAuthorizationResponse,
+    responses={401: {"model": ErrorResponse}, 503: {"model": ErrorResponse}},
+)
+async def start_youtube_oauth(
+    authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
+):
+    state_value = generate_oauth_state()
+    authorization_url = build_authorization_url(state_value)
+    await creator_store.create_oauth_state(
+        state_hash=hash_oauth_state(state_value),
+        user_id=authenticated_user.id,
+        expires_at=oauth_state_expiry(),
+    )
+    # A JSON URL lets the browser authenticate this API request with its bearer
+    # token, then perform a normal top-level redirect without putting that token
+    # into a query string.
+    return YouTubeAuthorizationResponse(authorizationUrl=authorization_url)
+
+
+@app.get(
+    "/auth/youtube/callback",
+    responses={400: {"model": ErrorResponse}, 502: {"model": ErrorResponse}},
+)
+async def youtube_oauth_callback(
+    state_value: str = Query(alias="state", min_length=1, max_length=512),
+    code: str | None = Query(default=None, max_length=4096),
+    error: str | None = Query(default=None, max_length=256),
+):
+    state_record = await creator_store.consume_oauth_state(
+        state_hash=hash_oauth_state(state_value)
+    )
+    if state_record is None:
+        raise YouTubeOAuthException(
+            status_code=400,
+            message="This YouTube connection request is invalid or has expired.",
+            code="invalid_oauth_state",
+        )
+
+    if error or not code:
+        return RedirectResponse(
+            url=f"{DASHBOARD_ORIGIN.rstrip('/')}/account?youtube=not_connected",
+            status_code=303,
+        )
+
+    tokens = await exchange_authorization_code(code)
+    channel = await fetch_authenticated_channel(tokens.access_token)
+    encrypted_refresh_token = encrypt_refresh_token(
+        tokens.refresh_token, user_id=state_record.user_id
+    )
+    await creator_store.upsert_youtube_connection(
+        user_id=state_record.user_id,
+        channel_id=channel.channel_id,
+        channel_title=channel.title,
+        encrypted_refresh_token=encrypted_refresh_token,
+        scopes=tokens.scopes,
+    )
+    await request_channel_collection_if_available(
+        store=public_roster_store,
+        channel_id=channel.channel_id,
+    )
+    try:
+        await synchronize_creator_history(
+            user_id=state_record.user_id,
+            access_token=tokens.access_token,
+            channel=channel,
+            store=creator_store,
+            model_registry=model_registry,
+        )
+    except Exception:
+        # Connection remains valid even when the initial history sync fails;
+        # the scheduled retry path can recover without repeating OAuth.
+        await creator_store.set_youtube_connection_status(
+            user_id=state_record.user_id, status="error"
+        )
+    return RedirectResponse(
+        url=f"{DASHBOARD_ORIGIN.rstrip('/')}/account?youtube=connected",
+        status_code=303,
+    )
+
+
+@app.get(
+    "/creator/youtube-connection",
+    response_model=YouTubeConnectionResponse,
+    responses={401: {"model": ErrorResponse}, 503: {"model": ErrorResponse}},
+)
+async def youtube_connection_status(
+    authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
+):
+    connection = await creator_store.get_youtube_connection_status(
+        user_id=authenticated_user.id
+    )
+    if connection is None:
+        return YouTubeConnectionResponse(isConnected=False)
+    return YouTubeConnectionResponse(
+        isConnected=True,
+        channelId=connection["channel_id"],
+        channelTitle=connection["channel_title"],
+        status=connection["status"],
+        connectedAt=connection["connected_at"].isoformat(),
+        lastRefreshOkAt=(
+            connection["last_refresh_ok_at"].isoformat()
+            if connection["last_refresh_ok_at"]
+            else None
+        ),
+    )
+
+
+@app.delete(
+    "/creator/youtube-connection",
+    response_model=YouTubeDisconnectResponse,
+    responses={401: {"model": ErrorResponse}, 503: {"model": ErrorResponse}},
+)
+async def disconnect_youtube_connection(
+    authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
+):
+    await disconnect_creator_connection(
+        user_id=authenticated_user.id,
+        store=creator_store,
+    )
+    return YouTubeDisconnectResponse()
+
+
 @app.post(
     "/channel-lookup",
     response_model=ChannelStatsResponse,
     responses={
+        401: {"model": ErrorResponse},
         400: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
         502: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
     },
 )
-async def channel_lookup(payload: ChannelLookupRequest):
+async def channel_lookup(
+    payload: ChannelLookupRequest,
+    _authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
+):
     return fetch_channel_stats(payload.channelIdentifier, YOUTUBE_API_KEY)
 
 
@@ -116,13 +306,18 @@ async def channel_lookup(payload: ChannelLookupRequest):
     "/forecast",
     response_model=ForecastResponse,
     responses={
+        401: {"model": ErrorResponse},
         400: {"model": ErrorResponse},
         404: {"model": ErrorResponse},
         500: {"model": ErrorResponse},
         502: {"model": ErrorResponse},
+        503: {"model": ErrorResponse},
     },
 )
-async def create_forecast(payload: ForecastRequest):
+async def create_forecast(
+    payload: ForecastRequest,
+    _authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
+):
     # 1. Resolve real YouTube channel statistics using reusable service
     channel_stats = fetch_channel_stats(payload.channelIdentifier, YOUTUBE_API_KEY)
 
@@ -149,12 +344,12 @@ async def create_forecast(payload: ForecastRequest):
 
     horizons = (7, 14, 21, 30)
     raw_predictions: dict[int, float] = {}
-    estimates: list[ForecastEstimate] = []
+    shared_estimates: list[ForecastEstimate] = []
 
     for position, horizon in enumerate(horizons):
         raw_val = float(trajectory[0, position])
         raw_predictions[horizon] = raw_val
-        estimates.append(
+        shared_estimates.append(
             ForecastEstimate(
                 horizonDays=horizon,
                 cumulativeViews=max(0, int(round(raw_val))),
@@ -181,6 +376,31 @@ async def create_forecast(payload: ForecastRequest):
         status="experimental",
         trajectoryMonotonic=is_monotonic,
     )
+
+    shared_rounded = {
+        estimate.horizonDays: estimate.cumulativeViews for estimate in shared_estimates
+    }
+    adjustment_rows: list[dict[str, Any]] = []
+    try:
+        adjustment_rows = await creator_store.get_active_adjustments(
+            user_id=_authenticated_user.id,
+            model_version=artifact_ver,
+        )
+    except Exception:
+        # Personalization is optional. A creator-store outage must not prevent
+        # the authenticated user from receiving the unchanged shared forecast.
+        adjustment_rows = []
+    requested_format = "short" if payload.durationSeconds <= 60 else "long"
+    displayed_predictions, personalization_payload = apply_forecast_adjustments(
+        shared_predictions=shared_rounded,
+        adjustment_rows=adjustment_rows,
+        requested_format=requested_format,
+        model_version=artifact_ver,
+    )
+    estimates = [
+        ForecastEstimate(horizonDays=horizon, cumulativeViews=displayed_predictions[horizon])
+        for horizon in horizons
+    ]
 
     unavailable_recs = [
         UnavailableRecommendation(
@@ -225,6 +445,7 @@ async def create_forecast(payload: ForecastRequest):
     return ForecastResponse(
         forecastId=forecast_id,
         estimates=estimates,
+        personalization=ForecastPersonalization(**personalization_payload),
         channelStats=channel_stats,
         recommendations=[],
         unavailableRecommendations=unavailable_recs,

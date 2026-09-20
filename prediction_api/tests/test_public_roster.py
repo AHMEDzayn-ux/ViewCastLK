@@ -1,4 +1,10 @@
-from app.public_roster import PublicRosterStore
+import asyncio
+
+from app import config
+from app.public_roster import (
+    PublicRosterStore,
+    request_channel_collection_if_available,
+)
 
 
 class FakeCursor:
@@ -62,3 +68,22 @@ def test_new_public_channel_creates_idempotent_roster_request(monkeypatch):
     assert "public.roster_requests" in insert_query
     assert "on conflict (channel_id) do nothing" in insert_query.lower()
     assert parameters == ("UC-new",)
+
+
+def test_unconfigured_warehouse_is_skipped_without_connecting(monkeypatch):
+    monkeypatch.setattr(config, "SUPABASE_WAREHOUSE_DB_URL", "")
+    store = PublicRosterStore()
+    monkeypatch.setattr(
+        store,
+        "_connect",
+        lambda: (_ for _ in ()).throw(AssertionError("must not connect")),
+    )
+
+    result = asyncio.run(
+        request_channel_collection_if_available(
+            store=store,
+            channel_id="UC-optional",
+        )
+    )
+
+    assert result == "skipped"

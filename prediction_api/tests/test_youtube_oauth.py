@@ -11,6 +11,7 @@ from app.auth import AuthenticatedUser, require_authenticated_user
 from app.creator_store import OAuthStateRecord
 from app.main import app
 import app.main as main_module
+from app.public_roster import PublicRosterStore
 from app.youtube_oauth import (
     GoogleTokenResponse,
     GoogleCredentialRevoked,
@@ -44,6 +45,16 @@ def test_oauth_start_requires_authentication():
 
     assert response.status_code == 401
     assert response.json()["code"] == "authentication_required"
+
+
+def test_api_health_starts_without_warehouse_database(monkeypatch):
+    monkeypatch.setattr(config, "SUPABASE_WAREHOUSE_DB_URL", "")
+    monkeypatch.setattr(main_module, "public_roster_store", PublicRosterStore())
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ok"
 
 
 def test_oauth_start_binds_random_state_to_authenticated_user(monkeypatch):
@@ -154,6 +165,49 @@ def test_callback_state_is_consumed_before_google_denial(monkeypatch):
     assert response.headers["location"].endswith("/account?youtube=not_connected")
     store.consume_oauth_state.assert_awaited_once()
     store.upsert_youtube_connection.assert_not_awaited()
+
+
+def test_callback_succeeds_without_warehouse_database(monkeypatch):
+    _configure_oauth(monkeypatch)
+    monkeypatch.setattr(config, "SUPABASE_WAREHOUSE_DB_URL", "")
+    store = AsyncMock()
+    store.consume_oauth_state.return_value = OAuthStateRecord(user_id="user-a")
+    monkeypatch.setattr(main_module, "creator_store", store)
+    monkeypatch.setattr(main_module, "public_roster_store", PublicRosterStore())
+    monkeypatch.setattr(
+        main_module,
+        "exchange_authorization_code",
+        AsyncMock(
+            return_value=GoogleTokenResponse(
+                access_token="access",
+                refresh_token="refresh",
+                scopes=YOUTUBE_OAUTH_SCOPES,
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        main_module,
+        "fetch_authenticated_channel",
+        AsyncMock(
+            return_value=YouTubeChannelIdentity(
+                channel_id="UC-private",
+                title="Private creator",
+            )
+        ),
+    )
+    monkeypatch.setattr(
+        main_module, "synchronize_creator_history", AsyncMock()
+    )
+
+    response = client.get(
+        "/auth/youtube/callback",
+        params={"state": "one-time-state", "code": "authorization-code"},
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"].endswith("/account?youtube=connected")
+    store.upsert_youtube_connection.assert_awaited_once()
 
 
 def test_refresh_token_ciphertext_is_user_bound(monkeypatch):

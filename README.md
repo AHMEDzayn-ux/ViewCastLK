@@ -57,12 +57,13 @@ migrate_csv_to_supabase.py  # One-time: load pre-Supabase CSV data into the DB.
 .github/workflows/collect.yml  # Scheduled workflow: 4 runs/day (full + discovery-only).
 ```
 
-The full collector run unions the checked-in roster with every durable
-`roster_requests` channel ID. It uses the existing channel-resolution path,
+An optional future integration can union the checked-in roster with durable
+`roster_requests` channel IDs. It uses the existing channel-resolution path,
 marks successfully resolved requests fulfilled, and continues refreshing them
-from the database-backed roster on later runs. The queue stores public channel
-IDs only; private creator Analytics never enter the warehouse or training
-pipeline.
+from the database-backed roster on later runs. This integration is disabled
+for standalone creator personalization unless a warehouse URL is explicitly
+configured. The queue stores public channel IDs only; private creator Analytics
+never enter the warehouse or training pipeline.
 
 ## Data model: identity vs. snapshot tables
 

@@ -19,6 +19,10 @@ class PublicRosterUnavailable(Exception):
 
 
 class PublicRosterStore:
+    @property
+    def is_configured(self) -> bool:
+        return bool(config.SUPABASE_WAREHOUSE_DB_URL)
+
     def _connect(self):
         if not config.SUPABASE_WAREHOUSE_DB_URL:
             raise PublicRosterUnavailable("Public roster storage is not configured.")
@@ -60,3 +64,15 @@ class PublicRosterStore:
             raise PublicRosterUnavailable(
                 "Public roster storage is unavailable."
             ) from exc
+
+
+async def request_channel_collection_if_available(
+    *, store: PublicRosterStore, channel_id: str
+) -> str:
+    """Best-effort optional handoff; core personalization never depends on it."""
+    if not store.is_configured:
+        return "skipped"
+    try:
+        return await store.request_channel_collection(channel_id=channel_id)
+    except PublicRosterUnavailable:
+        return "skipped"

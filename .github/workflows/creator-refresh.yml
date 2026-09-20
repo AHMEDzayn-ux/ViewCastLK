@@ -32,7 +32,6 @@ jobs:
         working-directory: prediction_api
         env:
           SUPABASE_AUTH_DB_URL: ${{ secrets.SUPABASE_AUTH_DB_URL }}
-          SUPABASE_WAREHOUSE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
           GOOGLE_OAUTH_CLIENT_ID: ${{ secrets.GOOGLE_OAUTH_CLIENT_ID }}
           GOOGLE_OAUTH_CLIENT_SECRET: ${{ secrets.GOOGLE_OAUTH_CLIENT_SECRET }}
           TOKEN_ENCRYPTION_KEY: ${{ secrets.TOKEN_ENCRYPTION_KEY }}

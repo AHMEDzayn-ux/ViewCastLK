@@ -37,7 +37,10 @@ from app.title_analysis import analyze_title_tone
 from app.youtube import ChannelLookupException, fetch_channel_stats
 from app.creator_store import CreatorStore, CreatorStoreUnavailable
 from app.creator_lifecycle import disconnect_creator_connection
-from app.public_roster import PublicRosterStore, PublicRosterUnavailable
+from app.public_roster import (
+    PublicRosterStore,
+    request_channel_collection_if_available,
+)
 from app.youtube_oauth import (
     YouTubeOAuthException,
     build_authorization_url,
@@ -214,14 +217,10 @@ async def youtube_oauth_callback(
         encrypted_refresh_token=encrypted_refresh_token,
         scopes=tokens.scopes,
     )
-    try:
-        await public_roster_store.request_channel_collection(
-            channel_id=channel.channel_id
-        )
-    except PublicRosterUnavailable:
-        # Creator connection is independent of the public collector. The
-        # weekly refresh retries this idempotent roster handoff.
-        pass
+    await request_channel_collection_if_available(
+        store=public_roster_store,
+        channel_id=channel.channel_id,
+    )
     try:
         await synchronize_creator_history(
             user_id=state_record.user_id,

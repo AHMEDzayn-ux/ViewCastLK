@@ -37,10 +37,11 @@ have neither schema usage nor table grants. The server requires
 representing exactly 32 random bytes. These values are server-only secrets or
 configuration and must never use a `NEXT_PUBLIC_` prefix.
 
-The optional public collector handoff uses a separate
-`SUPABASE_WAREHOUSE_DB_URL` connection and writes only a public channel ID to
-`roster_requests`. It never copies Auth user IDs, OAuth credentials, private
-Analytics, or adjustment values into the warehouse.
+Creator personalization does not require or use the team warehouse. The
+future public-roster handoff is disabled unless the optional
+`SUPABASE_WAREHOUSE_DB_URL` is explicitly configured. When enabled, it writes
+only a public channel ID to `roster_requests`; it never copies Auth user IDs,
+OAuth credentials, private Analytics, or adjustment values into the warehouse.
 
 ## Creator refresh and model lifecycle
 
@@ -58,11 +59,11 @@ version-bound: old-version rows are never applied. Until the weekly job
 recomputes an adjustment for the new version, forecasts safely use the shared
 model result.
 
-The weekly workflow requires `SUPABASE_AUTH_DB_URL`, `SUPABASE_DB_URL`,
+The weekly workflow requires `SUPABASE_AUTH_DB_URL`,
 `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and
 `TOKEN_ENCRYPTION_KEY` as GitHub Actions secrets. Cloud Run uses the equivalent
-Secret Manager bindings documented in its deployment workflow, including the
-separate `SUPABASE_WAREHOUSE_DB_URL` binding.
+Secret Manager bindings documented in its deployment workflow. Neither core
+deployment path requires `SUPABASE_WAREHOUSE_DB_URL`.
 
 Title guidance uses `GEMINI_MODEL` first and then the semicolon-separated
 `GEMINI_FALLBACK_MODELS` list. Retryable quota or availability failures move to

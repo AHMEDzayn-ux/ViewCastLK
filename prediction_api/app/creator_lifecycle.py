@@ -6,7 +6,7 @@ from collections import Counter
 from typing import Any
 
 from app.personalization import synchronize_creator_history
-from app.public_roster import PublicRosterUnavailable
+from app.public_roster import request_channel_collection_if_available
 from app.youtube_oauth import (
     GoogleCredentialRevoked,
     decrypt_refresh_token,
@@ -44,12 +44,10 @@ async def refresh_creator_connection(
             store=store,
             model_registry=model_registry,
         )
-        try:
-            await roster_store.request_channel_collection(channel_id=channel.channel_id)
-        except PublicRosterUnavailable:
-            # Public collection is independent of private forecast refresh and
-            # will be retried by the next scheduled lifecycle run.
-            pass
+        await request_channel_collection_if_available(
+            store=roster_store,
+            channel_id=channel.channel_id,
+        )
     except Exception:
         await store.set_youtube_connection_status(user_id=user_id, status="error")
         return "temporary_failure"

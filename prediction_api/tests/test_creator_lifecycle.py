@@ -4,7 +4,9 @@ from unittest.mock import AsyncMock
 import pytest
 
 import app.creator_lifecycle as lifecycle
+from app import config
 from app.creator_store import CreatorStore
+from app.public_roster import PublicRosterStore
 from app.youtube_oauth import (
     GoogleCredentialRevoked,
     GoogleRefreshResponse,
@@ -50,6 +52,38 @@ async def test_successful_refresh_records_consent_and_recomputes(monkeypatch):
         model_registry=registry,
     )
     roster.request_channel_collection.assert_awaited_once_with(channel_id="UC-new")
+
+
+@pytest.mark.asyncio
+async def test_scheduled_refresh_succeeds_without_warehouse_database(monkeypatch):
+    monkeypatch.setattr(config, "SUPABASE_WAREHOUSE_DB_URL", "")
+    store = AsyncMock()
+    registry = object()
+    monkeypatch.setattr(
+        lifecycle, "decrypt_refresh_token", lambda *_args, **_kwargs: "refresh"
+    )
+    monkeypatch.setattr(
+        lifecycle,
+        "refresh_access_token",
+        AsyncMock(return_value=GoogleRefreshResponse("access", ("scope",))),
+    )
+    channel = YouTubeChannelIdentity("UC-private", "Creator", "UU-uploads")
+    monkeypatch.setattr(
+        lifecycle, "fetch_authenticated_channel", AsyncMock(return_value=channel)
+    )
+    sync = AsyncMock()
+    monkeypatch.setattr(lifecycle, "synchronize_creator_history", sync)
+
+    result = await lifecycle.refresh_creator_connection(
+        connection={"user_id": "user-a", "encrypted_refresh_token": "ciphertext"},
+        store=store,
+        model_registry=registry,
+        roster_store=PublicRosterStore(),
+    )
+
+    assert result == "refreshed"
+    sync.assert_awaited_once()
+    store.set_youtube_connection_status.assert_not_awaited()
 
 
 @pytest.mark.asyncio

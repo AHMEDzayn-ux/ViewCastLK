@@ -14,10 +14,28 @@ first and names every path it tried when it gives up.
 Override with the VIEWCASTLK_DATASET environment variable.
 """
 import os
+import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_NAME = "viewcastlk_training_table.parquet"
+
+# Fixed locations, so scripts in any subfolder of Analysis/ never count "..".
+# Scripts in subfolders find this file by walking up from their own location:
+#     sys.path.insert(0, str(next(p for p in Path(__file__).resolve().parents
+#                                 if (p / "paths.py").is_file())))
+ANALYSIS = HERE                       # ViewCastLK/Analysis
+REPO = HERE.parent                    # ViewCastLK
+SCRIPTS = REPO / "scripts"            # collection code: storage.py, youtube_client.py
+DSEP = REPO.parent                    # project folder holding Dataset/, Deliverables/
+DELIVERABLES = DSEP / "Deliverables"
+REFERENCE_DATASETS = DSEP / "Reference Datasets"
+
+
+def use_repo_scripts() -> None:
+    """Make scripts/storage.py and scripts/youtube_client.py importable."""
+    if str(SCRIPTS) not in sys.path:
+        sys.path.insert(0, str(SCRIPTS))
 
 
 def dataset_path(name: str = DEFAULT_NAME) -> Path:

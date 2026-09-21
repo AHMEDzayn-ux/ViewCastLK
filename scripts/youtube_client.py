@@ -1,5 +1,7 @@
 import os
+import random
 import sys
+import time
 from dotenv import load_dotenv
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -16,6 +18,32 @@ youtube = build("youtube", "v3", developerKey=API_KEY)
 # set; it deliberately does NOT retry quotaExceeded, which stays terminal and is
 # handled separately by the caller.
 API_RETRIES = 5
+
+# What googleapiclient will not retry for us. It retries a 403 only when the
+# reason is userRateLimitExceeded or rateLimitExceeded; a bare "forbidden" is
+# not retried at all. YouTube returns that for transient authorisation
+# hiccups, sometimes blaming a myRating parameter the request never sent, and
+# one such response on one chunk of fifty ids ended a run on 21 September 2026
+# that had already gathered most of the roster.
+TRANSIENT_403_ATTEMPTS = 4
+
+
+def _is_quota_exceeded(error: HttpError) -> bool:
+    """quotaExceeded is terminal. The day's allowance is gone and retrying
+    only burns the run's remaining time."""
+    return error.resp.status == 403 and "quotaExceeded" in str(error)
+
+
+def _execute(request, attempts: int = TRANSIENT_403_ATTEMPTS):
+    """execute(), plus a backoff retry for the 403s the library leaves alone."""
+    for attempt in range(attempts):
+        try:
+            return request.execute(num_retries=API_RETRIES)
+        except HttpError as error:
+            last_attempt = attempt == attempts - 1
+            if last_attempt or error.resp.status != 403 or _is_quota_exceeded(error):
+                raise
+            time.sleep(2 ** attempt + random.random())
 
 
 CHANNEL_PARTS = "snippet,statistics,contentDetails,topicDetails"
@@ -224,18 +252,54 @@ VIDEO_PARTS = "snippet,statistics,contentDetails,status,liveStreamingDetails,pla
 PLAYER_MAX_HEIGHT = 8192
 
 
-def get_video_details(video_ids: list[str]) -> list[dict]:
-    """1 unit per call regardless of how many ids (up to 50 ids per call).
-    Batch ids together instead of calling once per video."""
-    details = []
+def iter_video_details(video_ids: list[str], skip_failed_chunks: bool = True,
+                       max_skipped_chunks: int = 25):
+    """Yield details fifty videos at a time, so the caller can write as it goes.
+
+    1 unit per call regardless of how many ids. A chunk that still fails after
+    its retries is reported and skipped rather than ending the run: those fifty
+    videos are picked up by the next run, which is a far smaller loss than
+    discarding every chunk already paid for. quotaExceeded still propagates,
+    because there is nothing left to spend, and so does any status other than
+    403. Past max_skipped_chunks the failures are not transient any more and
+    the run stops, so a broken request cannot masquerade as a thin collection.
+    """
+    skipped = 0
     for i in range(0, len(video_ids), 50):
         chunk = video_ids[i:i + 50]
-        response = youtube.videos().list(
-            part=VIDEO_PARTS,
-            id=",".join(chunk),
-            maxHeight=PLAYER_MAX_HEIGHT,
-        ).execute(num_retries=API_RETRIES)
-        details.extend(response.get("items", []))
+        try:
+            response = _execute(youtube.videos().list(
+                part=VIDEO_PARTS,
+                id=",".join(chunk),
+                maxHeight=PLAYER_MAX_HEIGHT,
+            ))
+        except HttpError as error:
+            # Only a non-quota 403 is treated as transient. Anything else is a
+            # real fault: a 400 means the request itself is wrong, and skipping
+            # it would repeat silently for every chunk and end the run claiming
+            # success with nothing collected.
+            transient = error.resp.status == 403 and not _is_quota_exceeded(error)
+            if not (transient and skip_failed_chunks):
+                raise
+            skipped += 1
+            print(f"  videos.list: skipped ids {i}-{i + len(chunk) - 1} "
+                  f"after {TRANSIENT_403_ATTEMPTS} attempts "
+                  f"(HTTP {error.resp.status})")
+            if skipped > max_skipped_chunks:
+                raise RuntimeError(
+                    f"{skipped} chunks failed with a transient 403; that is no "
+                    f"longer transient, so the run stops rather than reporting "
+                    f"a near-empty collection as a success"
+                ) from error
+            continue
+        yield response.get("items", [])
+
+
+def get_video_details(video_ids: list[str]) -> list[dict]:
+    """Every chunk in one list, for callers that do not write incrementally."""
+    details = []
+    for items in iter_video_details(video_ids):
+        details.extend(items)
     return details
 
 

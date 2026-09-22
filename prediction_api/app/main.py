@@ -12,6 +12,7 @@ from app.auth import (
     AuthenticationException,
     require_authenticated_user,
 )
+from app.channel_history import history_features_for_channel
 from app.feature_builder import build_candidate_feature_frame
 from app.model_registry import ModelRegistry
 from app.schemas import (
@@ -325,8 +326,18 @@ async def create_forecast(
     title_guidance, internal_tone_analysis = analyze_title_tone(payload.title)
 
     # 3. Build 30-column model-ready raw feature frame
+    #
+    # The channel's own recent record is read from the public warehouse for
+    # the moment the video is planned for. A channel the warehouse has not
+    # collected, or a warehouse that cannot be reached, yields the same values
+    # as a channel's first video, which is a state the model was trained on.
+    history = await history_features_for_channel(
+        channel_id=channel_stats.channelId,
+        category_name=payload.category,
+        is_short=getattr(payload, "isShort", None),
+    )
     try:
-        df = build_candidate_feature_frame(payload, channel_stats)
+        df = build_candidate_feature_frame(payload, channel_stats, history=history)
     except Exception:
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

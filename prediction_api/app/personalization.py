@@ -93,14 +93,21 @@ def apply_forecast_adjustments(
     requested_format: str,
     model_version: str,
 ) -> tuple[dict[int, int], dict[str, Any]]:
-    matching = [
-        row
-        for row in adjustment_rows
-        if row.get("model_version") == model_version
-        and row.get("horizon") in (7, 14, 21, 30)
-        and row.get("format") in ("all", "short", "long")
-        and float(row.get("factor", 0)) > 0
-    ]
+    matching = []
+    for row in adjustment_rows:
+        if (
+            row.get("model_version") != model_version
+            or row.get("horizon") not in (7, 14, 21, 30)
+            or row.get("format") not in ("all", "short", "long")
+        ):
+            continue
+        try:
+            factor = float(row.get("factor", 0))
+            n_videos = int(row.get("n_videos", 0))
+        except (TypeError, ValueError, OverflowError):
+            continue
+        if math.isfinite(factor) and factor > 0 and n_videos > 0:
+            matching.append(row)
     personalized: dict[int, int] = {}
     used: list[dict[str, Any]] = []
     for horizon in (7, 14, 21, 30):
@@ -123,7 +130,10 @@ def apply_forecast_adjustments(
                 }
             )
 
-    applied = any(row["nVideos"] > 0 for row in used)
+    applied = any(
+        personalized[horizon] != shared_predictions[horizon]
+        for horizon in (7, 14, 21, 30)
+    )
     if not applied:
         personalized = dict(shared_predictions)
     return personalized, {

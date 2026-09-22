@@ -261,7 +261,7 @@ function isChannelStats(value: unknown): value is ChannelStats {
 async function requestJson<T>(
   path: string,
   init?: RequestInit,
-  requiresAuthentication = false,
+  authentication: "none" | "optional" | "required" = "none",
 ): Promise<T> {
   if (!API_BASE_URL) {
     throw new PredictionApiError(
@@ -273,11 +273,11 @@ async function requestJson<T>(
 
   let authorizationHeader: Record<string, string> = {};
 
-  if (requiresAuthentication) {
+  if (authentication !== "none") {
     const { data, error } = await supabase.auth.getSession();
     const accessToken = data.session?.access_token;
 
-    if (error || !accessToken) {
+    if (error || (authentication === "required" && !accessToken)) {
       throw new PredictionApiError(
         "Sign in again to continue forecasting.",
         401,
@@ -285,7 +285,9 @@ async function requestJson<T>(
       );
     }
 
-    authorizationHeader = { Authorization: `Bearer ${accessToken}` };
+    if (accessToken) {
+      authorizationHeader = { Authorization: `Bearer ${accessToken}` };
+    }
   }
 
   const response = await fetch(API_BASE_URL + path, {
@@ -345,7 +347,7 @@ export async function generateForecast(
     method: "POST",
     body: JSON.stringify(request),
     signal: options?.signal,
-  }, true);
+  }, "optional");
 
   if (!isForecastResponse(response)) {
     throw new PredictionApiError(
@@ -393,7 +395,7 @@ export async function lookupChannelStats(
     method: "POST",
     body: JSON.stringify({ channelIdentifier: normalizedIdentifier }),
     signal: options?.signal,
-  }, true);
+  }, "required");
 
   if (!isChannelStats(response)) {
     throw new PredictionApiError(

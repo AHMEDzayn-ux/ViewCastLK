@@ -38,13 +38,17 @@ const response: ForecastResponse = {
 const mocks = vi.hoisted(() => ({
   generateForecast: vi.fn(),
   saveForecastHistory: vi.fn(),
-  user: { id: "authenticated-user", email: "creator@example.com" },
+  user: { id: "authenticated-user", email: "creator@example.com" } as {
+    id: string;
+    email: string;
+  } | null,
+  isLoading: false,
 }));
 
 vi.mock("@/components/auth/AuthProvider", () => ({
   useAuth: () => ({
-    isAuthenticated: true,
-    isLoading: false,
+    isAuthenticated: Boolean(mocks.user),
+    isLoading: mocks.isLoading,
     user: mocks.user,
   }),
 }));
@@ -58,10 +62,17 @@ vi.mock("@/lib/history/forecast-history", () => ({
 }));
 
 vi.mock("@/components/dashboard/ForecastForm", () => ({
-  default: ({ onSubmit }: { onSubmit: (value: ForecastRequest) => void }) => (
-    <button type="button" onClick={() => onSubmit(request)}>
-      Run forecast
-    </button>
+  default: ({
+    onSubmit,
+    canLookupChannel,
+  }: {
+    onSubmit: (value: ForecastRequest) => void;
+    canLookupChannel: boolean;
+  }) => (
+    <>
+      <button type="button" onClick={() => onSubmit(request)}>Run forecast</button>
+      {canLookupChannel && <button type="button">Retrieve details</button>}
+    </>
   ),
 }));
 
@@ -90,6 +101,8 @@ vi.mock("@/components/dashboard/ErrorState", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.user = { id: "authenticated-user", email: "creator@example.com" };
+  mocks.isLoading = false;
   mocks.generateForecast.mockResolvedValue(response);
   mocks.saveForecastHistory.mockResolvedValue(undefined);
 });
@@ -97,6 +110,19 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("ForecastPage history saving", () => {
+  it("lets a guest open and submit the forecast without saving history", async () => {
+    mocks.user = null;
+    render(<ForecastPage />);
+
+    expect(screen.getByRole("button", { name: "Run forecast" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Retrieve details" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Run forecast" }));
+
+    expect(await screen.findByText("Result forecast-1")).toBeTruthy();
+    expect(mocks.generateForecast).toHaveBeenCalledWith(request);
+    expect(mocks.saveForecastHistory).not.toHaveBeenCalled();
+  });
+
   it("saves one successful forecast with the authenticated user ID", async () => {
     render(<ForecastPage />);
     fireEvent.click(screen.getByRole("button", { name: "Run forecast" }));

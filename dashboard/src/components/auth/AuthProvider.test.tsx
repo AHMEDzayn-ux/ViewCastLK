@@ -121,6 +121,9 @@ describe("AuthProvider and account navigation", () => {
       screen.getByRole("link", { name: "Create account" }).getAttribute("href"),
     ).toBe("/signup");
     expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Forecast" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "History" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Account" })).toBeNull();
   });
 
   it("shows authenticated navigation after INITIAL_SESSION and reacts to SIGNED_OUT", () => {
@@ -134,6 +137,7 @@ describe("AuthProvider and account navigation", () => {
     expect(
       screen.getByRole("link", { name: "History" }).getAttribute("href"),
     ).toBe("/history");
+    expect(screen.getByRole("link", { name: "Account" }).getAttribute("href")).toBe("/account");
     expect(screen.queryByRole("link", { name: "Sign in" })).toBeNull();
     expect(screen.queryByRole("link", { name: "Create account" })).toBeNull();
 

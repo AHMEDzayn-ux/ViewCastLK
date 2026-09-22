@@ -68,6 +68,7 @@ interface ForecastFormProps {
   onSubmit: (request: ForecastRequest) => void;
   onReset: () => void;
   isLoading: boolean;
+  canLookupChannel: boolean;
 }
 
 const INITIAL_VALUES: ForecastFormValues = {
@@ -199,6 +200,7 @@ export default function ForecastForm({
   onSubmit,
   onReset,
   isLoading,
+  canLookupChannel,
 }: ForecastFormProps) {
   const [values, setValues] = useState<ForecastFormValues>(INITIAL_VALUES);
   const [errors, setErrors] = useState<ForecastValidationErrors>({});
@@ -566,18 +568,20 @@ export default function ForecastForm({
                 )
               }
             />
-            <button
-              type="button"
-              className="secondary-button channel-lookup-button"
-              disabled={
-                isLoading ||
-                isLookupLoading ||
-                !values.channelIdentifier.trim()
-              }
-              onClick={handleChannelLookup}
-            >
-              {isLookupLoading ? "Retrieving…" : "Retrieve details"}
-            </button>
+            {canLookupChannel && (
+              <button
+                type="button"
+                className="secondary-button channel-lookup-button"
+                disabled={
+                  isLoading ||
+                  isLookupLoading ||
+                  !values.channelIdentifier.trim()
+                }
+                onClick={handleChannelLookup}
+              >
+                {isLookupLoading ? "Retrieving…" : "Retrieve details"}
+              </button>
+            )}
           </div>
 
           {isLookupLoading && (

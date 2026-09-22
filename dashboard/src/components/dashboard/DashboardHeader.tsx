@@ -56,7 +56,7 @@ export default function DashboardHeader() {
               ...(isAuthenticated
                 ? [
                     { href: "/history", label: "History" },
-                    { href: "/account", label: "Channel" },
+                    { href: "/account", label: "Account" },
                   ]
                 : []),
             ].map((item) => {

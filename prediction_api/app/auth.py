@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL
@@ -105,4 +105,19 @@ async def require_authenticated_user(
     ):
         raise _authentication_required()
 
+    return await validate_access_token(credentials.credentials)
+
+
+async def optional_authenticated_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+) -> AuthenticatedUser | None:
+    if request.headers.get("authorization") is None:
+        return None
+    if (
+        credentials is None
+        or credentials.scheme.lower() != "bearer"
+        or not credentials.credentials.strip()
+    ):
+        raise _invalid_session()
     return await validate_access_token(credentials.credentials)

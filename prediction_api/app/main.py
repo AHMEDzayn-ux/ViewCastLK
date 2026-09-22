@@ -10,6 +10,7 @@ from app.config import ALLOWED_ORIGINS, DASHBOARD_ORIGIN, YOUTUBE_API_KEY
 from app.auth import (
     AuthenticatedUser,
     AuthenticationException,
+    optional_authenticated_user,
     require_authenticated_user,
 )
 from app.channel_history import history_features_for_channel
@@ -317,7 +318,7 @@ async def channel_lookup(
 )
 async def create_forecast(
     payload: ForecastRequest,
-    _authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
+    authenticated_user: AuthenticatedUser | None = Depends(optional_authenticated_user),
 ):
     # 1. Resolve real YouTube channel statistics using reusable service
     channel_stats = fetch_channel_stats(payload.channelIdentifier, YOUTUBE_API_KEY)
@@ -392,15 +393,16 @@ async def create_forecast(
         estimate.horizonDays: estimate.cumulativeViews for estimate in shared_estimates
     }
     adjustment_rows: list[dict[str, Any]] = []
-    try:
-        adjustment_rows = await creator_store.get_active_adjustments(
-            user_id=_authenticated_user.id,
-            model_version=artifact_ver,
-        )
-    except Exception:
-        # Personalization is optional. A creator-store outage must not prevent
-        # the authenticated user from receiving the unchanged shared forecast.
-        adjustment_rows = []
+    if authenticated_user is not None:
+        try:
+            adjustment_rows = await creator_store.get_active_adjustments(
+                user_id=authenticated_user.id,
+                model_version=artifact_ver,
+            )
+        except Exception:
+            # Personalization is optional. A creator-store outage must not prevent
+            # the authenticated user from receiving the unchanged shared forecast.
+            adjustment_rows = []
     is_short = payload.isShort
     if is_short is None:
         is_short = payload.durationSeconds <= 60

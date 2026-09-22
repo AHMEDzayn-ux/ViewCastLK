@@ -218,6 +218,26 @@ def test_unconnected_or_stale_adjustment_keeps_shared_forecast():
     assert metadata["adjustments"] == []
 
 
+@pytest.mark.parametrize("factor", [float("nan"), float("inf"), "invalid", 0])
+def test_invalid_adjustment_keeps_shared_forecast(factor):
+    shared = {7: 100, 14: 200, 21: 300, 30: 400}
+    displayed, metadata = apply_forecast_adjustments(
+        shared_predictions=shared,
+        adjustment_rows=[{
+            "horizon": 7,
+            "format": "all",
+            "factor": factor,
+            "n_videos": 10,
+            "model_version": "model-v1",
+        }],
+        requested_format="long",
+        model_version="model-v1",
+    )
+
+    assert displayed == shared
+    assert metadata["applied"] is False
+
+
 def test_format_adjustment_wins_then_falls_back_to_all():
     shared = {7: 100, 14: 200, 21: 300, 30: 400}
     rows = [

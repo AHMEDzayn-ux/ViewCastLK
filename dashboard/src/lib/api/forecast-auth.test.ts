@@ -81,17 +81,25 @@ describe("authenticated Prediction API requests", () => {
     );
   });
 
-  it("does not call the protected API when no authenticated session exists", async () => {
+  it("sends a guest forecast without Authorization", async () => {
     mocks.getSession.mockResolvedValueOnce({
       data: { session: null },
       error: null,
     });
     const { generateForecast } = await import("./forecast");
 
-    await expect(generateForecast(request)).rejects.toMatchObject({
+    await expect(generateForecast(request)).resolves.toEqual(response);
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    expect(init?.headers).not.toHaveProperty("Authorization");
+  });
+
+  it("keeps the separate channel lookup authenticated", async () => {
+    mocks.getSession.mockResolvedValueOnce({ data: { session: null }, error: null });
+    const { lookupChannelStats } = await import("./forecast");
+
+    await expect(lookupChannelStats("@creator")).rejects.toMatchObject({
       status: 401,
       code: "session_required",
-      message: "Sign in again to continue forecasting.",
     });
     expect(fetch).not.toHaveBeenCalled();
   });

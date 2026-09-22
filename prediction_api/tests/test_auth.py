@@ -1,10 +1,12 @@
 from unittest.mock import AsyncMock, patch
 
 import httpx
+import pytest
 from fastapi.testclient import TestClient
 
-from app.auth import AuthenticatedUser, require_authenticated_user
+from app.auth import AuthenticatedUser, optional_authenticated_user
 from app.main import app
+import app.main as main_module
 from app.schemas import ChannelStatsResponse
 
 
@@ -34,13 +36,19 @@ def test_health_remains_public():
     assert response.status_code == 200
 
 
-def test_forecast_without_authorization_is_denied():
-    response = client.post("/forecast", json=VALID_FORECAST_PAYLOAD)
-    assert response.status_code == 401
-    assert response.json() == {
-        "message": "Authentication is required to use this endpoint.",
-        "code": "authentication_required",
-    }
+def test_guest_forecast_is_shared_and_never_reads_creator_adjustments():
+    with patch("app.main.fetch_channel_stats", return_value=MOCK_CHANNEL_STATS), patch.object(
+        main_module.creator_store,
+        "get_active_adjustments",
+        new=AsyncMock(side_effect=AssertionError("guest queried creator data")),
+    ) as get_adjustments:
+        response = client.post("/forecast", json=VALID_FORECAST_PAYLOAD)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["personalization"]["applied"] is False
+    assert body["estimates"] == body["personalization"]["sharedEstimates"]
+    get_adjustments.assert_not_awaited()
 
 
 def test_malformed_bearer_header_is_denied():
@@ -50,7 +58,7 @@ def test_malformed_bearer_header_is_denied():
         headers={"Authorization": "Basic not-a-bearer-token"},
     )
     assert response.status_code == 401
-    assert response.json()["code"] == "authentication_required"
+    assert response.json()["code"] == "invalid_session"
 
 
 def test_invalid_token_is_denied_without_echoing_token():
@@ -95,14 +103,14 @@ def test_auth_upstream_failure_is_not_reported_as_invalid_token():
 
 
 def test_mocked_authenticated_user_reaches_existing_forecast_behavior():
-    app.dependency_overrides[require_authenticated_user] = lambda: AuthenticatedUser(
+    app.dependency_overrides[optional_authenticated_user] = lambda: AuthenticatedUser(
         id="test-user"
     )
     try:
         with patch("app.main.fetch_channel_stats", return_value=MOCK_CHANNEL_STATS):
             response = client.post("/forecast", json=VALID_FORECAST_PAYLOAD)
     finally:
-        app.dependency_overrides.pop(require_authenticated_user, None)
+        app.dependency_overrides.pop(optional_authenticated_user, None)
 
     assert response.status_code == 200
     assert [item["horizonDays"] for item in response.json()["estimates"]] == [
@@ -117,5 +125,19 @@ def test_channel_lookup_also_requires_authentication():
     response = client.post(
         "/channel-lookup", json={"channelIdentifier": "@samplechannel"}
     )
+    assert response.status_code == 401
+    assert response.json()["code"] == "authentication_required"
+
+
+@pytest.mark.parametrize(
+    ("method", "path"),
+    [
+        ("get", "/auth/youtube/start"),
+        ("get", "/creator/youtube-connection"),
+        ("delete", "/creator/youtube-connection"),
+    ],
+)
+def test_creator_endpoints_reject_guests(method, path):
+    response = getattr(client, method)(path)
     assert response.status_code == 401
     assert response.json()["code"] == "authentication_required"

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ForecastForm from "@/components/dashboard/ForecastForm";
@@ -32,16 +31,15 @@ export default function ForecastPage() {
   }, [user]);
 
   async function runForecast(request: ForecastRequest) {
+    const forecastUserId = userRef.current?.id;
     setState({ status: "loading", request });
 
     try {
       const response = await generateForecast(request);
       let historySaveNotice: string | undefined;
-      const authenticatedUser = userRef.current;
-
-      if (authenticatedUser) {
+      if (forecastUserId && userRef.current?.id === forecastUserId) {
         try {
-          await saveForecastHistory(authenticatedUser.id, request, response);
+          await saveForecastHistory(forecastUserId, request, response);
         } catch {
           historySaveNotice =
             "Forecast generated, but it could not be saved to your history.";
@@ -85,26 +83,6 @@ export default function ForecastPage() {
     );
   }
 
-  if (!isAuthenticated) {
-    // This client-side gate is UX only. The prediction API validates the
-    // bearer token independently before using quota or running inference.
-    return (
-      <main className="page-shell forecast-page">
-        <section className="result-state">
-          <p className="result-state__eyebrow">Sign in required</p>
-          <h1>Sign in to generate a forecast</h1>
-          <p>
-            Forecast generation and channel lookup are available to verified
-            ViewCastLK accounts.
-          </p>
-          <Link className="primary-button history-state__action" href="/login?next=%2Fforecast">
-            Sign in to forecast
-          </Link>
-        </section>
-      </main>
-    );
-  }
-
   return (
     <main className="page-shell forecast-page">
       <header className="page-intro">
@@ -122,6 +100,7 @@ export default function ForecastPage() {
             onSubmit={runForecast}
             onReset={() => setState({ status: "idle" })}
             isLoading={isLoading}
+            canLookupChannel={isAuthenticated}
           />
         </div>
 

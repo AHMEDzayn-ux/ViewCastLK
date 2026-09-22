@@ -213,6 +213,41 @@ def test_personalization_is_scoped_to_authenticated_user_and_current_model(mock_
     )
 
 
+@patch("app.main.fetch_channel_stats", return_value=MOCK_CHANNEL_STATS)
+def test_authenticated_user_without_adjustments_gets_shared_forecast(mock_fetch):
+    with patch.object(
+        main_module.creator_store,
+        "get_active_adjustments",
+        new=AsyncMock(return_value=[]),
+    ) as get_adjustments:
+        response = client.post("/forecast", json=VALID_FORECAST_PAYLOAD)
+
+    assert response.status_code == 200
+    assert response.json()["personalization"]["applied"] is False
+    get_adjustments.assert_awaited_once_with(
+        user_id="test-authenticated-user",
+        model_version="viewcastlk_monotonic_trajectory_experimental_v1",
+    )
+
+
+@patch("app.main.fetch_channel_stats", return_value=MOCK_CHANNEL_STATS)
+def test_wrong_model_adjustment_is_not_applied(mock_fetch):
+    with patch.object(
+        main_module.creator_store,
+        "get_active_adjustments",
+        new=AsyncMock(return_value=[{
+            "horizon": 7, "format": "all", "factor": 2.0,
+            "n_videos": 10, "model_version": "old-model",
+        }]),
+    ):
+        response = client.post("/forecast", json=VALID_FORECAST_PAYLOAD)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["personalization"]["applied"] is False
+    assert body["estimates"] == body["personalization"]["sharedEstimates"]
+
+
 @patch("app.main.fetch_channel_stats")
 def test_duration_format_fallback_is_used_when_is_short_is_absent(mock_fetch):
     mock_fetch.return_value = MOCK_CHANNEL_STATS

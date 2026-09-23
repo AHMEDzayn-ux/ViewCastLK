@@ -7,7 +7,7 @@ REFRESH_CHANNELS env var (the workflow sets it per cron slot):
        them up by id fifty at a time (~19 units for the whole roster; it was
        ~1,282 when every handle was resolved singly).
     2. Discovers videos published since the last poll.
-    3. Snapshots every video still inside its 60-day tracking window.
+    3. Snapshots every video still inside its 31-day tracking window.
 
   Discovery-only run (REFRESH_CHANNELS=false, the other two of the four runs):
     - Skips the channel refresh entirely. Subscriber and view counts barely move
@@ -74,7 +74,14 @@ from storage import (
 )
 from channel_roster import load_handles
 
-TRACKING_WINDOW_DAYS = 60
+# Day 30 is the last horizon, plus the same 24h buffer used elsewhere so a late
+# run still lands an observation near the mark. This was 60 days, as headroom in
+# case views were still climbing at day 30 and a later horizon was needed. The
+# labels say they are not: median day-30 views are 1.02x day-7 for long-form and
+# 1.04x for Shorts, across 42,799 videos with at least 100 views at day 7. Days
+# 31-60 fed no label and cost about half the snapshot quota, 3,700 units a day
+# of the 7,300 measured on 22 September 2026, and half of each day's partition.
+TRACKING_WINDOW_DAYS = 31
 
 # >24h buffer so a daily cron never drops a video to timing drift. Overridable
 # because a one-off backfill is the same operation over a longer reach: uploads

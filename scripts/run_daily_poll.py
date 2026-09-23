@@ -53,6 +53,7 @@ from youtube_client import (
     get_channel_videos_since_by_playlist,
     get_video_categories,
     get_video_details,
+    iter_video_details,
     flatten_channel_identity,
     flatten_channel_snapshot,
     flatten_video_identity,
@@ -103,6 +104,11 @@ USE_RSS = os.environ.get("USE_RSS", "true").strip().lower() == "true"
 
 CHANNEL_BATCH_SIZE = 50
 
+# How many videos are gathered before they are written. Ten API chunks: small
+# enough that a failure loses little, large enough that the run does not make a
+# database round trip per fifty videos.
+SNAPSHOT_PERSIST_BATCH = int(os.environ.get("SNAPSHOT_PERSIST_BATCH", "500"))
+
 # Full run refreshes channel stats; discovery-only run skips that to save quota.
 # Defaults to a full run when unset (e.g. a local manual invocation).
 REFRESH_CHANNELS = os.environ.get("REFRESH_CHANNELS", "true").strip().lower() == "true"
@@ -121,6 +127,40 @@ class QuotaExceeded(Exception):
 
 def is_quota_exceeded(e: HttpError) -> bool:
     return e.resp.status == 403 and "quotaExceeded" in str(e)
+
+
+def _persist_videos(batch: list[dict], captured_at: str,
+                    category_names: dict, known_video_ids: set[str]) -> tuple[int, int]:
+    """Writes one batch of video details and returns (edited, newly seen).
+
+    The channel phase has always written per batch so a failure partway
+    through loses at most the current one. The snapshot phase did not: it
+    gathered every chunk first and wrote afterwards, so a single failed chunk
+    discarded the whole run along with the quota already spent on it.
+
+    Title, description and tags arrive in the same response as the statistics,
+    so comparing them costs nothing. videos keeps what was seen first; edits
+    since then are recorded separately.
+    """
+    if not batch:
+        return 0, 0
+
+    seen_before = [v["id"] for v in batch if v["id"] in known_video_ids]
+    shas = load_metadata_shas(seen_before)
+    changes, updated = metadata_changes.detect(batch, shas, captured_at)
+    if changes:
+        append_rows(changes, METADATA_CHANGES_TABLE)
+    save_metadata_shas(updated)
+
+    unseen = [v for v in batch if v["id"] not in known_video_ids]
+    append_rows([flatten_video_identity(v, category_names) for v in unseen], VIDEOS_TABLE)
+    # After videos, so a shape row never exists without its video.
+    append_rows([flatten_video_shape(v, captured_at) for v in unseen], VIDEO_SHAPES_TABLE)
+    append_rows([flatten_video_snapshot(v, captured_at) for v in batch], VIDEO_SNAPSHOTS_TABLE)
+    # Later batches must not write an identity row for a video this one just
+    # added, which a duplicate id across chunks would otherwise cause.
+    known_video_ids.update(v["id"] for v in unseen)
+    return len(changes), len(unseen)
 
 
 def _persist_channels(batch_channels: list[dict], captured_at: str,
@@ -333,29 +373,39 @@ def main():
               f"({len(active_video_ids)} still-active + {len(new_video_ids)} new)...")
 
         category_names = get_video_categories()
-        details = get_video_details(list(video_ids_to_snapshot))
 
-        # Title, description and tags arrived in the same response as the
-        # statistics, so comparing them costs nothing. videos keeps what was
-        # seen first; edits since then are recorded separately.
-        seen_before = [v["id"] for v in details if v["id"] in known_video_ids]
-        shas = load_metadata_shas(seen_before)
-        changes, updated = metadata_changes.detect(details, shas, captured_at)
-        if changes:
-            append_rows(changes, METADATA_CHANGES_TABLE)
-        save_metadata_shas(updated)
-        print(f"  metadata: {len(changes)} video(s) edited since last seen")
+        totals = {"edited": 0, "new": 0, "snapshotted": 0}
+        pending: list[dict] = []
 
-        unseen_details = [v for v in details if v["id"] not in known_video_ids]
-        append_rows([flatten_video_identity(v, category_names) for v in unseen_details], VIDEOS_TABLE)
-        # After videos, so a shape row never exists without its video.
-        append_rows([flatten_video_shape(v, captured_at) for v in unseen_details], VIDEO_SHAPES_TABLE)
-        append_rows([flatten_video_snapshot(v, captured_at) for v in details], VIDEO_SNAPSHOTS_TABLE)
+        def flush() -> None:
+            if not pending:
+                return
+            edited, unseen = _persist_videos(pending, captured_at,
+                                             category_names, known_video_ids)
+            totals["edited"] += edited
+            totals["new"] += unseen
+            totals["snapshotted"] += len(pending)
+            pending.clear()
+
+        try:
+            for items in iter_video_details(list(video_ids_to_snapshot)):
+                pending.extend(items)
+                if len(pending) >= SNAPSHOT_PERSIST_BATCH:
+                    flush()
+        except HttpError as error:
+            # Those units are spent whether or not the rows are kept, so keep
+            # them before surfacing the failure.
+            flush()
+            if is_quota_exceeded(error):
+                raise QuotaExceeded() from error
+            raise
+        flush()
+        print(f"  metadata: {totals['edited']} video(s) edited since last seen")
 
         elapsed = time.time() - start
         run_kind = "full" if REFRESH_CHANNELS else "discovery-only"
         print(f"Done ({run_kind}) in {elapsed:.1f}s. {channel_count} channels, "
-              f"{len(unseen_details)} new videos, {len(details)} total snapshotted.")
+              f"{totals['new']} new videos, {totals['snapshotted']} total snapshotted.")
 
     except QuotaExceeded:
         elapsed = time.time() - start

@@ -3,8 +3,8 @@
 import { formatForecastViews } from "@/lib/forecast-format";
 import {
   CartesianGrid,
-  Line,
-  LineChart,
+  Area,
+  AreaChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -33,7 +33,7 @@ export default function ForecastChart({ estimates }: ForecastChartProps) {
       <div className="section-heading">
         <div>
           <p className="section-kicker">Trajectory</p>
-          <h3 id="trajectory-title">How the total builds over time</h3>
+          <h3 id="trajectory-title">The view ahead</h3>
         </div>
       </div>
 
@@ -43,10 +43,11 @@ export default function ForecastChart({ estimates }: ForecastChartProps) {
         aria-label="Line chart of cumulative forecast views on days 7, 14, 21, and 30"
       >
         <ResponsiveContainer width="100%" height={280}>
-          <LineChart
+          <AreaChart
             data={data}
             margin={{ top: 12, right: 16, left: 4, bottom: 4 }}
           >
+            <defs><linearGradient id="forecast-area-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="var(--accent)" stopOpacity={0.2} /><stop offset="100%" stopColor="var(--accent)" stopOpacity={0.01} /></linearGradient></defs>
             <CartesianGrid
               stroke="var(--border)"
               strokeDasharray="2 5"
@@ -82,16 +83,18 @@ export default function ForecastChart({ estimates }: ForecastChartProps) {
                 "Cumulative views",
               ]}
             />
-            <Line
+            <Area
               type="monotone"
               dataKey="cumulativeViews"
               name="Cumulative views"
               stroke="var(--accent)"
               strokeWidth={3}
+              fill="url(#forecast-area-fill)"
+              isAnimationActive={false}
               dot={{ fill: "var(--surface)", strokeWidth: 3, r: 5 }}
               activeDot={{ fill: "var(--accent)", strokeWidth: 0, r: 6 }}
             />
-          </LineChart>
+          </AreaChart>
         </ResponsiveContainer>
       </div>
 

@@ -5,121 +5,71 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { isDevelopmentMockMode } from "@/lib/api/forecast";
+import StudioIcon, { type StudioIconName } from "./StudioIcon";
 
-const NAVIGATION = [
-  { href: "/forecast", label: "Forecast" },
-  { href: "/accuracy", label: "Accuracy" },
-  { href: "/methodology", label: "Methodology & Limitations" },
+const NAVIGATION: { href: string; label: string; icon: StudioIconName; group: string }[] = [
+  { href: "/forecast", label: "New forecast", icon: "forecast", group: "Your workspace" },
+  { href: "/history", label: "Forecast history", icon: "history", group: "Your workspace" },
+  { href: "/account", label: "Your channel", icon: "channel", group: "Your workspace" },
+  { href: "/accuracy", label: "Model accuracy", icon: "chart", group: "Behind the forecast" },
+  { href: "/methodology", label: "How it works", icon: "book", group: "Behind the forecast" },
 ];
 
 export default function DashboardHeader() {
   const pathname = usePathname();
-  const isMockMode = isDevelopmentMockMode();
-  const { isAuthenticated, isLoading, isSigningOut, signOut } = useAuth();
+  const { user, isAuthenticated, isLoading, isSigningOut, signOut } = useAuth();
   const [signOutError, setSignOutError] = useState<string | null>(null);
+  const currentPage = NAVIGATION.find((item) => item.href === pathname)?.label
+    ?? ({ "/login": "Welcome back", "/signup": "Create your account", "/privacy": "Privacy", "/forgot-password": "Reset password", "/reset-password": "New password" }[pathname] || "Creator studio");
+  const displayName = String(user?.user_metadata?.display_name || user?.email?.split("@")[0] || "Creator");
 
   async function handleSignOut() {
     setSignOutError(null);
-    const wasSuccessful = await signOut();
-
-    if (!wasSuccessful) {
-      setSignOutError("We could not sign you out. Please try again.");
-    }
+    if (!(await signOut())) setSignOutError("We could not sign you out. Please try again.");
   }
 
   return (
-    <header className="site-header">
-      {isMockMode && (
-        <div className="development-notice" role="status">
-          <span>Development adapter active</span>
-          <span>Forecasts are illustrative; evaluation values are not simulated.</span>
-        </div>
-      )}
-
-      <div className="site-header__inner">
-        <Link className="brand" href="/forecast" aria-label="ViewCastLK forecast home">
-          <span className="brand__mark" aria-hidden="true">
-            <span>VC</span>
-            <i />
-            <span>LK</span>
-          </span>
-          <span className="brand__name">
-            <strong>ViewCastLK</strong>
-            <small>Pre-publication view forecasting</small>
-          </span>
+    <>
+      <aside className="studio-sidebar" aria-label="Creator workspace">
+        <Link className="studio-brand" href="/forecast" aria-label="ViewCastLK forecast home">
+          <span className="studio-brand__symbol" aria-hidden="true"><i /><i /><i /></span>
+          <span>ViewCast<span className="studio-brand__lk">LK</span><small>CREATOR STUDIO</small></span>
         </Link>
-
-        <div className="site-header__actions">
-          <nav className="primary-nav" aria-label="Primary navigation">
-            {[
-              ...NAVIGATION,
-              ...(isAuthenticated
-                ? [
-                    { href: "/history", label: "History" },
-                    { href: "/account", label: "Account" },
-                  ]
-                : []),
-            ].map((item) => {
-              const isCurrent =
-                pathname === item.href ||
-                (item.href === "/methodology" && pathname === "/about");
-
-              return (
-                <Link
-                  href={item.href}
-                  key={item.href}
-                  aria-current={isCurrent ? "page" : undefined}
-                  className={
-                    isCurrent
-                      ? "primary-nav__link is-current"
-                      : "primary-nav__link"
-                  }
-                >
-                  {item.label}
-                </Link>
-              );
-            })}
-          </nav>
-
-          <nav className="auth-navigation" aria-label="Account navigation">
-            {isLoading ? (
-              <span
-                className="auth-navigation__placeholder"
-                aria-label="Loading account status"
-              >
-                Account
-              </span>
-            ) : isAuthenticated ? (
-              <button
-                className="auth-navigation__button"
-                type="button"
-                disabled={isSigningOut}
-                onClick={handleSignOut}
-              >
-                {isSigningOut ? "Signing out..." : "Sign out"}
-              </button>
-            ) : (
-              <>
-                <Link className="auth-navigation__link" href="/login">
-                  Sign in
-                </Link>
-                <Link
-                  className="auth-navigation__link auth-navigation__link--primary"
-                  href="/signup"
-                >
-                  Create account
-                </Link>
-              </>
-            )}
-
-            {signOutError && (
-              <p className="auth-navigation__error" role="alert">
-                {signOutError}
-              </p>
-            )}
-          </nav>
+        <div className="workspace-label"><span className="workspace-label__icon">V</span><span>Your creative space<small>Sri Lanka edition</small></span><span className="workspace-label__dot" /></div>
+        <nav className="studio-nav" aria-label="Primary navigation">
+          {["Your workspace", "Behind the forecast"].map((group) => (
+            <div className="studio-nav__group" key={group}>
+              <p>{group}</p>
+              {NAVIGATION.filter((item) => item.group === group).map((item) => {
+                const current = pathname === item.href || (item.href === "/methodology" && pathname === "/about");
+                return <Link key={item.href} href={item.href} className={`studio-nav__link${current ? " is-current" : ""}`} aria-current={current ? "page" : undefined}><StudioIcon name={item.icon} /><span>{item.label}</span>{current && <span className="studio-nav__active-dot" />}</Link>;
+              })}
+            </div>
+          ))}
+        </nav>
+        <div className="sidebar-note">
+          <StudioIcon name="spark" width="26" height="26" />
+          <h2>Your next idea starts here.</h2>
+          <p>A little more perspective before you press publish.</p>
+          <Link href="/methodology">Explore the approach <StudioIcon name="arrow" width="16" height="16" /></Link>
         </div>
-      </div>
-    </header>
+        <div className="sidebar-account" aria-label={isLoading ? "Loading account status" : undefined}>
+          <span className="account-avatar" aria-hidden="true">{isAuthenticated ? String(displayName).slice(0, 1).toUpperCase() : "G"}</span>
+          <span className="sidebar-account__name"><strong>{isLoading ? "Opening studio…" : isAuthenticated ? displayName : "Guest workspace"}</strong><small>{isAuthenticated ? "Your personal workspace" : "Free to explore"}</small></span>
+          {isAuthenticated && <button type="button" title="Sign out" aria-label={isSigningOut ? "Signing out..." : "Sign out"} className="icon-button" disabled={isSigningOut} onClick={handleSignOut}><StudioIcon name="logout" width="17" height="17" /></button>}
+          {signOutError && <p role="alert" className="sidebar-account__error">{signOutError}</p>}
+        </div>
+      </aside>
+      <header className="studio-topbar">
+        <div className="studio-breadcrumb"><span>Workspace</span><span aria-hidden="true">/</span><strong>{currentPage}</strong></div>
+        <div className="studio-topbar__actions">
+          <Link href="/accuracy" className="model-status"><span />Experimental model</Link>
+          {!isLoading && !isAuthenticated && <Link href="/signup" className="studio-signup">Create account</Link>}
+          {!isLoading && !isAuthenticated && <Link href="/login" className="studio-signin">Sign in <StudioIcon name="arrow" width="15" height="15" /></Link>}
+          {!isLoading && isAuthenticated && <Link href="/account" className="topbar-avatar" aria-label="Your account">{String(displayName).slice(0, 1).toUpperCase()}</Link>}
+        </div>
+      </header>
+      {isDevelopmentMockMode() && <div className="studio-mock-notice" role="status">Example mode · Forecasts are illustrative. Evaluation values are not simulated.</div>}
+    </>
   );
 }

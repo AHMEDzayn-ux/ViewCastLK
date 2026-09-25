@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/AuthProvider";
+import StudioIcon from "@/components/dashboard/StudioIcon";
 import {
   disconnectYouTubeConnection,
   getYouTubeConnection,
@@ -18,7 +19,7 @@ type ViewState =
 
 const STATUS_COPY: Record<string, string> = {
   pending_sync: "Connected. Your private channel history is waiting for its first sync.",
-  active: "Connected and ready for personalised forecasts.",
+  active: "Channel history synced. Eligible videos can contribute to personal forecast adjustments.",
   reauth_required: "Google access needs to be renewed. Reconnect your channel.",
   error: "The last channel sync did not complete. We will retry it automatically.",
 };
@@ -104,9 +105,12 @@ export default function YouTubeConnectionCard() {
 
   if (!isAuthenticated) {
     return (
-      <section className="connection-card">
+      <section className="connection-card connection-card--guest">
+        <span className="connection-symbol"><StudioIcon name="channel" width="36" height="36" /></span>
+        <div>
         <h2>Sign in to connect a channel</h2>
         <p>Your YouTube connection is private to your ViewCastLK account.</p>
+        </div>
         <Link className="primary-button" href="/login?next=%2Faccount">
           Sign in
         </Link>
@@ -130,6 +134,7 @@ export default function YouTubeConnectionCard() {
   return (
     <section className="connection-card" aria-labelledby="youtube-connection-title">
       <div>
+        <span className="connection-symbol"><StudioIcon name="channel" width="32" height="32" /></span>
         <p className="section-kicker">Private creator data</p>
         <h2 id="youtube-connection-title">
           {isConnected
@@ -142,6 +147,7 @@ export default function YouTubeConnectionCard() {
             <p className="connection-card__identity">
               Channel ID: <span>{connection.channelId}</span>
             </p>
+            <div className="connection-sync"><span className={`connection-sync__badge${connection.status === "active" ? " is-synced" : ""}`}>{connection.status === "active" ? "History synced" : connection.status === "error" ? "Sync needs attention" : connection.status === "reauth_required" ? "Reconnect needed" : "Sync pending"}</span>{connection.lastRefreshOkAt && <span>Last successful refresh: {new Date(connection.lastRefreshOkAt).toLocaleString("en-LK", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Colombo" })} SLT</span>}</div>
           </>
         ) : (
           <p>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import StudioIcon from "./StudioIcon";
 import type {
   AudioLanguage,
   ChannelStats,
@@ -163,7 +164,7 @@ function Field({
   children,
 }: FieldProps) {
   return (
-    <div className="field">
+    <div className={`field${["title", "audioLanguage", "channelIdentifier"].includes(id) ? " field--wide" : ""}`}>
       <div className="field__heading">
         <label className="field__label" htmlFor={id}>
           {label}
@@ -172,12 +173,12 @@ function Field({
           {requirement === "required" ? "Required" : "Optional"}
         </span>
       </div>
+      {children}
       {hint && (
         <p className="field__hint" id={id + "-hint"}>
           {hint}
         </p>
       )}
-      {children}
       {error && (
         <p className="field__error" id={id + "-error"} role="alert">
           {error}
@@ -304,6 +305,12 @@ export default function ForecastForm({
 
   const inputClass = (error?: string) =>
     "field-control" + (error ? " field-control--invalid" : "");
+  const publishingPlanSummary = [
+    values.plannedPublishDay,
+    values.plannedPublishHour === ""
+      ? ""
+      : `${values.plannedPublishHour.padStart(2, "0")}:00 SLT`,
+  ].filter(Boolean).join(" · ") || "Optional";
 
   return (
     <form
@@ -315,11 +322,9 @@ export default function ForecastForm({
       aria-busy={isLoading}
     >
       <div className="form-section__header">
-        <div>
-          <p className="section-kicker">Forecast request</p>
-          <h2 id="forecast-form-title">Tell us about the planned video</h2>
-        </div>
-        <p>Required details are marked clearly.</p>
+        <span className="panel-icon"><StudioIcon name="play" /></span>
+        <div><h2 id="forecast-form-title">Your video brief</h2><p>Start with the details. We’ll take it from here.</p></div>
+        <span className="brief-badge">NEW IDEA</span>
       </div>
 
       <div className="form-grid">
@@ -333,13 +338,13 @@ export default function ForecastForm({
           <textarea
             id="title"
             name="title"
-            rows={3}
+            rows={2}
             dir="auto"
             value={values.title}
             maxLength={200}
             disabled={isLoading}
             className={inputClass(errors.title)}
-            placeholder="Enter the title you plan to publish"
+            placeholder="Give your next big idea a title…"
             aria-invalid={Boolean(errors.title)}
             aria-describedby={describedBy("title", true, errors.title)}
             onChange={(event) =>
@@ -353,7 +358,7 @@ export default function ForecastForm({
           label="Video category"
           requirement="required"
           error={errors.category}
-          hint="Choose the category you plan to use when publishing on YouTube."
+          hint="Your YouTube publishing category."
         >
           <select
             id="category"
@@ -385,7 +390,7 @@ export default function ForecastForm({
           label="Planned duration"
           requirement="required"
           error={errors.duration}
-          hint="Enter the expected finished length."
+          hint="The expected finished length."
         >
           <div className="duration-fields">
             <label>
@@ -447,7 +452,7 @@ export default function ForecastForm({
         </Field>
 
         <fieldset
-          className="field"
+          className="field field--wide format-field"
           aria-invalid={Boolean(errors.videoFormat)}
           aria-describedby={[
             "videoFormat-hint",
@@ -463,8 +468,7 @@ export default function ForecastForm({
             </span>
           </div>
           <p className="field__hint" id="videoFormat-hint">
-            Choose the YouTube publishing format. Duration alone cannot identify
-            a Short reliably.
+            Select the format you’ll publish on YouTube.
           </p>
           <div className="choice-group">
             {[
@@ -487,6 +491,7 @@ export default function ForecastForm({
                     )
                   }
                 />
+                <StudioIcon name={option.value === "short" ? "spark" : "channel"} width="21" height="21" />
                 <span>{option.label}</span>
               </label>
             ))}
@@ -503,7 +508,7 @@ export default function ForecastForm({
           label="Audio language"
           requirement="required"
           error={errors.audioLanguage}
-          hint="Choose the main spoken or sung language; use Mixed / multilingual when several are used."
+          hint="The main spoken or sung language in your video."
         >
           <select
             id="audioLanguage"
@@ -540,7 +545,7 @@ export default function ForecastForm({
           label="YouTube channel"
           requirement="required"
           error={errors.channelIdentifier}
-          hint="Use a channel URL, @handle, or channel ID. Channel statistics are retrieved automatically."
+          hint="Channel URL, @handle, or ID. We’ll retrieve its public statistics."
         >
           <div className="channel-lookup-control">
             <input
@@ -550,7 +555,7 @@ export default function ForecastForm({
               value={values.channelIdentifier}
               disabled={isLoading || isLookupLoading}
               className={inputClass(errors.channelIdentifier)}
-              placeholder="https://youtube.com/@yourchannel"
+              placeholder="@yourchannel"
               autoCapitalize="none"
               autoCorrect="off"
               spellCheck="false"
@@ -634,14 +639,8 @@ export default function ForecastForm({
         </Field>
       </div>
 
-      <section className="optional-section" aria-labelledby="timing-title">
-        <div>
-          <p className="section-kicker">Optional</p>
-          <h3 id="timing-title">Publishing plan</h3>
-          <p>
-            Leave either field blank if the publishing schedule is not decided.
-          </p>
-        </div>
+      <details className="optional-section">
+        <summary><StudioIcon name="clock" width="18" height="18" /><span>Have a publishing plan?</span><small>{publishingPlanSummary}</small><StudioIcon name="plus" width="16" height="16" /></summary>
 
         <div className="form-grid form-grid--timing">
           <Field
@@ -716,11 +715,13 @@ export default function ForecastForm({
             </select>
           </Field>
         </div>
-      </section>
+      </details>
 
       <div className="form-actions">
         <button className="primary-button" type="submit" disabled={isLoading}>
+          <StudioIcon name="spark" width="17" height="17" />
           {isLoading ? "Generating forecast…" : "Generate forecast"}
+          <StudioIcon name="arrow" width="17" height="17" />
         </button>
         <button
           className="secondary-button"
@@ -731,6 +732,7 @@ export default function ForecastForm({
           Clear form
         </button>
       </div>
+      <p className="form-footnote"><StudioIcon name="shield" width="13" height="13" /> A planning perspective, never a promise of views.</p>
 
       {hasValidationErrors(errors) && (
         <p className="sr-only" role="alert" aria-live="assertive">

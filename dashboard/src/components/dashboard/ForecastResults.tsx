@@ -4,6 +4,7 @@ import DegradedNotice from "./DegradedNotice";
 import ForecastChart from "./ForecastChart";
 import HorizonCards from "./HorizonCards";
 import RecommendationCards from "./RecommendationCards";
+import StudioIcon from "./StudioIcon";
 
 interface ForecastResultsProps {
   response: ForecastResponse;
@@ -32,7 +33,7 @@ export default function ForecastResults({
       <header className="forecast-results__header">
         <div>
           <p className="section-kicker">Forecast ready</p>
-          <h2 id="forecast-results-title">Four planning checkpoints</h2>
+          <h2 id="forecast-results-title">Your next 30 days, in view.</h2>
           <p className="forecast-results__subject" dir="auto">
             {request.title}
           </p>
@@ -46,14 +47,15 @@ export default function ForecastResults({
             }
           >
             {response.model.dataSource === "mock"
-              ? "Development forecast"
-              : "Prediction API"}
+              ? "Illustrative example"
+              : response.personalization?.applied ? "Channel-adjusted" : "Shared forecast"}
           </span>
           <span>{generatedAt} SLT</span>
         </div>
       </header>
 
       <DegradedNotice completeness={response.completeness} />
+      {!response.personalization?.applied && response.model.dataSource !== "mock" && <div className="shared-forecast-note"><StudioIcon name="chart" width="17" height="17" /><p>Built with the shared model. No personal adjustment was applied to this forecast.</p></div>}
       {response.personalization?.applied && (
         <section className="personalization-notice" role="status">
           <div>
@@ -89,10 +91,10 @@ export default function ForecastResults({
           </ul>
         </details>
       )}
-      <RecommendationCards
+      {(response.recommendations.length > 0 || response.unavailableRecommendations.length > 0) && <RecommendationCards
         recommendations={response.recommendations}
         unavailableRecommendations={response.unavailableRecommendations}
-      />
+      />}
 
       {response.titleGuidance && (
         <section className="title-guidance" aria-labelledby="title-guidance-title">

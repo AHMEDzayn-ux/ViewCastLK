@@ -3,6 +3,7 @@ import Link from "next/link";
 import AuthProvider from "@/components/auth/AuthProvider";
 import DashboardHeader from "@/components/dashboard/DashboardHeader";
 import "./globals.css";
+import "./studio.css";
 
 export const metadata: Metadata = {
   title: {
@@ -33,11 +34,10 @@ export default function RootLayout({
           <footer className="site-footer">
             <div>
               <p>
-                <strong>ViewCastLK</strong> · University project for Sri Lankan
-                creator forecasting
+                Made for the next generation of Sri Lankan creators.
               </p>
               <p>
-                Not affiliated with or endorsed by YouTube or Google. ·{" "}
+                ViewCastLK · Research project · Not affiliated with or endorsed by YouTube or Google. ·{" "}
                 <Link href="/privacy">Privacy</Link>
               </p>
             </div>

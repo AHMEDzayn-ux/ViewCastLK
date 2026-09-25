@@ -110,6 +110,39 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("ForecastPage history saving", () => {
+  it("opens and closes an explicitly labelled example without an API call or history write", () => {
+    render(<ForecastPage />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Try an example" })[0]);
+
+    expect(screen.getByText("Result illustrative-example")).toBeTruthy();
+    expect(screen.getByText(/Illustrative numbers, not a real prediction/)).toBeTruthy();
+    expect(mocks.generateForecast).not.toHaveBeenCalled();
+    expect(mocks.saveForecastHistory).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close example" }));
+    expect(screen.getByRole("heading", { name: "Your forecast canvas" })).toBeTruthy();
+    expect(screen.queryByText("Result illustrative-example")).toBeNull();
+  });
+
+  it("lets creators explore checkpoints without inventing a view estimate", () => {
+    render(<ForecastPage />);
+    const firstWeek = screen.getByRole("button", { name: "Day 7" });
+    fireEvent.click(firstWeek);
+
+    expect(firstWeek.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Day 30" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByText("The first impression")).toBeTruthy();
+    expect(screen.getByLabelText("No forecast yet")).toBeTruthy();
+    expect(mocks.generateForecast).not.toHaveBeenCalled();
+  });
+
+  it("disables the example action while a real forecast is running", () => {
+    mocks.generateForecast.mockReturnValueOnce(new Promise(() => {}));
+    render(<ForecastPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Run forecast" }));
+    expect((screen.getByRole("button", { name: "Try an example" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("lets a guest open and submit the forecast without saving history", async () => {
     mocks.user = null;
     render(<ForecastPage />);

@@ -5,11 +5,13 @@ import Link from "next/link";
 import { useAuth } from "@/components/auth/AuthProvider";
 import ForecastForm from "@/components/dashboard/ForecastForm";
 import ForecastResults from "@/components/dashboard/ForecastResults";
+import ForecastOnboarding, { type CreatorAudience } from "@/components/dashboard/ForecastOnboarding";
 import ErrorState from "@/components/dashboard/ErrorState";
 import LoadingState from "@/components/dashboard/LoadingState";
 import ForecastPreview from "@/components/dashboard/ForecastPreview";
 import StudioIcon from "@/components/dashboard/StudioIcon";
 import { generateForecast } from "@/lib/api/forecast";
+import { getYouTubeConnection } from "@/lib/api/youtube-connection";
 import { saveForecastHistory } from "@/lib/history/forecast-history";
 import type { ForecastRequest, ForecastResponse } from "@/types/forecast";
 
@@ -28,6 +30,26 @@ type PageState =
 export default function ForecastPage() {
   const { isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
   const [state, setState] = useState<PageState>({ status: "idle" });
+  const [connection, setConnection] = useState<{
+    userId: string; audience: CreatorAudience;
+  } | null>(null);
+  const audience: CreatorAudience = !user
+    ? "guest"
+    : connection?.userId === user.id ? connection.audience : "checking";
+
+  const userId = user?.id;
+  useEffect(() => {
+    if (!userId) return;
+    let active = true;
+    getYouTubeConnection()
+      .then((status) => {
+        if (active) setConnection({ userId, audience: status.isConnected ? "connected" : "unconnected" });
+      })
+      .catch(() => {
+        if (active) setConnection({ userId, audience: "checking" });
+      });
+    return () => { active = false; };
+  }, [userId]);
   const userRef = useRef(user);
   const outputRef = useRef<HTMLDivElement>(null);
   const isShowingExample = state.status === "success" && Boolean(state.isExample);
@@ -156,7 +178,7 @@ export default function ForecastPage() {
 
         <div className="forecast-workspace__output" ref={outputRef} aria-live="polite">
           {state.status === "idle" && (
-            <ForecastPreview onExample={showExample} isAuthenticated={isAuthenticated} />
+            <ForecastPreview onExample={showExample} audience={audience} />
           )}
 
           {state.status === "loading" && <LoadingState />}
@@ -176,7 +198,9 @@ export default function ForecastPage() {
               response={state.response}
               historySaveNotice={state.historySaveNotice}
               onChangeInputs={focusForm}
+              channelConnected={audience === "connected"}
             />
+            {!state.isExample && <ForecastOnboarding audience={audience} />}
             </>
           )}
         </div>

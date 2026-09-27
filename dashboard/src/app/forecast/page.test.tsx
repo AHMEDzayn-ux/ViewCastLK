@@ -38,6 +38,7 @@ const response: ForecastResponse = {
 const mocks = vi.hoisted(() => ({
   generateForecast: vi.fn(),
   saveForecastHistory: vi.fn(),
+  getYouTubeConnection: vi.fn(),
   user: { id: "authenticated-user", email: "creator@example.com" } as {
     id: string;
     email: string;
@@ -59,6 +60,10 @@ vi.mock("@/lib/api/forecast", () => ({
 
 vi.mock("@/lib/history/forecast-history", () => ({
   saveForecastHistory: mocks.saveForecastHistory,
+}));
+
+vi.mock("@/lib/api/youtube-connection", () => ({
+  getYouTubeConnection: mocks.getYouTubeConnection,
 }));
 
 vi.mock("@/components/dashboard/ForecastForm", () => ({
@@ -105,6 +110,7 @@ beforeEach(() => {
   mocks.isLoading = false;
   mocks.generateForecast.mockResolvedValue(response);
   mocks.saveForecastHistory.mockResolvedValue(undefined);
+  mocks.getYouTubeConnection.mockResolvedValue({ isConnected: false });
 });
 
 afterEach(() => cleanup());
@@ -154,6 +160,48 @@ describe("ForecastPage history saving", () => {
     expect(await screen.findByText("Result forecast-1")).toBeTruthy();
     expect(mocks.generateForecast).toHaveBeenCalledWith(request);
     expect(mocks.saveForecastHistory).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "Want forecasts tailored to your channel?" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Create free account/ }).getAttribute("href")).toBe("/signup");
+    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login?next=%2Fforecast");
+    expect(screen.getByText("Personalized forecasts")).toBeTruthy();
+    expect(mocks.getYouTubeConnection).not.toHaveBeenCalled();
+  });
+
+  it("shows no signup or connection prompt while auth is loading", () => {
+    mocks.isLoading = true;
+    mocks.user = null;
+    render(<ForecastPage />);
+    expect(screen.getByText("Checking your account")).toBeTruthy();
+    expect(screen.queryByText("Want forecasts tailored to your channel?")).toBeNull();
+    expect(screen.queryByText("Make forecasts more personal")).toBeNull();
+  });
+
+  it("invites an unconnected creator through the existing account flow", async () => {
+    render(<ForecastPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Run forecast" }));
+    expect(await screen.findByText("Result forecast-1")).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "Make forecasts more personal" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Connect YouTube/ }).getAttribute("href")).toBe("/account");
+    expect(screen.queryByText("Want forecasts tailored to your channel?")).toBeNull();
+  });
+
+  it("hides onboarding promotions for connected creators", async () => {
+    mocks.getYouTubeConnection.mockResolvedValue({ isConnected: true });
+    render(<ForecastPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Run forecast" }));
+    expect(await screen.findByText("Result forecast-1")).toBeTruthy();
+    await waitFor(() => expect(mocks.getYouTubeConnection).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("Want forecasts tailored to your channel?")).toBeNull();
+    expect(screen.queryByText("Make forecasts more personal")).toBeNull();
+  });
+
+  it("does not guess connection state when the lookup fails", async () => {
+    mocks.getYouTubeConnection.mockRejectedValue(new Error("connection unavailable"));
+    render(<ForecastPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Run forecast" }));
+    expect(await screen.findByText("Result forecast-1")).toBeTruthy();
+    await waitFor(() => expect(mocks.getYouTubeConnection).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText("Make forecasts more personal")).toBeNull();
   });
 
   it("saves one successful forecast with the authenticated user ID", async () => {

@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/AuthProvider";
+import GuestAccessPrompt from "@/components/auth/GuestAccessPrompt";
 import {
   deleteForecastHistory,
   listForecastHistory,
@@ -14,7 +14,7 @@ import type { ForecastHistoryRow } from "@/types/history";
 type HistoryState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "success"; records: ForecastHistoryRow[] }
+  | { status: "success"; records: ForecastHistoryRow[]; userId: string }
   | { status: "error" };
 
 function formatViews(value: number) {
@@ -36,8 +36,8 @@ function formatDate(value: string) {
 }
 
 export default function HistoryView() {
-  const { replace } = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
+  const userId = user?.id;
   const [state, setState] = useState<HistoryState>({ status: "idle" });
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -45,12 +45,10 @@ export default function HistoryView() {
   useEffect(() => {
     if (isLoading) return;
 
-    if (!isAuthenticated) {
-      // Client-side route state is UX only. Supabase RLS is the real data
-      // authorization boundary for every history read and deletion.
-      replace("/login?next=%2Fhistory");
-      return;
-    }
+    if (!isAuthenticated || !userId) return;
+
+    // Client-side route state is UX only. Supabase RLS is the real data
+    // authorization boundary for every history read and deletion.
 
     let isActive = true;
 
@@ -60,7 +58,7 @@ export default function HistoryView() {
         return listForecastHistory();
       })
       .then((records) => {
-        if (isActive) setState({ status: "success", records });
+        if (isActive) setState({ status: "success", records, userId });
       })
       .catch(() => {
         if (isActive) setState({ status: "error" });
@@ -69,7 +67,7 @@ export default function HistoryView() {
     return () => {
       isActive = false;
     };
-  }, [isAuthenticated, isLoading, replace]);
+  }, [isAuthenticated, isLoading, userId]);
 
   async function handleDelete(record: ForecastHistoryRow) {
     const confirmed = window.confirm(
@@ -87,6 +85,7 @@ export default function HistoryView() {
           ? {
               status: "success",
               records: current.records.filter((item) => item.id !== record.id),
+              userId: current.userId,
             }
           : current,
       );
@@ -109,20 +108,9 @@ export default function HistoryView() {
     );
   }
 
-  if (!isAuthenticated) {
-    return (
-      <section className="history-state">
-        <p className="section-kicker">Sign in required</p>
-        <h2>Your history is private to your account</h2>
-        <p>Sign in to view forecasts saved for your account.</p>
-        <Link className="primary-button history-state__action" href="/login?next=%2Fhistory">
-          Sign in to view history
-        </Link>
-      </section>
-    );
-  }
+  if (!isAuthenticated) return <GuestAccessPrompt feature="history" />;
 
-  if (state.status === "idle" || state.status === "loading") {
+  if (state.status === "idle" || state.status === "loading" || (state.status === "success" && state.userId !== userId)) {
     return (
       <section className="history-state" aria-busy="true" role="status">
         <p className="section-kicker">Your forecast memory</p>

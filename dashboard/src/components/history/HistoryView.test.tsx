@@ -54,10 +54,9 @@ const records: ForecastHistoryRow[] = [
 ];
 
 const mocks = vi.hoisted(() => ({
-  auth: { isAuthenticated: true, isLoading: false },
+  auth: { isAuthenticated: true, isLoading: false, user: { id: "user-a" } },
   deleteForecastHistory: vi.fn(),
   listForecastHistory: vi.fn(),
-  routerReplace: vi.fn(),
 }));
 
 vi.mock("@/components/auth/AuthProvider", () => ({
@@ -67,10 +66,6 @@ vi.mock("@/components/auth/AuthProvider", () => ({
 vi.mock("@/lib/history/forecast-history", () => ({
   deleteForecastHistory: mocks.deleteForecastHistory,
   listForecastHistory: mocks.listForecastHistory,
-}));
-
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: mocks.routerReplace }),
 }));
 
 vi.mock("next/link", () => ({
@@ -89,6 +84,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.isAuthenticated = true;
   mocks.auth.isLoading = false;
+  mocks.auth.user = { id: "user-a" };
   mocks.listForecastHistory.mockResolvedValue(records);
   mocks.deleteForecastHistory.mockResolvedValue(undefined);
   vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -123,20 +119,33 @@ describe("HistoryView", () => {
     ).toBe("/forecast");
   });
 
-  it("redirects signed-out users only to the root-relative login return path", async () => {
+  it("explains private history and offers both auth routes without reading records", () => {
     mocks.auth.isAuthenticated = false;
     render(<HistoryView />);
 
-    expect(screen.getByText("Your history is private to your account")).toBeTruthy();
-    expect(
-      screen.getByRole("link", { name: "Sign in to view history" }).getAttribute("href"),
-    ).toBe("/login?next=%2Fhistory");
-    await waitFor(() => {
-      expect(mocks.routerReplace).toHaveBeenCalledWith(
-        "/login?next=%2Fhistory",
-      );
-    });
+    expect(screen.getByText("Save and revisit your forecasts.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Create account" }).getAttribute("href")).toBe("/signup");
+    expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe("/login?next=%2Fhistory");
     expect(mocks.listForecastHistory).not.toHaveBeenCalled();
+  });
+
+  it("does not show guest actions during auth loading", () => {
+    mocks.auth.isAuthenticated = false;
+    mocks.auth.isLoading = true;
+    render(<HistoryView />);
+    expect(screen.getByText("Checking your account")).toBeTruthy();
+    expect(screen.queryByText("Save and revisit your forecasts.")).toBeNull();
+    expect(mocks.listForecastHistory).not.toHaveBeenCalled();
+  });
+
+  it("does not display another account's records while the new history loads", async () => {
+    const { rerender } = render(<HistoryView />);
+    expect(await screen.findByText("Newest forecast")).toBeTruthy();
+    mocks.auth.user = { id: "user-b" };
+    mocks.listForecastHistory.mockReturnValueOnce(new Promise(() => {}));
+    rerender(<HistoryView />);
+    expect(screen.queryByText("Newest forecast")).toBeNull();
+    expect(screen.getByText("Loading saved forecasts")).toBeTruthy();
   });
 
   it("removes a record after a successful confirmed deletion", async () => {

@@ -50,11 +50,20 @@ describe("YouTubeConnectionCard", () => {
     mocks.auth.isAuthenticated = false;
     render(<YouTubeConnectionCard />);
 
-    expect(screen.getByText("Sign in to connect a channel")).toBeTruthy();
+    expect(screen.getByText("Your creator workspace starts here.")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Create account" }).getAttribute("href")).toBe("/signup");
     expect(screen.getByRole("link", { name: "Sign in" }).getAttribute("href")).toBe(
       "/login?next=%2Faccount",
     );
     expect(mocks.getConnection).not.toHaveBeenCalled();
+  });
+
+  it("keeps guest actions hidden while account status loads", () => {
+    mocks.auth.isAuthenticated = false;
+    mocks.auth.isLoading = true;
+    render(<YouTubeConnectionCard />);
+    expect(screen.getByText(/Checking your account/)).toBeTruthy();
+    expect(screen.queryByText("Your creator workspace starts here.")).toBeNull();
   });
 
   it("shows the connected channel without exposing credentials", async () => {

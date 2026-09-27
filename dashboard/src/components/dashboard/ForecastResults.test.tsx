@@ -94,5 +94,12 @@ describe("ForecastResults personalization", () => {
 
     expect(screen.queryByText("Personalised forecast")).toBeNull();
     expect(screen.queryByText("Compare with the shared model forecast")).toBeNull();
+    expect(screen.getByText("Shared forecast")).toBeTruthy();
+  });
+
+  it("explains a connected creator's shared result without implying an adjustment", () => {
+    render(<ForecastResults request={request} response={baseResponse} channelConnected onChangeInputs={vi.fn()} />);
+    expect(screen.getByText(/Your channel is connected, but this forecast used the shared model/)).toBeTruthy();
+    expect(screen.queryByText("Personalised forecast")).toBeNull();
   });
 });

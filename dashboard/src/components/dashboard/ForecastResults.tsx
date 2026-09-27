@@ -11,6 +11,7 @@ interface ForecastResultsProps {
   request: ForecastRequest;
   onChangeInputs: () => void;
   historySaveNotice?: string;
+  channelConnected?: boolean;
 }
 
 export default function ForecastResults({
@@ -18,6 +19,7 @@ export default function ForecastResults({
   request,
   onChangeInputs,
   historySaveNotice,
+  channelConnected = false,
 }: ForecastResultsProps) {
   const generatedAt = new Date(response.model.generatedAt).toLocaleString(
     "en-LK",
@@ -55,7 +57,7 @@ export default function ForecastResults({
       </header>
 
       <DegradedNotice completeness={response.completeness} />
-      {!response.personalization?.applied && response.model.dataSource !== "mock" && <div className="shared-forecast-note"><StudioIcon name="chart" width="17" height="17" /><p>Built with the shared model. No personal adjustment was applied to this forecast.</p></div>}
+      {!response.personalization?.applied && response.model.dataSource !== "mock" && <div className="shared-forecast-note"><StudioIcon name="chart" width="17" height="17" /><p>{channelConnected ? "Your channel is connected, but this forecast used the shared model. An adjustment requires eligible channel history for this request." : "Built with the shared model. No personal adjustment was applied to this forecast."}</p></div>}
       {response.personalization?.applied && (
         <section className="personalization-notice" role="status">
           <div>

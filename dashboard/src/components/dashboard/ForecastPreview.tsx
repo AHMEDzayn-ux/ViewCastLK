@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import StudioIcon from "./StudioIcon";
+import type { CreatorAudience } from "./ForecastOnboarding";
 
 const CHECKPOINTS = [
   { day: 7, label: "The first impression", text: "An estimate of the total views your video could reach in its first week.", x: 120, y: 168 },
@@ -11,7 +12,7 @@ const CHECKPOINTS = [
   { day: 30, label: "A month of possibility", text: "Bring the full month into view with your final planning checkpoint.", x: 480, y: 50 },
 ];
 
-export default function ForecastPreview({ onExample, isAuthenticated }: { onExample: () => void; isAuthenticated: boolean }) {
+export default function ForecastPreview({ onExample, audience }: { onExample: () => void; audience: CreatorAudience }) {
   const [selected, setSelected] = useState(3);
   const checkpoint = CHECKPOINTS[selected];
 
@@ -39,11 +40,11 @@ export default function ForecastPreview({ onExample, isAuthenticated }: { onExam
         <div className="checkpoint-description" aria-live="polite"><span className="checkpoint-description__dot" /><div><h3>{checkpoint.label}</h3><p>{checkpoint.text}</p></div></div>
         <div className="preview-panel__footer"><span>Curious what a result looks like?</span><button type="button" onClick={onExample}>Try an example <StudioIcon name="arrow" width="16" height="16" /></button></div>
       </section>
-      <section className="personal-studio-card">
+      {(audience === "guest" || audience === "unconnected") && <section className="personal-studio-card">
         <span className="personal-studio-card__icon"><StudioIcon name="channel" width="26" height="26" /></span>
-        <div><p className="section-kicker">A forecast with your perspective</p><h2>Every channel has its own story.</h2><p>Connect yours to use eligible channel history for personal adjustments.</p><Link href={isAuthenticated ? "/account" : "/login?next=%2Faccount"}>{isAuthenticated ? "Manage your channel" : "Sign in to connect your channel"}<StudioIcon name="arrow" width="16" height="16" /></Link></div>
+        <div><p className="section-kicker">A forecast with your perspective</p><h2>Every channel has its own story.</h2><p>Connect yours to use eligible channel history for personal adjustments.</p><Link href={audience === "unconnected" ? "/account" : "/login?next=%2Faccount"}>{audience === "unconnected" ? "Manage your channel" : "Sign in to connect your channel"}<StudioIcon name="arrow" width="16" height="16" /></Link></div>
         <StudioIcon name="spark" className="personal-studio-card__decoration" width="74" height="74" />
-      </section>
+      </section>}
       <p className="studio-privacy-note"><StudioIcon name="shield" width="15" height="15" /> Your private Analytics never train the shared model.</p>
     </>
   );

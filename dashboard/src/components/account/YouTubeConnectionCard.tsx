@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth/AuthProvider";
 import StudioIcon from "@/components/dashboard/StudioIcon";
+import GuestAccessPrompt from "@/components/auth/GuestAccessPrompt";
 import {
   disconnectYouTubeConnection,
   getYouTubeConnection,
@@ -103,20 +104,7 @@ export default function YouTubeConnectionCard() {
     );
   }
 
-  if (!isAuthenticated) {
-    return (
-      <section className="connection-card connection-card--guest">
-        <span className="connection-symbol"><StudioIcon name="channel" width="36" height="36" /></span>
-        <div>
-        <h2>Sign in to connect a channel</h2>
-        <p>Your YouTube connection is private to your ViewCastLK account.</p>
-        </div>
-        <Link className="primary-button" href="/login?next=%2Faccount">
-          Sign in
-        </Link>
-      </section>
-    );
-  }
+  if (!isAuthenticated) return <GuestAccessPrompt feature="account" />;
 
   if (state.kind === "idle" || state.kind === "loading") {
     return (

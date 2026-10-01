@@ -292,3 +292,18 @@ def test_creator_format_selects_matching_personal_adjustment(mock_fetch):
     assert body["estimates"][0]["cumulativeViews"] == round(
         body["personalization"]["sharedEstimates"][0]["cumulativeViews"] * 1.25
     )
+
+
+def test_a_category_the_model_never_saw_is_reported_not_hidden():
+    with patch("app.main.fetch_channel_stats") as mock_fetch:
+        mock_fetch.return_value = MOCK_CHANNEL_STATS
+        unseen = client.post(
+            "/forecast", json={**VALID_FORECAST_PAYLOAD, "category": "Nonprofits & Activism"}
+        )
+        seen = client.post("/forecast", json={**VALID_FORECAST_PAYLOAD, "category": "Music"})
+
+    assert unseen.status_code == 200
+    issues = unseen.json()["completeness"]["issues"]
+    assert any(issue["source"] == "category" for issue in issues)
+    assert unseen.json()["completeness"]["status"] == "degraded"
+    assert not any(issue["source"] == "category" for issue in seen.json()["completeness"]["issues"])

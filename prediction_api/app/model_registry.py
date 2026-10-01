@@ -88,6 +88,25 @@ class ModelRegistry:
         self.model = joblib.load(model_path)
         return self.model
 
+    def known_categories(self) -> frozenset[str] | None:
+        """Categories the model saw while training, read from the model itself.
+
+        An unseen category is not an error: the category encoder gives it the
+        training-wide average, which is the right answer with no examples. But
+        the forecast is then not adjusted for the category, and the creator
+        should be told. None when the artefact does not expose its encoder, in
+        which case nothing is claimed either way.
+        """
+        try:
+            categories: set[str] = set()
+            for horizon_model in self.load_model().horizon_models:
+                encoder = horizon_model.preprocessor.category_encoder_
+                categories.update(str(name) for name in encoder.category_counts_)
+        except AttributeError:
+            return None
+        categories.discard("__MISSING__")
+        return frozenset(categories)
+
     def predict_trajectory(self, df: pd.DataFrame) -> np.ndarray:
         """Predict and validate Day 7/14/21/30 cumulative views in one call."""
         horizons = self.get_manifest().get("supported_horizons_days", [])

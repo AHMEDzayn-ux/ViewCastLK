@@ -190,3 +190,33 @@ def test_26_output_column_order_exactly_matches_manifest():
     expected = manifest["input_schema"]["expected_columns"]
     df = build_candidate_feature_frame({"category": "Music"})
     assert list(df.columns) == expected
+
+
+def test_model_language_comes_from_the_channel_not_the_audio_answer():
+    """The model learned the video's metadata language. The form's audio answer
+    matched the stored value on only 53.5% of training videos; the channel's
+    usual metadata language matched on 92.8%."""
+    from app.channel_history import CHANNEL_LANGUAGE_KEY, empty_history_features
+
+    history = empty_history_features()
+    history[CHANNEL_LANGUAGE_KEY] = "en-US"
+    df = build_candidate_feature_frame(
+        {"title": "මගේ අලුත් වීඩියෝව", "audioLanguage": "Sinhala"}, None, history=history
+    )
+    assert df["default_language"].iloc[0] == "en-US"
+
+
+@pytest.mark.parametrize(
+    "title, expected",
+    [
+        ("මගේ අලුත් වීඩියෝව", "si"),
+        ("எனது புதிய வீடியோ", "ta"),
+        ("මගේ புதிய video", "si"),
+        ("Aluth Sindu 2026", "en"),
+        ("", "en"),
+    ],
+)
+def test_uncollected_channel_falls_back_to_the_titles_alphabet(title, expected):
+    for audio in ("Mixed / multilingual", "Other", "Tamil"):
+        df = build_candidate_feature_frame({"title": title, "audioLanguage": audio})
+        assert df["default_language"].iloc[0] == expected

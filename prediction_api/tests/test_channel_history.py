@@ -212,3 +212,31 @@ async def test_no_channel_id_means_no_history_and_no_query():
 
     features = await history_features_for_channel(channel_id=None, store=Exploding())
     assert features == empty_history_features()
+
+
+def test_usual_language_is_the_channels_most_common_stored_value():
+    from app.channel_history import usual_language
+
+    videos = [{"default_language": code} for code in ("si", "si", "en-US", "si", None, " ")]
+    assert usual_language(videos) == "si"
+    # Stored values are kept as they are: the model learned "en-US", not "en".
+    assert usual_language([{"default_language": "en-US"}]) == "en-US"
+    assert usual_language([{"default_language": None}]) is None
+
+
+def test_usual_language_breaks_ties_the_same_way_every_time():
+    from app.channel_history import usual_language
+
+    forwards = [{"default_language": "si"}, {"default_language": "en"}]
+    assert usual_language(forwards) == usual_language(list(reversed(forwards))) == "en"
+
+
+def test_channel_language_comes_only_from_earlier_videos():
+    from app.channel_history import CHANNEL_LANGUAGE_KEY
+
+    earlier = {"published_at": AS_OF - timedelta(days=20), "category_name": "Music",
+               "is_short": False, "default_language": "si",
+               "d7_views": None, "d7_hours_off": None, "d30_views": None, "d30_hours_off": None}
+    later = dict(earlier, published_at=AS_OF + timedelta(days=1), default_language="en")
+    features = compute_history_features([earlier, later, dict(later), dict(later)], as_of=AS_OF)
+    assert features[CHANNEL_LANGUAGE_KEY] == "si"

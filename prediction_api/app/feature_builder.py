@@ -11,13 +11,43 @@ from urllib.parse import unquote, urlparse
 import numpy as np
 import pandas as pd
 
-from app.channel_history import HISTORY_COLUMNS, empty_history_features
+from app.channel_history import (
+    CHANNEL_LANGUAGE_KEY,
+    HISTORY_COLUMNS,
+    empty_history_features,
+)
 from app.pre_publication_features import (
     TIMING_COLUMNS,
     TITLE_COLUMNS,
     derive_timing_features,
     derive_title_features,
+    title_script,
 )
+
+# Which metadata language a title's alphabet implies, measured on the training
+# table: Latin-alphabet titles are "en" 87% of the time, Sinhala 83% "si",
+# Tamil 76% "ta", and mixed-script titles 74% "si".
+TITLE_SCRIPT_LANGUAGE = {
+    "sinhala_script": "si",
+    "mixed_script": "si",
+    "tamil_script": "ta",
+    "latin_script": "en",
+}
+
+
+def resolve_metadata_language(channel_language: Any, title: Any) -> str:
+    """The value the model's default_language input should carry.
+
+    The model learned the video's metadata language, not its spoken language.
+    The form asks for audio language, and the two agree on only 62% of training
+    videos; fed straight in, the form's answer matched the stored value on
+    53.5% of them. A channel's usual metadata language matches on 92.8% (from
+    its earlier videos only), so it is used whenever the channel has been
+    collected, and the title's alphabet otherwise.
+    """
+    if isinstance(channel_language, str) and channel_language.strip():
+        return channel_language.strip()
+    return TITLE_SCRIPT_LANGUAGE[title_script(title if isinstance(title, str) else "")]
 
 # The served artefact ships its own viewcastlk_ml package, which must be the one
 # imported, or the preprocessing would differ from what the model was fitted on.
@@ -308,8 +338,12 @@ def build_candidate_feature_frame(
     raw_duration = _extract_val(request, ["durationSeconds", "duration_seconds"])
     duration_seconds = float(raw_duration) if raw_duration is not None else np.nan
 
-    raw_language = _extract_val(request, ["audioLanguage", "default_language", "language"])
-    default_language = map_language(raw_language)
+    # The form's audio-language answer is kept in the user's history, but it is
+    # not what the model learned; see resolve_metadata_language.
+    channel_language = dict(history).get(CHANNEL_LANGUAGE_KEY) if history else None
+    default_language = resolve_metadata_language(
+        channel_language, _extract_val(request, ["title"])
+    )
 
     raw_day = _extract_val(request, ["plannedPublishDay", "publish_day"])
     publish_is_weekend = map_publish_is_weekend(raw_day)

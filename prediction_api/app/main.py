@@ -418,19 +418,19 @@ async def create_forecast(
     unavailable_recs = [
         UnavailableRecommendation(
             type="timing",
-            reason="Recommendations are unavailable in the experimental trajectory model.",
+            reason="Recommendations are unavailable in the current trajectory model.",
         ),
         UnavailableRecommendation(
             type="duration",
-            reason="Recommendations are unavailable in the experimental trajectory model.",
+            reason="Recommendations are unavailable in the current trajectory model.",
         ),
         UnavailableRecommendation(
             type="format",
-            reason="Recommendations are unavailable in the experimental trajectory model.",
+            reason="Recommendations are unavailable in the current trajectory model.",
         ),
         UnavailableRecommendation(
             type="title",
-            reason="Recommendations are unavailable in the experimental trajectory model.",
+            reason="Recommendations are unavailable in the current trajectory model.",
         ),
     ]
 
@@ -440,6 +440,17 @@ async def create_forecast(
             DataCompletenessIssue(
                 source="channel_lookup",
                 message="Subscriber count is hidden or unavailable for this channel.",
+            )
+        )
+    known_categories = model_registry.known_categories()
+    if known_categories is not None and payload.category not in known_categories:
+        issues.append(
+            DataCompletenessIssue(
+                source="category",
+                message=(
+                    f"No {payload.category} videos were in the training data, so "
+                    "this forecast is not adjusted for the category."
+                ),
             )
         )
     if title_guidance is None:

@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.schemas import ChannelStatsResponse, ForecastRequest
 from app.title_analysis import TitleToneAnalysisInternal, analyze_title_tone
-from app.feature_builder import build_candidate_feature_frame
+from app.feature_builder import EXPECTED_COLUMNS, build_candidate_feature_frame
 
 client = TestClient(app)
 pytestmark = pytest.mark.usefixtures("authenticated_api")
@@ -308,7 +308,9 @@ def test_10_candidate_feature_frame_remains_unchanged():
         plannedPublishHour=None
     )
     df = build_candidate_feature_frame(request, MOCK_CHANNEL_STATS)
-    assert len(df.columns) == 30
+    # Gemini's tone scores never become model inputs: the frame is exactly the
+    # artefact's declared schema, whatever that artefact is.
+    assert list(df.columns) == EXPECTED_COLUMNS
     assert "urgency" not in df.columns
     assert "emotional_appeal" not in df.columns
     assert "seriousness" not in df.columns

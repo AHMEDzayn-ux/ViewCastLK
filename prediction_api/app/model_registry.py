@@ -12,12 +12,10 @@ import joblib
 import numpy as np
 import pandas as pd
 
+from app.artifact import ARTIFACT_DIR
 
-DEFAULT_ARTIFACT_DIR = (
-    Path(__file__).resolve().parent.parent
-    / "model_artifacts"
-    / "viewcastlk_monotonic_trajectory_experimental_v1"
-)
+
+DEFAULT_ARTIFACT_DIR = ARTIFACT_DIR
 
 
 def sha256_file(path: Path) -> str:

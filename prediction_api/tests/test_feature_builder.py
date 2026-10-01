@@ -16,12 +16,9 @@ from app.feature_builder import (
     EXPECTED_COLUMNS,
 )
 
-MANIFEST_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "model_artifacts"
-    / "viewcastlk_monotonic_trajectory_experimental_v1"
-    / "manifest.json"
-)
+from app.artifact import ARTIFACT_DIR  # noqa: E402
+
+MANIFEST_PATH = ARTIFACT_DIR / "manifest.json"
 
 
 def test_1_category_mapped_correctly():

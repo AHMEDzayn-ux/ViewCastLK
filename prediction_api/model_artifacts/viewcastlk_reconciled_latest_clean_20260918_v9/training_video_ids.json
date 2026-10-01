@@ -1,0 +1,13 @@
+{
+  "path": "training_video_ids.txt",
+  "count": 123766,
+  "sha256": "87268dbe5345867817dc93c25ed5294caca32df69f84d7a0b03284975b2af8f1",
+  "kind": "superset",
+  "derivation": "Every video_id in the source training table this artefact was fitted on, identified by evaluation/training_manifest.json source_training_table.sha256. The release does not ship its exact training-ID list, and reproducing its seed-793 channel split was not attempted, so the list is a superset: it contains every video any of the seven components trained on, plus the reserved-channel videos they did not. Personalisation only uses it to exclude videos, so a superset can never let a training video into a creator's calibration; the cost is that reserved-channel videos are excluded too.",
+  "source_training_table_sha256": "aa340358e82c4764d09f04ff1d8e1b0fc84cf8441c95e4cc5319ca5137258433",
+  "largest_component_training_rows": 55527,
+  "added_by_api": [
+    "training_video_ids.txt",
+    "training_video_ids.json"
+  ]
+}

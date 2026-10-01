@@ -19,12 +19,9 @@ from app.pre_publication_features import (
     derive_title_features,
 )
 
-# Safe resolution of model artifact directory and importing viewcastlk_ml
-ARTIFACT_DIR = (
-    Path(__file__).resolve().parent.parent
-    / "model_artifacts"
-    / "viewcastlk_monotonic_trajectory_experimental_v1"
-)
+# The served artefact ships its own viewcastlk_ml package, which must be the one
+# imported, or the preprocessing would differ from what the model was fitted on.
+from app.artifact import ARTIFACT_DIR  # noqa: E402
 
 if str(ARTIFACT_DIR) not in sys.path:
     sys.path.insert(0, str(ARTIFACT_DIR))

@@ -1,6 +1,8 @@
 from typing import Any, List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
+from app.artifact import ACTIVE_ARTIFACT_VERSION
+
 
 class HealthResponse(BaseModel):
     status: str = "ok"
@@ -185,11 +187,11 @@ class DataCompleteness(BaseModel):
 
 class ModelMetadata(BaseModel):
     artifactVersion: str = Field(
-        "viewcastlk_monotonic_trajectory_experimental_v1",
+        ACTIVE_ARTIFACT_VERSION,
         description="Artifact version",
     )
     modelVersion: str = Field(
-        "viewcastlk_monotonic_trajectory_experimental_v1",
+        ACTIVE_ARTIFACT_VERSION,
         description="Model version",
     )
     generatedAt: str = Field(..., description="Timestamp in ISO format")

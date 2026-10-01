@@ -1,0 +1,123 @@
+{
+  "artifact_version": "checkpoint27_reconciled_latest_clean_20260918",
+  "status": "reconciliation_promoted",
+  "source_training_table": {
+    "path": "Dataset/viewcastlk_training_table.csv",
+    "sha256": "aa340358e82c4764d09f04ff1d8e1b0fc84cf8441c95e4cc5319ca5137258433"
+  },
+  "model_path": "models/reconciled_independent_trajectory.joblib",
+  "model_sha256": "c243e882ab3ad28fa14e47552a0d7ab465500dfebc21cf5cb26ec2fae00e4d6e",
+  "horizons": [
+    7,
+    14,
+    21,
+    30
+  ],
+  "construction": "four horizon-specific regressors trained on every clean label, followed by log-space isotonic monotonic reconciliation",
+  "components": [
+    {
+      "component": "day_7_independent",
+      "target": "day_7_cumulative_views",
+      "target_scale": "log1p",
+      "training_rows": 55527,
+      "training_channels": 1753,
+      "selected_n_estimators": 229
+    },
+    {
+      "component": "day_14_independent",
+      "target": "day_14_cumulative_views",
+      "target_scale": "log1p",
+      "training_rows": 48239,
+      "training_channels": 1694,
+      "selected_n_estimators": 103
+    },
+    {
+      "component": "day_21_independent",
+      "target": "day_21_cumulative_views",
+      "target_scale": "log1p",
+      "training_rows": 40217,
+      "training_channels": 1625,
+      "selected_n_estimators": 261
+    },
+    {
+      "component": "day_30_independent",
+      "target": "day_30_cumulative_views",
+      "target_scale": "log1p",
+      "training_rows": 29922,
+      "training_channels": 1477,
+      "selected_n_estimators": 146
+    },
+    {
+      "component": "day_7_to_14_increment",
+      "target": "nonnegative_day_7_to_day_14_view_increment",
+      "target_scale": "log1p",
+      "training_rows": 47161,
+      "training_channels": 1692,
+      "negative_observed_growth_rows_excluded": 367,
+      "selected_n_estimators": 162
+    },
+    {
+      "component": "day_14_to_21_increment",
+      "target": "nonnegative_day_14_to_day_21_view_increment",
+      "target_scale": "log1p",
+      "training_rows": 40026,
+      "training_channels": 1625,
+      "negative_observed_growth_rows_excluded": 139,
+      "selected_n_estimators": 179
+    },
+    {
+      "component": "day_21_to_30_increment",
+      "target": "nonnegative_day_21_to_day_30_view_increment",
+      "target_scale": "log1p",
+      "training_rows": 29879,
+      "training_channels": 1477,
+      "negative_observed_growth_rows_excluded": 43,
+      "selected_n_estimators": 228
+    }
+  ],
+  "selected_reconciliation": "isotonic_log",
+  "selection_data": "five-fold channel-grouped development OOF",
+  "full_horizon_checkpoint": "D:\\ViewCastLK\\artifacts\\checkpoint26_latest_clean_full_20260918",
+  "aligned_baseline_checkpoint": "D:\\ViewCastLK\\artifacts\\checkpoint25_latest_clean_independent_20260918",
+  "feature_options": {
+    "include_enhanced_features": true,
+    "collapse_rare_categories": true,
+    "rare_category_min_count": 100,
+    "drop_features": [
+      "publish_dow_sin",
+      "publish_dow_cos",
+      "title_has_question",
+      "topic_technology"
+    ]
+  },
+  "common_split": {
+    "selection_seed": 793,
+    "test_channels": 439,
+    "source_test_row_fractions": {
+      "day_7": 0.2007858715834017,
+      "day_7_to_14": 0.20041722043707205,
+      "day_14_to_21": 0.19923043183540012,
+      "day_21_to_30": 0.20088665740839654
+    }
+  },
+  "development_rows": 28680,
+  "reserved_test_rows": 7202,
+  "complete_four_horizon_rows": 36484,
+  "complete_four_horizon_test_rows": 7315,
+  "complete_monotone_four_horizon_test_rows": 7202,
+  "end_to_end_day_30_testable": true,
+  "comparison": {
+    "development_forward_max_mean_rmsle": 1.6828961844643069,
+    "development_selected_mean_rmsle": 1.6634852175945762,
+    "reserved_aligned_baseline_mean_rmsle": 1.6451629448083818,
+    "reserved_selected_mean_rmsle": 1.6214353793369598,
+    "reserved_improvement_pct": 1.442262333120176,
+    "release_gate_passed": true
+  },
+  "release_gate": "selected monotonic rule must beat forward-max on development OOF and the aligned clean baseline on reserved channels",
+  "limitations": [
+    "Evaluation excludes rows whose observed cumulative views decrease between horizons.",
+    "Point forecasts remain conservative for unrecognized breakout videos.",
+    "The reserved channel split has been evaluated and must not be used for further tuning."
+  ]
+}

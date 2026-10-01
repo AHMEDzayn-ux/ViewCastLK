@@ -17,14 +17,16 @@ def test_artifact_exists():
 def test_training_video_ids_artifact_matches_manifest():
     import hashlib
 
-    manifest = json.loads(
-        (DEFAULT_ARTIFACT_DIR / "manifest.json").read_text(encoding="utf-8")
+    # The release manifest is covered by SHA256SUMS, so the API records the
+    # training-ID provenance in a sidecar rather than editing the manifest.
+    record = json.loads(
+        (DEFAULT_ARTIFACT_DIR / "training_video_ids.json").read_text(encoding="utf-8")
     )
-    record = manifest["training_video_ids"]
     path = DEFAULT_ARTIFACT_DIR / record["path"]
     identifiers = path.read_text(encoding="utf-8").splitlines()
 
-    assert len(identifiers) == record["count"] == 40851
+    assert len(identifiers) == record["count"]
+    assert len(identifiers) >= record["largest_component_training_rows"]
     assert len(identifiers) == len(set(identifiers))
     assert hashlib.sha256(path.read_bytes()).hexdigest() == record["sha256"]
 
@@ -81,7 +83,13 @@ def test_artifact_package_checksums_file_is_complete_and_valid():
         expected, relative_path = line.split(maxsplit=1)
         entries[relative_path] = expected
 
-    # SHA256SUMS.txt intentionally does not include itself.
+    # SHA256SUMS.txt intentionally does not include itself, and the files the
+    # API adds beside the release are listed in the sidecar, not the release.
+    added_by_api = set(
+        json.loads(
+            (DEFAULT_ARTIFACT_DIR / "training_video_ids.json").read_text(encoding="utf-8")
+        )["added_by_api"]
+    )
     packaged_files = {
         path.relative_to(DEFAULT_ARTIFACT_DIR).as_posix()
         for path in DEFAULT_ARTIFACT_DIR.rglob("*")
@@ -89,6 +97,7 @@ def test_artifact_package_checksums_file_is_complete_and_valid():
         and path.name != "SHA256SUMS.txt"
         and "__pycache__" not in path.parts
         and path.suffix != ".pyc"
+        and path.relative_to(DEFAULT_ARTIFACT_DIR).as_posix() not in added_by_api
     }
     assert set(entries) == packaged_files
 
@@ -101,10 +110,12 @@ def test_artifact_package_checksums_file_is_complete_and_valid():
         assert digest == expected, relative_path
 
 
-def test_manifest_contract_is_the_expected_experimental_artifact():
+def test_manifest_contract_is_the_served_artifact():
+    from app.artifact import ACTIVE_ARTIFACT_VERSION
+
     manifest = json.loads(
         (DEFAULT_ARTIFACT_DIR / "manifest.json").read_text(encoding="utf-8")
     )
-    assert manifest["artifact_version"] == "viewcastlk_monotonic_trajectory_experimental_v1"
+    assert manifest["artifact_version"] == ACTIVE_ARTIFACT_VERSION
     assert manifest["supported_horizons_days"] == [7, 14, 21, 30]
     assert manifest["trajectory_guarantee"] == "day_7 <= day_14 <= day_21 <= day_30"

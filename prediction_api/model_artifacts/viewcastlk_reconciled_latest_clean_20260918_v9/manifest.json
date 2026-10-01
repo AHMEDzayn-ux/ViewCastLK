@@ -1,0 +1,399 @@
+{
+  "format_version": 1,
+  "artifact_version": "viewcastlk_reconciled_latest_clean_20260918_v9",
+  "created_at_utc": "2026-09-19T16:39:56.241152+00:00",
+  "status": "reconciliation_promoted",
+  "supported_horizons_days": [
+    7,
+    14,
+    21,
+    30
+  ],
+  "prediction_interface": "predict.py CSV CLI or trajectory_bundle.predict_views(DataFrame)",
+  "trajectory_guarantee": "day_7 <= day_14 <= day_21 <= day_30",
+  "source_checkpoint": "checkpoint27_reconciled_latest_clean_20260918",
+  "source_checkpoint_manifest_sha256": "57ba80d93df699deb50e52898750aa02051ab726b10a0c374a3a6d7e60135f72",
+  "source_git_commit": "fb9e2ed68d0463608cdce965e9f964d4943c1202",
+  "runtime_versions_used_for_export": {
+    "python": "3.11.9",
+    "numpy": "2.4.4",
+    "pandas": "3.0.2",
+    "scikit-learn": "1.8.0",
+    "xgboost": "3.2.0",
+    "joblib": "1.5.3"
+  },
+  "input_schema": {
+    "expected_columns": [
+      "duration_seconds",
+      "ch_subs_at_publish",
+      "ch_avg_views_per_video_at_publish",
+      "ch_videos_at_publish",
+      "channel_age_days_at_publish",
+      "publish_hour_sin",
+      "publish_hour_cos",
+      "title_length",
+      "title_word_count",
+      "title_upper_ratio",
+      "tag_count",
+      "description_length",
+      "prior_channel_video_count",
+      "uploads_previous_7d",
+      "uploads_previous_30d",
+      "days_since_previous_upload",
+      "prior_d7_view_count",
+      "prior_d7_median_views",
+      "prior_d7_mean_log_views",
+      "prior_d7_std_log_views",
+      "prior_d7_last_views",
+      "prior_d7_recent5_median_views",
+      "prior_same_category_d7_count",
+      "prior_same_category_d7_median_views",
+      "prior_d30_view_count",
+      "prior_d30_median_views",
+      "prior_d30_mean_log_views",
+      "prior_d7_recent_log_trend",
+      "prior_same_format_d7_count",
+      "prior_same_format_d7_median_views",
+      "is_short",
+      "publish_is_weekend",
+      "title_has_number",
+      "title_has_exclaim",
+      "topic_entertainment",
+      "topic_fashion",
+      "topic_food",
+      "topic_gaming",
+      "topic_health",
+      "topic_hobby",
+      "topic_humour",
+      "topic_knowledge",
+      "topic_lifestyle",
+      "topic_music",
+      "topic_pet",
+      "topic_politics",
+      "topic_religion",
+      "topic_society",
+      "topic_sports",
+      "topic_tourism",
+      "topic_vehicle",
+      "topic_missing",
+      "category_name",
+      "default_language",
+      "publish_time_bucket",
+      "subscriber_tier",
+      "title_script"
+    ],
+    "numeric_columns": [
+      "duration_seconds",
+      "ch_subs_at_publish",
+      "ch_avg_views_per_video_at_publish",
+      "ch_videos_at_publish",
+      "channel_age_days_at_publish",
+      "publish_hour_sin",
+      "publish_hour_cos",
+      "title_length",
+      "title_word_count",
+      "title_upper_ratio",
+      "tag_count",
+      "description_length",
+      "prior_channel_video_count",
+      "uploads_previous_7d",
+      "uploads_previous_30d",
+      "days_since_previous_upload",
+      "prior_d7_view_count",
+      "prior_d7_median_views",
+      "prior_d7_mean_log_views",
+      "prior_d7_std_log_views",
+      "prior_d7_last_views",
+      "prior_d7_recent5_median_views",
+      "prior_same_category_d7_count",
+      "prior_same_category_d7_median_views",
+      "prior_d30_view_count",
+      "prior_d30_median_views",
+      "prior_d30_mean_log_views",
+      "prior_d7_recent_log_trend",
+      "prior_same_format_d7_count",
+      "prior_same_format_d7_median_views"
+    ],
+    "boolean_columns": [
+      "is_short",
+      "publish_is_weekend",
+      "title_has_number",
+      "title_has_exclaim",
+      "topic_entertainment",
+      "topic_fashion",
+      "topic_food",
+      "topic_gaming",
+      "topic_health",
+      "topic_hobby",
+      "topic_humour",
+      "topic_knowledge",
+      "topic_lifestyle",
+      "topic_music",
+      "topic_pet",
+      "topic_politics",
+      "topic_religion",
+      "topic_society",
+      "topic_sports",
+      "topic_tourism",
+      "topic_vehicle",
+      "topic_missing"
+    ],
+    "categorical_columns": [
+      "category_name",
+      "default_language",
+      "publish_time_bucket",
+      "subscriber_tier",
+      "title_script"
+    ],
+    "missing_values": "Allowed in values, but every expected column must exist.",
+    "subscriber_tier_note": "Use the exported tier if available. It can also be derived from ch_subs_at_publish with the boundaries documented in the model code.",
+    "future_optional_llm_score_columns": [
+      "title_urgency",
+      "title_emotional_appeal",
+      "title_seriousness",
+      "title_curiosity_gap"
+    ],
+    "llm_scores_enabled_in_this_artifact": false,
+    "enhanced_history_features_enabled": true,
+    "rare_category_compaction_enabled": true,
+    "dropped_features": [
+      "publish_dow_cos",
+      "publish_dow_sin",
+      "title_has_question",
+      "topic_technology"
+    ],
+    "explicitly_excluded_columns": [
+      "definition",
+      "caption",
+      "made_for_kids",
+      "publish_hour_slt",
+      "publish_dow_slt",
+      "ch_views_at_publish",
+      "video_id",
+      "channel_id",
+      "published_at"
+    ]
+  },
+  "model": {
+    "model_path": "models/monotonic_trajectory.joblib",
+    "sha256": "c243e882ab3ad28fa14e47552a0d7ab465500dfebc21cf5cb26ec2fae00e4d6e",
+    "size_bytes": 3289093,
+    "construction": "four horizon-specific regressors trained on every clean label, followed by log-space isotonic monotonic reconciliation",
+    "components": [
+      {
+        "component": "day_7_independent",
+        "target": "day_7_cumulative_views",
+        "target_scale": "log1p",
+        "training_rows": 55527,
+        "training_channels": 1753,
+        "selected_n_estimators": 229
+      },
+      {
+        "component": "day_14_independent",
+        "target": "day_14_cumulative_views",
+        "target_scale": "log1p",
+        "training_rows": 48239,
+        "training_channels": 1694,
+        "selected_n_estimators": 103
+      },
+      {
+        "component": "day_21_independent",
+        "target": "day_21_cumulative_views",
+        "target_scale": "log1p",
+        "training_rows": 40217,
+        "training_channels": 1625,
+        "selected_n_estimators": 261
+      },
+      {
+        "component": "day_30_independent",
+        "target": "day_30_cumulative_views",
+        "target_scale": "log1p",
+        "training_rows": 29922,
+        "training_channels": 1477,
+        "selected_n_estimators": 146
+      },
+      {
+        "component": "day_7_to_14_increment",
+        "target": "nonnegative_day_7_to_day_14_view_increment",
+        "target_scale": "log1p",
+        "training_rows": 47161,
+        "training_channels": 1692,
+        "negative_observed_growth_rows_excluded": 367,
+        "selected_n_estimators": 162
+      },
+      {
+        "component": "day_14_to_21_increment",
+        "target": "nonnegative_day_14_to_day_21_view_increment",
+        "target_scale": "log1p",
+        "training_rows": 40026,
+        "training_channels": 1625,
+        "negative_observed_growth_rows_excluded": 139,
+        "selected_n_estimators": 179
+      },
+      {
+        "component": "day_21_to_30_increment",
+        "target": "nonnegative_day_21_to_day_30_view_increment",
+        "target_scale": "log1p",
+        "training_rows": 29879,
+        "training_channels": 1477,
+        "negative_observed_growth_rows_excluded": 43,
+        "selected_n_estimators": 228
+      }
+    ]
+  },
+  "evaluation": {
+    "common_split": {
+      "selection_seed": 793,
+      "test_channels": 439,
+      "source_test_row_fractions": {
+        "day_7": 0.2007858715834017,
+        "day_7_to_14": 0.20041722043707205,
+        "day_14_to_21": 0.19923043183540012,
+        "day_21_to_30": 0.20088665740839654
+      }
+    },
+    "experimental_test_used": true,
+    "complete_four_horizon_rows": 36484,
+    "complete_four_horizon_test_rows": 7315,
+    "complete_monotone_four_horizon_test_rows": 7202,
+    "end_to_end_day_30_testable": true,
+    "transition_test_metrics": [
+      {
+        "partition": "reserved_channels",
+        "scope": "day_7",
+        "method": "isotonic_log",
+        "rows": 7202,
+        "wape_pct": 83.2715065225,
+        "total_view_capture_pct": 36.034979213,
+        "median_absolute_error_views": 879.4403608844,
+        "rmsle": 1.613746073,
+        "log_r2": 0.6537873047
+      },
+      {
+        "partition": "reserved_channels",
+        "scope": "day_14",
+        "method": "isotonic_log",
+        "rows": 7202,
+        "wape_pct": 84.3877192627,
+        "total_view_capture_pct": 34.0913890696,
+        "median_absolute_error_views": 909.8717299973,
+        "rmsle": 1.6123576361,
+        "log_r2": 0.6517274716
+      },
+      {
+        "partition": "reserved_channels",
+        "scope": "day_21",
+        "method": "isotonic_log",
+        "rows": 7202,
+        "wape_pct": 85.2122226642,
+        "total_view_capture_pct": 35.6165548404,
+        "median_absolute_error_views": 931.8423863156,
+        "rmsle": 1.6298681898,
+        "log_r2": 0.6420659491
+      },
+      {
+        "partition": "reserved_channels",
+        "scope": "day_30",
+        "method": "isotonic_log",
+        "rows": 7202,
+        "wape_pct": 86.1921715496,
+        "total_view_capture_pct": 35.7499608069,
+        "median_absolute_error_views": 949.2751497496,
+        "rmsle": 1.6297696185,
+        "log_r2": 0.6391448979
+      }
+    ],
+    "complete_day_7_14_21_test_metrics": [
+      {
+        "partition": "reserved_channels",
+        "scope": "day_7",
+        "method": "isotonic_log",
+        "rows": 7202,
+        "wape_pct": 83.2715065225,
+        "total_view_capture_pct": 36.034979213,
+        "median_absolute_error_views": 879.4403608844,
+        "rmsle": 1.613746073,
+        "log_r2": 0.6537873047
+      },
+      {
+        "partition": "reserved_channels",
+        "scope": "day_14",
+        "method": "isotonic_log",
+        "rows": 7202,
+        "wape_pct": 84.3877192627,
+        "total_view_capture_pct": 34.0913890696,
+        "median_absolute_error_views": 909.8717299973,
+        "rmsle": 1.6123576361,
+        "log_r2": 0.6517274716
+      },
+      {
+        "partition": "reserved_channels",
+        "scope": "day_21",
+        "method": "isotonic_log",
+        "rows": 7202,
+        "wape_pct": 85.2122226642,
+        "total_view_capture_pct": 35.6165548404,
+        "median_absolute_error_views": 931.8423863156,
+        "rmsle": 1.6298681898,
+        "log_r2": 0.6420659491
+      }
+    ],
+    "complete_day_7_14_21_30_test_metrics": [
+      {
+        "partition": "reserved_channels",
+        "scope": "day_7",
+        "method": "isotonic_log",
+        "rows": 7202,
+        "wape_pct": 83.2715065225,
+        "total_view_capture_pct": 36.034979213,
+        "median_absolute_error_views": 879.4403608844,
+        "rmsle": 1.613746073,
+        "log_r2": 0.6537873047
+      },
+      {
+        "partition": "reserved_channels",
+        "scope": "day_14",
+        "method": "isotonic_log",
+        "rows": 7202,
+        "wape_pct": 84.3877192627,
+        "total_view_capture_pct": 34.0913890696,
+        "median_absolute_error_views": 909.8717299973,
+        "rmsle": 1.6123576361,
+        "log_r2": 0.6517274716
+      },
+      {
+        "partition": "reserved_channels",
+        "scope": "day_21",
+        "method": "isotonic_log",
+        "rows": 7202,
+        "wape_pct": 85.2122226642,
+        "total_view_capture_pct": 35.6165548404,
+        "median_absolute_error_views": 931.8423863156,
+        "rmsle": 1.6298681898,
+        "log_r2": 0.6420659491
+      },
+      {
+        "partition": "reserved_channels",
+        "scope": "day_30",
+        "method": "isotonic_log",
+        "rows": 7202,
+        "wape_pct": 86.1921715496,
+        "total_view_capture_pct": 35.7499608069,
+        "median_absolute_error_views": 949.2751497496,
+        "rmsle": 1.6297696185,
+        "log_r2": 0.6391448979
+      }
+    ],
+    "limitations": [
+      "Evaluation excludes rows whose observed cumulative views decrease between horizons.",
+      "Point forecasts remain conservative for unrecognized breakout videos.",
+      "The reserved channel split has been evaluated and must not be used for further tuning."
+    ]
+  },
+  "sample_smoke_prediction": {
+    "day_7_views": 7085.296725797748,
+    "day_14_views": 7717.885246546907,
+    "day_21_views": 7717.885246546907,
+    "day_30_views": 7717.885246546907
+  }
+}

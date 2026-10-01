@@ -70,13 +70,16 @@ vi.mock("@/components/dashboard/ForecastForm", () => ({
   default: ({
     onSubmit,
     canLookupChannel,
+    connectedChannel,
   }: {
     onSubmit: (value: ForecastRequest) => void;
     canLookupChannel: boolean;
+    connectedChannel: { id: string; title: string | null } | null;
   }) => (
     <>
       <button type="button" onClick={() => onSubmit(request)}>Run forecast</button>
       {canLookupChannel && <button type="button">Retrieve details</button>}
+      {connectedChannel && <span>Using {connectedChannel.title} ({connectedChannel.id})</span>}
     </>
   ),
 }));
@@ -186,8 +189,13 @@ describe("ForecastPage history saving", () => {
   });
 
   it("hides onboarding promotions for connected creators", async () => {
-    mocks.getYouTubeConnection.mockResolvedValue({ isConnected: true });
+    mocks.getYouTubeConnection.mockResolvedValue({
+      isConnected: true,
+      channelId: "UC-connected",
+      channelTitle: "My channel",
+    });
     render(<ForecastPage />);
+    expect(await screen.findByText("Using My channel (UC-connected)")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Run forecast" }));
     expect(await screen.findByText("Result forecast-1")).toBeTruthy();
     await waitFor(() => expect(mocks.getYouTubeConnection).toHaveBeenCalledTimes(1));

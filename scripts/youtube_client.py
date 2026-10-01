@@ -303,6 +303,15 @@ def get_video_details(video_ids: list[str]) -> list[dict]:
     return details
 
 
+# Names for categories a region's list can leave out. YouTube's list for Sri
+# Lanka does not include 29, so every Nonprofits & Activism video was stored
+# with a blank name: 1,242 of them by 1 October 2026, and every blank category
+# in the training table. The region list still wins wherever it has an entry.
+FALLBACK_CATEGORY_NAMES = {
+    "29": "Nonprofits & Activism",
+}
+
+
 def get_video_categories(region_code: str = "LK") -> dict[str, str]:
     """1 unit. Maps numeric category_id -> human-readable name (e.g. '25' -> 'News & Politics').
     Fetch once per run/session and reuse — categories don't change day to day."""
@@ -310,7 +319,9 @@ def get_video_categories(region_code: str = "LK") -> dict[str, str]:
         part="snippet",
         regionCode=region_code,
     ).execute(num_retries=API_RETRIES)
-    return {item["id"]: item["snippet"]["title"] for item in response.get("items", [])}
+    names = dict(FALLBACK_CATEGORY_NAMES)
+    names.update({item["id"]: item["snippet"]["title"] for item in response.get("items", [])})
+    return names
 
 
 def search_videos(query: str, published_after: str = None, region_code: str = "LK",

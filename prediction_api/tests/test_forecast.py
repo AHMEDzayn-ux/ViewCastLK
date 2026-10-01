@@ -298,7 +298,7 @@ def test_a_category_the_model_never_saw_is_reported_not_hidden():
     with patch("app.main.fetch_channel_stats") as mock_fetch:
         mock_fetch.return_value = MOCK_CHANNEL_STATS
         unseen = client.post(
-            "/forecast", json={**VALID_FORECAST_PAYLOAD, "category": "Nonprofits & Activism"}
+            "/forecast", json={**VALID_FORECAST_PAYLOAD, "category": "Made Up Category"}
         )
         seen = client.post("/forecast", json={**VALID_FORECAST_PAYLOAD, "category": "Music"})
 
@@ -307,3 +307,14 @@ def test_a_category_the_model_never_saw_is_reported_not_hidden():
     assert any(issue["source"] == "category" for issue in issues)
     assert unseen.json()["completeness"]["status"] == "degraded"
     assert not any(issue["source"] == "category" for issue in seen.json()["completeness"]["issues"])
+
+
+def test_nonprofits_is_not_reported_as_unknown_because_the_model_learned_it_blank():
+    with patch("app.main.fetch_channel_stats") as mock_fetch:
+        mock_fetch.return_value = MOCK_CHANNEL_STATS
+        response = client.post(
+            "/forecast", json={**VALID_FORECAST_PAYLOAD, "category": "Nonprofits & Activism"}
+        )
+    assert response.status_code == 200
+    issues = response.json()["completeness"]["issues"]
+    assert not any(issue["source"] == "category" for issue in issues)

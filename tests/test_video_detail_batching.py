@@ -144,3 +144,24 @@ def test_get_video_details_still_returns_one_flat_list(monkeypatch):
     install(monkeypatch, [[items(2)], [items(1, start=5)]])
     details = yc.get_video_details(ids(60))
     assert [video["id"] for video in details] == ["v0", "v1", "v5"]
+
+
+def test_category_names_fill_in_what_the_region_list_leaves_out(monkeypatch):
+    # YouTube's list for Sri Lanka has no category 29, so it used to be stored blank.
+    response = {"items": [{"id": "25", "snippet": {"title": "News & Politics"}}]}
+    categories = types.SimpleNamespace(
+        list=lambda **kwargs: types.SimpleNamespace(execute=lambda num_retries=None: response)
+    )
+    monkeypatch.setattr(yc, "youtube", types.SimpleNamespace(videoCategories=lambda: categories))
+    names = yc.get_video_categories()
+    assert names["29"] == "Nonprofits & Activism"
+    assert names["25"] == "News & Politics"
+
+
+def test_the_region_list_wins_where_it_has_a_name(monkeypatch):
+    response = {"items": [{"id": "29", "snippet": {"title": "Regional name"}}]}
+    categories = types.SimpleNamespace(
+        list=lambda **kwargs: types.SimpleNamespace(execute=lambda num_retries=None: response)
+    )
+    monkeypatch.setattr(yc, "youtube", types.SimpleNamespace(videoCategories=lambda: categories))
+    assert yc.get_video_categories()["29"] == "Regional name"

@@ -4,6 +4,7 @@ import json
 
 import numpy as np
 import pandas as pd
+import pytest
 
 from app.model_registry import DEFAULT_ARTIFACT_DIR, ModelRegistry
 
@@ -119,3 +120,25 @@ def test_manifest_contract_is_the_served_artifact():
     assert manifest["artifact_version"] == ACTIVE_ARTIFACT_VERSION
     assert manifest["supported_horizons_days"] == [7, 14, 21, 30]
     assert manifest["trajectory_guarantee"] == "day_7 <= day_14 <= day_21 <= day_30"
+
+
+def test_a_category_stored_blank_in_training_reaches_the_model_blank():
+    """Every Nonprofits & Activism video reached training with a blank name, so
+    a model trained on that data learned it as the blank category. Sending the
+    name instead would discard that and fall back to the training average."""
+    import math
+
+    from app.model_registry import MISSING_CATEGORY_TOKEN, STORED_BLANK_CATEGORIES
+
+    registry = ModelRegistry()
+    fitted = registry._encoder_categories()
+    if fitted is None or MISSING_CATEGORY_TOKEN not in fitted:
+        pytest.skip("the served model has no blank category")
+    for name in STORED_BLANK_CATEGORIES:
+        if name in fitted:
+            assert registry.model_category(name) == name
+        else:
+            assert math.isnan(registry.model_category(name))
+        assert name in registry.known_categories()
+    assert registry.model_category("Music") == "Music"
+    assert registry.model_category("Made Up Category") == "Made Up Category"

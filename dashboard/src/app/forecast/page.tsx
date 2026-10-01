@@ -31,7 +31,10 @@ export default function ForecastPage() {
   const { isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
   const [state, setState] = useState<PageState>({ status: "idle" });
   const [connection, setConnection] = useState<{
-    userId: string; audience: CreatorAudience;
+    userId: string;
+    audience: CreatorAudience;
+    channelId: string | null;
+    channelTitle: string | null;
   } | null>(null);
   const audience: CreatorAudience = !user
     ? "guest"
@@ -43,10 +46,15 @@ export default function ForecastPage() {
     let active = true;
     getYouTubeConnection()
       .then((status) => {
-        if (active) setConnection({ userId, audience: status.isConnected ? "connected" : "unconnected" });
+        if (active) setConnection({
+          userId,
+          audience: status.isConnected && status.channelId ? "connected" : "unconnected",
+          channelId: status.isConnected ? status.channelId : null,
+          channelTitle: status.isConnected ? status.channelTitle : null,
+        });
       })
       .catch(() => {
-        if (active) setConnection({ userId, audience: "checking" });
+        if (active) setConnection({ userId, audience: "checking", channelId: null, channelTitle: null });
       });
     return () => { active = false; };
   }, [userId]);
@@ -173,6 +181,10 @@ export default function ForecastPage() {
             onReset={() => setState({ status: "idle" })}
             isLoading={isLoading}
             canLookupChannel={isAuthenticated}
+            connectedChannel={audience === "connected" && connection?.channelId
+              ? { id: connection.channelId, title: connection.channelTitle }
+              : null}
+            isCheckingChannel={Boolean(user && connection?.userId !== user.id)}
           />
         </div>
 

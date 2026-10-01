@@ -70,6 +70,8 @@ interface ForecastFormProps {
   onReset: () => void;
   isLoading: boolean;
   canLookupChannel: boolean;
+  connectedChannel: { id: string; title: string | null } | null;
+  isCheckingChannel: boolean;
 }
 
 const INITIAL_VALUES: ForecastFormValues = {
@@ -202,6 +204,8 @@ export default function ForecastForm({
   onReset,
   isLoading,
   canLookupChannel,
+  connectedChannel,
+  isCheckingChannel,
 }: ForecastFormProps) {
   const [values, setValues] = useState<ForecastFormValues>(INITIAL_VALUES);
   const [errors, setErrors] = useState<ForecastValidationErrors>({});
@@ -271,9 +275,12 @@ export default function ForecastForm({
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isLoading) return;
+    if (isLoading || isCheckingChannel) return;
 
-    const nextErrors = validateForecastForm(values);
+    const submittedValues = connectedChannel
+      ? { ...values, channelIdentifier: connectedChannel.id }
+      : values;
+    const nextErrors = validateForecastForm(submittedValues);
     if (hasValidationErrors(nextErrors)) {
       setErrors(nextErrors);
       const firstError = Object.keys(nextErrors)[0] as
@@ -287,7 +294,7 @@ export default function ForecastForm({
     }
 
     setErrors({});
-    onSubmit(toForecastRequest(values));
+    onSubmit(toForecastRequest(submittedValues));
   }
 
   function handleReset() {
@@ -540,6 +547,14 @@ export default function ForecastForm({
         </Field>
 
 
+        {isCheckingChannel ? (
+          <div className="field field--wide" role="status">Checking your YouTube connection…</div>
+        ) : connectedChannel ? (
+          <div className="field field--wide">
+            <div className="field__heading"><span className="field__label">YouTube channel</span></div>
+            <p>Using your connected channel: <strong>{connectedChannel.title || connectedChannel.id}</strong></p>
+          </div>
+        ) : (
         <Field
           id="channelIdentifier"
           label="YouTube channel"
@@ -637,6 +652,7 @@ export default function ForecastForm({
             </div>
           )}
         </Field>
+        )}
       </div>
 
       <details className="optional-section">
@@ -718,7 +734,7 @@ export default function ForecastForm({
       </details>
 
       <div className="form-actions">
-        <button className="primary-button" type="submit" disabled={isLoading}>
+        <button className="primary-button" type="submit" disabled={isLoading || isCheckingChannel}>
           <StudioIcon name="spark" width="17" height="17" />
           {isLoading ? "Generating forecast…" : "Generate forecast"}
           <StudioIcon name="arrow" width="17" height="17" />

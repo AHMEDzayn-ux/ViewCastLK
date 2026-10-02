@@ -1,6 +1,6 @@
 import type { SVGProps } from "react";
 
-export type StudioIconName = "forecast" | "history" | "channel" | "chart" | "book" | "arrow" | "spark" | "shield" | "play" | "clock" | "plus" | "logout" | "check";
+export type StudioIconName = "forecast" | "history" | "channel" | "chart" | "book" | "arrow" | "spark" | "shield" | "play" | "clock" | "plus" | "logout" | "check" | "data";
 
 const paths: Record<StudioIconName, React.ReactNode> = {
   forecast: <><rect x="3" y="3" width="18" height="18" rx="4" /><path d="m7 15 4-4 3 2 3-5M14 8h3v3" /></>,
@@ -16,6 +16,7 @@ const paths: Record<StudioIconName, React.ReactNode> = {
   plus: <path d="M12 5v14M5 12h14" />,
   logout: <path d="M10 4H4v16h6M10 12h11m-4-4 4 4-4 4" />,
   check: <path d="m5 12 4 4L19 6" />,
+  data: <><ellipse cx="12" cy="6" rx="8" ry="3" /><path d="M4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" /></>,
 };
 
 export default function StudioIcon({ name, ...props }: SVGProps<SVGSVGElement> & { name: StudioIconName }) {

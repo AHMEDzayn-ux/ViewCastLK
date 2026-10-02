@@ -8,6 +8,7 @@
   "largest_component_training_rows": 55527,
   "added_by_api": [
     "training_video_ids.txt",
-    "training_video_ids.json"
+    "training_video_ids.json",
+    "published_accuracy.json"
   ]
 }

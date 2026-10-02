@@ -71,16 +71,24 @@ the next model; invalid credentials and invalid requests stop immediately.
 
 ## Active model artifact
 
-The API serves `model_artifacts/viewcastlk_monotonic_trajectory_experimental_v1`.
-It predicts all four horizons in one call and guarantees a nondecreasing
-cumulative trajectory. The previous `viewcastlk_mvp_candidate_v1` directory is
-retained only as a rollback artifact and is not loaded by the API.
+The served model is named once, in `app/artifact.py`. It is currently
+`model_artifacts/viewcastlk_reconciled_latest_clean_20260918_v9`: four
+horizon-specific regressors trained on 36,484 videos with complete day-7, 14,
+21 and 30 labels, reconciled so the trajectory never falls. It reads the
+channel's own recent record, rebuilt from the warehouse at request time by
+`app/channel_history.py`, and the title and planned slot from the form, via
+`app/pre_publication_features.py`. It passed its release gate on reserved
+channels; see the artifact's `evaluation/` directory.
 
-The active artifact is explicitly experimental: its manifest reports that no
-video in the frozen dataset has all four horizon labels, so end-to-end Day 30
-accuracy has not been measured. See the artifact's `manifest.json` and
-`evaluation/` directory before treating it as an approved production-quality
-model.
+The release does not ship its exact training-ID list, which personalisation
+needs in order to keep training videos out of a creator's calibration.
+`training_video_ids.txt` is therefore a superset, every video in the source
+training table, and `training_video_ids.json` records how it was derived.
+
+`viewcastlk_monotonic_trajectory_experimental_v1` is kept beside it as the
+rollback: change `ACTIVE_ARTIFACT_VERSION` and redeploy. A creator's stored
+adjustments are tied to the model that produced them, so after any swap they
+apply again only once that creator's history has been re-synced.
 
 ## Setup & Running Locally
 

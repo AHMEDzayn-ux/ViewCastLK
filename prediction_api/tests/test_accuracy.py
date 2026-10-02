@@ -2,6 +2,7 @@
 
 from fastapi.testclient import TestClient
 
+from app.artifact import ACTIVE_ARTIFACT_VERSION
 from app.main import app
 
 
@@ -14,7 +15,7 @@ def test_accuracy_endpoint_returns_unavailable_status():
     assert response.status_code == 200
     assert response.json() == {
         "status": "unavailable",
-        "modelName": "viewcastlk_monotonic_trajectory_experimental_v1",
+        "modelName": ACTIVE_ARTIFACT_VERSION,
         "evaluatedAt": None,
         "evaluations": [],
         "dataSource": "prediction_api",

@@ -328,9 +328,16 @@ def test_connected_creator_without_adjustments_receives_shared_forecast():
 
 
 def test_current_training_id_artifact_is_unique_and_nonempty():
-    identifiers = load_current_training_video_ids()
+    import json
 
-    assert len(identifiers) == 40851
+    from app.artifact import ARTIFACT_DIR
+
+    identifiers = load_current_training_video_ids()
+    record = json.loads((ARTIFACT_DIR / "training_video_ids.json").read_text(encoding="utf-8"))
+
+    assert len(identifiers) == record["count"]
+    # A superset is only safe if it really covers what the model trained on.
+    assert len(identifiers) >= record["largest_component_training_rows"]
     assert all(identifier.strip() == identifier for identifier in identifiers)
 
 
@@ -419,3 +426,54 @@ def test_history_sync_persists_predictions_and_current_model_adjustments(monkeyp
     store.set_youtube_connection_status.assert_awaited_once_with(
         user_id="user-a", status="active", refresh_ok=True
     )
+
+
+def test_past_videos_are_re_predicted_with_the_inputs_a_live_forecast_gets():
+    """A creator's correction is learned from re-predictions of their own past
+    videos and applied to live forecasts, so both must see the same inputs.
+    The served model reads the title and the channel's own record; leaving
+    either out of the re-prediction would learn the correction against a
+    different kind of forecast from the one it is applied to."""
+    from datetime import datetime, timedelta, timezone
+
+    from app.creator_analytics import CreatorVideo
+    from app.feature_builder import EXPECTED_COLUMNS
+    from app.personalization import _historical_feature_frame
+
+    if not {"title_length", "prior_d7_view_count"} <= set(EXPECTED_COLUMNS):
+        pytest.skip("the served model reads neither the title nor the channel's record")
+    from app.youtube_oauth import YouTubeChannelIdentity
+
+    start = datetime(2026, 8, 1, 12, tzinfo=timezone.utc)
+    channel = YouTubeChannelIdentity(
+        channel_id="UCtest", title="Test", published_at=start - timedelta(days=900)
+    )
+    collected = [
+        {"published_at": start, "category_name": "Music", "is_short": False,
+         "d7_views": 1500, "d7_hours_off": 0.0, "d30_views": None, "d30_hours_off": None},
+    ]
+
+    def frame_for(days_after_first):
+        video = CreatorVideo(
+            video_id=f"v{days_after_first}",
+            title="Aluth Sindu 2026 | Best Hits!",
+            category="Music",
+            duration_seconds=240,
+            audio_language="Sinhala",
+            published_at=start + timedelta(days=days_after_first),
+            is_short=False,
+        )
+        return _historical_feature_frame(
+            video=video, position=2, channel=channel, history_rows=collected
+        )
+
+    later = frame_for(10)
+    assert later.loc[0, "title_length"] == len("Aluth Sindu 2026 | Best Hits!")
+    # Ten days on, the first video's day-7 figure had been observed.
+    assert later.loc[0, "prior_d7_view_count"] == 1
+    assert later.loc[0, "prior_d7_median_views"] == 1500
+
+    sooner = frame_for(3)
+    # Three days on it had been published but its day-7 figure did not exist yet.
+    assert sooner.loc[0, "prior_channel_video_count"] == 1
+    assert sooner.loc[0, "prior_d7_view_count"] == 0

@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
+from app.artifact import ACTIVE_ARTIFACT_VERSION
 from app.main import app
 import app.main as main_module
 from app.schemas import ChannelStatsResponse
@@ -71,8 +72,8 @@ def test_6_model_metadata_identifies_monotonic_trajectory(mock_fetch):
     assert response.status_code == 200
     data = response.json()
     model = data.get("model", {})
-    assert model.get("artifactVersion") == "viewcastlk_monotonic_trajectory_experimental_v1"
-    assert model.get("modelVersion") == "viewcastlk_monotonic_trajectory_experimental_v1"
+    assert model.get("artifactVersion") == ACTIVE_ARTIFACT_VERSION
+    assert model.get("modelVersion") == ACTIVE_ARTIFACT_VERSION
     assert model.get("dataSource") == "prediction_api"
     assert model.get("status") == "experimental"
 
@@ -189,7 +190,7 @@ def test_personalization_is_scoped_to_authenticated_user_and_current_model(mock_
             "format": "all",
             "factor": 1.25,
             "n_videos": 12,
-            "model_version": "viewcastlk_monotonic_trajectory_experimental_v1",
+            "model_version": ACTIVE_ARTIFACT_VERSION,
         }
         for horizon in (7, 14, 21, 30)
     ]
@@ -209,7 +210,7 @@ def test_personalization_is_scoped_to_authenticated_user_and_current_model(mock_
     )
     get_adjustments.assert_awaited_once_with(
         user_id="test-authenticated-user",
-        model_version="viewcastlk_monotonic_trajectory_experimental_v1",
+        model_version=ACTIVE_ARTIFACT_VERSION,
     )
 
 
@@ -226,7 +227,7 @@ def test_authenticated_user_without_adjustments_gets_shared_forecast(mock_fetch)
     assert response.json()["personalization"]["applied"] is False
     get_adjustments.assert_awaited_once_with(
         user_id="test-authenticated-user",
-        model_version="viewcastlk_monotonic_trajectory_experimental_v1",
+        model_version=ACTIVE_ARTIFACT_VERSION,
     )
 
 
@@ -272,7 +273,7 @@ def test_creator_format_selects_matching_personal_adjustment(mock_fetch):
             "format": format_name,
             "factor": factor,
             "n_videos": 8,
-            "model_version": "viewcastlk_monotonic_trajectory_experimental_v1",
+            "model_version": ACTIVE_ARTIFACT_VERSION,
         }
         for horizon in (7, 14, 21, 30)
         for format_name, factor in (("short", 1.5), ("long", 1.25))
@@ -291,3 +292,29 @@ def test_creator_format_selects_matching_personal_adjustment(mock_fetch):
     assert body["estimates"][0]["cumulativeViews"] == round(
         body["personalization"]["sharedEstimates"][0]["cumulativeViews"] * 1.25
     )
+
+
+def test_a_category_the_model_never_saw_is_reported_not_hidden():
+    with patch("app.main.fetch_channel_stats") as mock_fetch:
+        mock_fetch.return_value = MOCK_CHANNEL_STATS
+        unseen = client.post(
+            "/forecast", json={**VALID_FORECAST_PAYLOAD, "category": "Made Up Category"}
+        )
+        seen = client.post("/forecast", json={**VALID_FORECAST_PAYLOAD, "category": "Music"})
+
+    assert unseen.status_code == 200
+    issues = unseen.json()["completeness"]["issues"]
+    assert any(issue["source"] == "category" for issue in issues)
+    assert unseen.json()["completeness"]["status"] == "degraded"
+    assert not any(issue["source"] == "category" for issue in seen.json()["completeness"]["issues"])
+
+
+def test_nonprofits_is_not_reported_as_unknown_because_the_model_learned_it_blank():
+    with patch("app.main.fetch_channel_stats") as mock_fetch:
+        mock_fetch.return_value = MOCK_CHANNEL_STATS
+        response = client.post(
+            "/forecast", json={**VALID_FORECAST_PAYLOAD, "category": "Nonprofits & Activism"}
+        )
+    assert response.status_code == 200
+    issues = response.json()["completeness"]["issues"]
+    assert not any(issue["source"] == "category" for issue in issues)

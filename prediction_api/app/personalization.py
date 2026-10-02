@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from statistics import median
 from typing import Any
@@ -16,16 +16,17 @@ from app.creator_analytics import (
     fetch_upload_video_ids,
     fetch_video_metadata,
 )
+from app.artifact import ARTIFACT_DIR
+from app.channel_history import (
+    ChannelHistoryStore,
+    ChannelHistoryUnavailable,
+    compute_history_features,
+)
 from app.feature_builder import build_candidate_feature_frame
 from app.youtube_oauth import YouTubeChannelIdentity
 
 
-TRAINING_IDS_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "model_artifacts"
-    / "viewcastlk_monotonic_trajectory_experimental_v1"
-    / "training_video_ids.txt"
-)
+TRAINING_IDS_PATH = ARTIFACT_DIR / "training_video_ids.txt"
 COLOMBO = ZoneInfo("Asia/Colombo")
 
 
@@ -149,7 +150,11 @@ def apply_forecast_adjustments(
 
 
 def _historical_feature_frame(
-    *, video: CreatorVideo, position: int, channel: YouTubeChannelIdentity
+    *,
+    video: CreatorVideo,
+    position: int,
+    channel: YouTubeChannelIdentity,
+    history_rows: list[dict[str, Any]] | None = None,
 ):
     published_local = video.published_at.astimezone(COLOMBO)
     channel_created = channel.published_at
@@ -157,6 +162,9 @@ def _historical_feature_frame(
     if channel_created is not None:
         channel_age_days = max(0, (video.published_at - channel_created).days)
     request = {
+        # The title is known for every past video, and a live forecast reads
+        # the creator's typed title, so the re-prediction must read it too.
+        "title": video.title,
         "category": video.category,
         "durationSeconds": video.duration_seconds,
         "audioLanguage": video.audio_language,
@@ -172,7 +180,35 @@ def _historical_feature_frame(
         "ch_videos_at_publish": position,
         "channel_age_days_at_publish": channel_age_days,
     }
-    return build_candidate_feature_frame(request, channel_stats)
+    # The channel's record as it stood when this video went up. A live forecast
+    # reads the same warehouse for the same features as of now; computing them
+    # as of each past publish time keeps the two predictions comparable, so the
+    # correction learned here applies to the forecast it is used on. Labels the
+    # channel could not yet have seen are excluded by compute_history_features.
+    history = compute_history_features(
+        history_rows or [],
+        as_of=video.published_at,
+        category_name=video.category,
+        is_short=video.is_short,
+    )
+    return build_candidate_feature_frame(request, channel_stats, history=history)
+
+
+async def _load_channel_history_rows(
+    channel_id: str, store: ChannelHistoryStore | None
+) -> list[dict[str, Any]]:
+    """The channel's collected videos, read once and reused for every past video.
+
+    Empty when the channel has not been collected or the warehouse is
+    unreachable, which matches what a live forecast for that channel sees.
+    """
+    store = store or ChannelHistoryStore()
+    if not store.is_configured:
+        return []
+    try:
+        return await store.fetch(channel_id=channel_id, as_of=datetime.now(timezone.utc))
+    except ChannelHistoryUnavailable:
+        return []
 
 
 async def synchronize_creator_history(
@@ -182,6 +218,7 @@ async def synchronize_creator_history(
     channel: YouTubeChannelIdentity,
     store,
     model_registry,
+    history_store: ChannelHistoryStore | None = None,
 ) -> None:
     if not channel.uploads_playlist_id:
         raise CreatorSyncException("The channel uploads playlist was unavailable")
@@ -197,10 +234,17 @@ async def synchronize_creator_history(
     if not isinstance(model_version, str) or not model_version:
         raise CreatorSyncException("The active model version is unavailable")
 
+    history_rows = await _load_channel_history_rows(channel.channel_id, history_store)
+
     records: list[dict[str, Any]] = []
     for position, video in enumerate(videos, start=1):
         trajectory = model_registry.predict_trajectory(
-            _historical_feature_frame(video=video, position=position, channel=channel)
+            _historical_feature_frame(
+                video=video,
+                position=position,
+                channel=channel,
+                history_rows=history_rows,
+            )
         )[0]
         horizons = cumulative_horizons(
             published_at=video.published_at,

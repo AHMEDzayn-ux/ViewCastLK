@@ -61,6 +61,12 @@ HISTORY_COLUMNS: tuple[str, ...] = (
 )
 
 
+# Not a model column. The model's default_language input is the video's
+# metadata language, and on a channel that is a habit: 93.6% of training videos
+# share their channel's usual one. The feature builder reads it from here.
+CHANNEL_LANGUAGE_KEY = "channel_usual_language"
+
+
 class ChannelHistoryUnavailable(Exception):
     """The warehouse could not be reached. Callers fall back to no history."""
 
@@ -153,7 +159,25 @@ def empty_history_features() -> dict[str, float]:
     features["prior_d30_view_count"] = 0.0
     features["prior_same_category_d7_count"] = 0.0
     features["prior_same_format_d7_count"] = 0.0
+    features[CHANNEL_LANGUAGE_KEY] = None
     return features
+
+
+def usual_language(videos: Iterable[Mapping[str, Any]]) -> str | None:
+    """The metadata language a channel's videos use most often.
+
+    Ties go to the alphabetically first code so the answer never depends on row
+    order. Values are kept exactly as stored ("en-US" stays "en-US"), because
+    the model was trained on the stored values, not on base languages.
+    """
+    counts: dict[str, int] = {}
+    for video in videos:
+        language = video.get("default_language")
+        if isinstance(language, str) and language.strip():
+            counts[language.strip()] = counts.get(language.strip(), 0) + 1
+    if not counts:
+        return None
+    return min(counts, key=lambda code: (-counts[code], code))
 
 
 def _as_utc(value: Any) -> datetime | None:
@@ -228,6 +252,8 @@ def compute_history_features(
         return features
 
     prior.sort(key=lambda item: item[0])
+    # From earlier videos only, like every other history feature.
+    features[CHANNEL_LANGUAGE_KEY] = usual_language(video for _, video in prior)
 
     features["prior_channel_video_count"] = float(len(prior))
     features["uploads_previous_7d"] = float(
@@ -289,6 +315,7 @@ def compute_history_features(
 CHANNEL_HISTORY_SQL = """
 SELECT v.published_at,
        v.category_name,
+       v.default_language,
        v.duration,
        sh.embed_width,
        sh.embed_height,
@@ -341,7 +368,8 @@ class ChannelHistoryStore:
 
 
 def _row_to_video(row: Sequence[Any]) -> dict[str, Any]:
-    published_at, category_name, duration, width, height, d7, d7_off, d30, d30_off = row
+    (published_at, category_name, default_language, duration, width, height,
+     d7, d7_off, d30, d30_off) = row
     try:
         duration_seconds = parse_iso8601_duration(duration) if duration else 0
     except (TypeError, ValueError):
@@ -349,6 +377,7 @@ def _row_to_video(row: Sequence[Any]) -> dict[str, Any]:
     return {
         "published_at": published_at,
         "category_name": category_name,
+        "default_language": default_language,
         "is_short": classify_short(
             duration_seconds=duration_seconds, width=width, height=height
         ),

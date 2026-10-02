@@ -13,6 +13,7 @@ from app.auth import (
     optional_authenticated_user,
     require_authenticated_user,
 )
+from app.artifact import ACTIVE_ARTIFACT_VERSION
 from app.channel_history import history_features_for_channel
 from app.feature_builder import build_candidate_feature_frame
 from app.model_registry import ModelRegistry
@@ -151,9 +152,7 @@ async def health_check():
 async def accuracy_status():
     manifest = model_registry.get_manifest()
     return AccuracyResponse(
-        modelName=manifest.get(
-            "artifact_version", "viewcastlk_monotonic_trajectory_experimental_v1"
-        ),
+        modelName=manifest.get("artifact_version", ACTIVE_ARTIFACT_VERSION),
         message=(
             "Evaluation results are not available yet. No approved held-out "
             "MAPE, baseline comparison, or accuracy values are published."
@@ -376,9 +375,7 @@ async def create_forecast(
     # 6. Build response metadata & documentation fields
     forecast_id = f"fc_{uuid.uuid4().hex[:12]}"
     manifest = model_registry.get_manifest()
-    artifact_ver = manifest.get(
-        "artifact_version", "viewcastlk_monotonic_trajectory_experimental_v1"
-    )
+    artifact_ver = manifest.get("artifact_version", ACTIVE_ARTIFACT_VERSION)
 
     model_metadata = ModelMetadata(
         artifactVersion=artifact_ver,
@@ -421,19 +418,19 @@ async def create_forecast(
     unavailable_recs = [
         UnavailableRecommendation(
             type="timing",
-            reason="Recommendations are unavailable in the experimental trajectory model.",
+            reason="Recommendations are unavailable in the current trajectory model.",
         ),
         UnavailableRecommendation(
             type="duration",
-            reason="Recommendations are unavailable in the experimental trajectory model.",
+            reason="Recommendations are unavailable in the current trajectory model.",
         ),
         UnavailableRecommendation(
             type="format",
-            reason="Recommendations are unavailable in the experimental trajectory model.",
+            reason="Recommendations are unavailable in the current trajectory model.",
         ),
         UnavailableRecommendation(
             type="title",
-            reason="Recommendations are unavailable in the experimental trajectory model.",
+            reason="Recommendations are unavailable in the current trajectory model.",
         ),
     ]
 
@@ -443,6 +440,17 @@ async def create_forecast(
             DataCompletenessIssue(
                 source="channel_lookup",
                 message="Subscriber count is hidden or unavailable for this channel.",
+            )
+        )
+    known_categories = model_registry.known_categories()
+    if known_categories is not None and payload.category not in known_categories:
+        issues.append(
+            DataCompletenessIssue(
+                source="category",
+                message=(
+                    f"No {payload.category} videos were in the training data, so "
+                    "this forecast is not adjusted for the category."
+                ),
             )
         )
     if title_guidance is None:

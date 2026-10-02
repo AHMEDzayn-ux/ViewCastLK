@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { EffectCell, GrowthRow, InsightsData } from "@/types/insights";
 import EffectChart, { effectTone, formatEffect, formatRange } from "./EffectChart";
+import YourChannelInsights from "./YourChannelInsights";
 
 interface InsightsViewProps {
   data: InsightsData;
@@ -383,6 +384,8 @@ export default function InsightsView({ data }: InsightsViewProps) {
           range includes zero.
         </p>
       </aside>
+
+      <YourChannelInsights benchmarks={data} />
 
       <div className="insight-grid">
         <SpacingSection spacing={data.spacing} />

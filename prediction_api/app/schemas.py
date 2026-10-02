@@ -80,6 +80,50 @@ class YouTubeConnectionResponse(BaseModel):
     lastRefreshOkAt: Optional[str] = None
 
 
+class CreatorEffect(BaseModel):
+    """Views against the channel's own normal, with a bootstrap 95% range."""
+    videos: int
+    effectPct: float
+    lowPct: float
+    highPct: float
+
+
+class CreatorGroupEffect(CreatorEffect):
+    key: str
+    label: str
+
+
+class CreatorSpacing(BaseModel):
+    uploadsCounted: int
+    shareWithinHour: Optional[float] = None
+    medianGapHours: Optional[float] = None
+    buckets: List[CreatorGroupEffect] = Field(default_factory=list)
+
+
+class CreatorFormat(BaseModel):
+    shorts: int
+    regular: int
+    shortsVsRegular: Optional[CreatorEffect] = None
+
+
+class CreatorGrowth(BaseModel):
+    videos: int
+    medianGrowthPct: float
+
+
+class CreatorInsightsResponse(BaseModel):
+    channelTitle: Optional[str] = None
+    videosSynced: int
+    videosMeasured: int
+    periodStart: Optional[str] = None
+    periodEnd: Optional[str] = None
+    mainCategory: Optional[str] = None
+    spacing: Optional[CreatorSpacing] = None
+    timing: List[CreatorGroupEffect] = Field(default_factory=list)
+    format: Optional[CreatorFormat] = None
+    growth: Optional[CreatorGrowth] = None
+
+
 class YouTubeDisconnectResponse(BaseModel):
     disconnected: Literal[True] = True
 

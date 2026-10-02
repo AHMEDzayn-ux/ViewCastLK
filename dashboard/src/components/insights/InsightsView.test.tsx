@@ -1,10 +1,19 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import insights from "@/data/insights.json";
 import type { EffectCell, InsightsData } from "@/types/insights";
 import { effectTone, formatEffect } from "./EffectChart";
 import InsightsView from "./InsightsView";
+
+// The section fetches the signed-in creator's data; neither the session nor
+// the Supabase client exists in a unit test.
+vi.mock("@/lib/supabase/client", () => ({
+  supabase: { auth: { getSession: async () => ({ data: { session: null } }) } },
+}));
+vi.mock("@/components/auth/AuthProvider", () => ({
+  useAuth: () => ({ isAuthenticated: false, isLoading: true }),
+}));
 
 const data = insights as InsightsData;
 
@@ -79,6 +88,10 @@ describe("InsightsView", () => {
     expect(html).toContain("not proof of cause");
     expect(html).toContain("Shorts view each time a Short starts or replays");
     expect(html).toContain("changed thumbnail from the same address");
+  });
+
+  it("leads with the creator's own channel section", () => {
+    expect(html).toContain("How these patterns look on your own uploads");
   });
 
   it("offers each chart's numbers as a table", () => {

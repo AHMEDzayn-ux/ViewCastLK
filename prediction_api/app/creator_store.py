@@ -242,6 +242,23 @@ class CreatorStore:
                         (user_id,),
                     )
 
+    async def get_video_history(self, *, user_id: str) -> list[dict[str, Any]]:
+        return await asyncio.to_thread(self._get_video_history, user_id=user_id)
+
+    def _get_video_history(self, *, user_id: str) -> list[dict[str, Any]]:
+        with self._connect() as connection:
+            with connection.cursor(cursor_factory=RealDictCursor) as cursor:
+                cursor.execute(
+                    """
+                    select published_at, category, duration_seconds, is_short, d7, d30
+                    from creator.video_history
+                    where user_id = %s
+                    order by published_at
+                    """,
+                    (user_id,),
+                )
+                return [dict(row) for row in cursor.fetchall()]
+
     async def upsert_video_history(self, *, user_id: str, rows: list[dict[str, Any]]) -> None:
         if not rows:
             return

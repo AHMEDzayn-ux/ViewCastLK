@@ -1,0 +1,411 @@
+{
+ "generatedAt": "2026-10-02T18:45:21+00:00",
+ "releaseTag": "dataset-2026-10-01",
+ "videos": 142651,
+ "channels": 2590,
+ "periodStart": "2026-07-02",
+ "periodEnd": "2026-10-01",
+ "toleranceHours": 12,
+ "labelled": {
+  "day7": 99230,
+  "day14": 94531,
+  "day21": 93949,
+  "day30": 94213
+ },
+ "files": [
+  {
+   "name": "viewcastlk_dataset_20261001.parquet",
+   "format": "Parquet",
+   "bytes": 32408518,
+   "sha256": "820ef676cd0573158c969d5665fd4133cd78344cffae359515441fc10370ba48",
+   "url": "https://github.com/AHMEDzayn-ux/ViewCastLK/releases/download/dataset-2026-10-01/viewcastlk_dataset_20261001.parquet"
+  },
+  {
+   "name": "viewcastlk_dataset_20261001.csv.gz",
+   "format": "CSV (gzip)",
+   "bytes": 27562163,
+   "sha256": "32e90119ed01334aabf4d2c94754b618334653751fb53b932dba2ea3c00277c9",
+   "url": "https://github.com/AHMEDzayn-ux/ViewCastLK/releases/download/dataset-2026-10-01/viewcastlk_dataset_20261001.csv.gz"
+  }
+ ],
+ "columns": [
+  {
+   "name": "video_id",
+   "type": "string",
+   "group": "Identifiers",
+   "meaning": "YouTube video ID. The video is at youtube.com/watch?v=<video_id>.",
+   "source": "youtube",
+   "how": "videos.list id.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "channel_id",
+   "type": "string",
+   "group": "Identifiers",
+   "meaning": "YouTube channel ID of the uploader.",
+   "source": "youtube",
+   "how": "videos.list snippet.channelId.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "channel_title",
+   "type": "string",
+   "group": "Identifiers",
+   "meaning": "The channel's display name.",
+   "source": "youtube",
+   "how": "channels.list snippet.title, as first collected.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "published_at",
+   "type": "timestamp (UTC)",
+   "group": "Video",
+   "meaning": "When the video was published.",
+   "source": "youtube",
+   "how": "videos.list snippet.publishedAt.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "title",
+   "type": "string",
+   "group": "Video",
+   "meaning": "Video title.",
+   "source": "youtube",
+   "how": "videos.list snippet.title, as first collected. See title_changed.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "tags",
+   "type": "string",
+   "group": "Video",
+   "meaning": "Uploader's tags, separated by |. Empty when the video has none.",
+   "source": "youtube",
+   "how": "videos.list snippet.tags, joined with |.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "category_id",
+   "type": "string",
+   "group": "Video",
+   "meaning": "YouTube category number.",
+   "source": "youtube",
+   "how": "videos.list snippet.categoryId.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "category_name",
+   "type": "string",
+   "group": "Video",
+   "meaning": "YouTube category name.",
+   "source": "computed",
+   "how": "Looked up from YouTube's category list for Sri Lanka. That list leaves out category 29, which we fill in as Nonprofits & Activism.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "duration_seconds",
+   "type": "number",
+   "group": "Video",
+   "meaning": "Length in seconds. Empty when YouTube reports no usable duration.",
+   "source": "youtube",
+   "how": "videos.list contentDetails.duration, converted from ISO 8601.",
+   "emptyPct": 3.6
+  },
+  {
+   "name": "is_short",
+   "type": "boolean",
+   "group": "Video",
+   "meaning": "Whether the video is a YouTube Short.",
+   "source": "computed",
+   "how": "The API has no Shorts flag. True when the player is vertical or square and the video is at most 180 seconds. Where the player shape is unknown (is_vertical empty), true when the video is at most 60 seconds.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "is_vertical",
+   "type": "boolean",
+   "group": "Video",
+   "meaning": "Whether the video player is taller than or as tall as it is wide. Empty when the shape could not be read.",
+   "source": "collected",
+   "how": "Embed width and height from YouTube's oEmbed endpoint.",
+   "emptyPct": 2.8
+  },
+  {
+   "name": "is_live_broadcast",
+   "type": "boolean",
+   "group": "Video",
+   "meaning": "Whether the video is a live broadcast (YouTube reports its duration as zero).",
+   "source": "computed",
+   "how": "contentDetails.duration equals P0D.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "definition",
+   "type": "string",
+   "group": "Video",
+   "meaning": "hd or sd.",
+   "source": "youtube",
+   "how": "videos.list contentDetails.definition.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "caption",
+   "type": "boolean",
+   "group": "Video",
+   "meaning": "Whether the uploader added captions.",
+   "source": "youtube",
+   "how": "videos.list contentDetails.caption.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "made_for_kids",
+   "type": "boolean",
+   "group": "Video",
+   "meaning": "Whether the video is marked as made for kids.",
+   "source": "youtube",
+   "how": "videos.list status.madeForKids.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "default_audio_language",
+   "type": "string",
+   "group": "Video",
+   "meaning": "Spoken language the uploader set, as a language code. Often empty.",
+   "source": "youtube",
+   "how": "videos.list snippet.defaultAudioLanguage.",
+   "emptyPct": 6.7
+  },
+  {
+   "name": "default_language",
+   "type": "string",
+   "group": "Video",
+   "meaning": "Language of the title and description the uploader set, as a language code.",
+   "source": "youtube",
+   "how": "videos.list snippet.defaultLanguage.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "description_length",
+   "type": "integer",
+   "group": "Video",
+   "meaning": "Number of characters in the description. 0 when there is none.",
+   "source": "computed",
+   "how": "Length of videos.list snippet.description. The description itself is not included.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "topic_categories",
+   "type": "string",
+   "group": "Video",
+   "meaning": "The channel's topics, as Wikipedia URLs separated by |.",
+   "source": "youtube",
+   "how": "channels.list topicDetails.topicCategories.",
+   "emptyPct": 0.6
+  },
+  {
+   "name": "ch_subs_at_publish",
+   "type": "integer",
+   "group": "Channel when the video was published",
+   "meaning": "Channel subscribers.",
+   "source": "collected",
+   "how": "From our channel snapshot taken at or most recently before published_at.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "ch_views_at_publish",
+   "type": "integer",
+   "group": "Channel when the video was published",
+   "meaning": "Channel total views.",
+   "source": "collected",
+   "how": "Same snapshot as ch_subs_at_publish.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "ch_videos_at_publish",
+   "type": "integer",
+   "group": "Channel when the video was published",
+   "meaning": "Number of videos on the channel.",
+   "source": "collected",
+   "how": "Same snapshot as ch_subs_at_publish.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "channel_age_days_at_publish",
+   "type": "number",
+   "group": "Channel when the video was published",
+   "meaning": "Days between the channel's creation and the video's publication.",
+   "source": "computed",
+   "how": "published_at minus channels.list snippet.publishedAt.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "ch_stats_as_of",
+   "type": "timestamp (UTC)",
+   "group": "Channel when the video was published",
+   "meaning": "When the channel snapshot above was taken.",
+   "source": "collected",
+   "how": "If it is after published_at, no snapshot predated the video and the earliest one was used instead, so the channel figures include some growth after publication.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "d7_views",
+   "type": "integer",
+   "group": "Day 7",
+   "meaning": "Total views at day 7.",
+   "source": "collected",
+   "how": "From our poll nearest to 168 hours after published_at.",
+   "emptyPct": 30.4
+  },
+  {
+   "name": "d7_likes",
+   "type": "integer",
+   "group": "Day 7",
+   "meaning": "Total likes at day 7. Empty when likes are hidden.",
+   "source": "collected",
+   "how": "Same poll as d7_views.",
+   "emptyPct": 31.7
+  },
+  {
+   "name": "d7_comments",
+   "type": "integer",
+   "group": "Day 7",
+   "meaning": "Total comments at day 7. Empty when comments are off.",
+   "source": "collected",
+   "how": "Same poll as d7_views.",
+   "emptyPct": 31.2
+  },
+  {
+   "name": "d7_hours_off",
+   "type": "number",
+   "group": "Day 7",
+   "meaning": "How far that poll was from the exact day-7 mark, in hours. Positive means after the mark.",
+   "source": "computed",
+   "how": "Poll time minus (published_at + 168 hours). Use the day-7 figures only when this is within ±12 and d7_views is present.",
+   "emptyPct": 30.4
+  },
+  {
+   "name": "d14_views",
+   "type": "integer",
+   "group": "Day 14",
+   "meaning": "Total views at day 14.",
+   "source": "collected",
+   "how": "From our poll nearest to 336 hours after published_at.",
+   "emptyPct": 33.7
+  },
+  {
+   "name": "d14_likes",
+   "type": "integer",
+   "group": "Day 14",
+   "meaning": "Total likes at day 14. Empty when likes are hidden.",
+   "source": "collected",
+   "how": "Same poll as d14_views.",
+   "emptyPct": 34.9
+  },
+  {
+   "name": "d14_comments",
+   "type": "integer",
+   "group": "Day 14",
+   "meaning": "Total comments at day 14. Empty when comments are off.",
+   "source": "collected",
+   "how": "Same poll as d14_views.",
+   "emptyPct": 34.5
+  },
+  {
+   "name": "d14_hours_off",
+   "type": "number",
+   "group": "Day 14",
+   "meaning": "How far that poll was from the exact day-14 mark, in hours. Positive means after the mark.",
+   "source": "computed",
+   "how": "Poll time minus (published_at + 336 hours). Use the day-14 figures only when this is within ±12 and d14_views is present.",
+   "emptyPct": 33.7
+  },
+  {
+   "name": "d21_views",
+   "type": "integer",
+   "group": "Day 21",
+   "meaning": "Total views at day 21.",
+   "source": "collected",
+   "how": "From our poll nearest to 504 hours after published_at.",
+   "emptyPct": 34.1
+  },
+  {
+   "name": "d21_likes",
+   "type": "integer",
+   "group": "Day 21",
+   "meaning": "Total likes at day 21. Empty when likes are hidden.",
+   "source": "collected",
+   "how": "Same poll as d21_views.",
+   "emptyPct": 35.2
+  },
+  {
+   "name": "d21_comments",
+   "type": "integer",
+   "group": "Day 21",
+   "meaning": "Total comments at day 21. Empty when comments are off.",
+   "source": "collected",
+   "how": "Same poll as d21_views.",
+   "emptyPct": 35.0
+  },
+  {
+   "name": "d21_hours_off",
+   "type": "number",
+   "group": "Day 21",
+   "meaning": "How far that poll was from the exact day-21 mark, in hours. Positive means after the mark.",
+   "source": "computed",
+   "how": "Poll time minus (published_at + 504 hours). Use the day-21 figures only when this is within ±12 and d21_views is present.",
+   "emptyPct": 34.1
+  },
+  {
+   "name": "d30_views",
+   "type": "integer",
+   "group": "Day 30",
+   "meaning": "Total views at day 30.",
+   "source": "collected",
+   "how": "From our poll nearest to 720 hours after published_at.",
+   "emptyPct": 34.0
+  },
+  {
+   "name": "d30_likes",
+   "type": "integer",
+   "group": "Day 30",
+   "meaning": "Total likes at day 30. Empty when likes are hidden.",
+   "source": "collected",
+   "how": "Same poll as d30_views.",
+   "emptyPct": 35.0
+  },
+  {
+   "name": "d30_comments",
+   "type": "integer",
+   "group": "Day 30",
+   "meaning": "Total comments at day 30. Empty when comments are off.",
+   "source": "collected",
+   "how": "Same poll as d30_views.",
+   "emptyPct": 34.9
+  },
+  {
+   "name": "d30_hours_off",
+   "type": "number",
+   "group": "Day 30",
+   "meaning": "How far that poll was from the exact day-30 mark, in hours. Positive means after the mark.",
+   "source": "computed",
+   "how": "Poll time minus (published_at + 720 hours). Use the day-30 figures only when this is within ±12 and d30_views is present.",
+   "emptyPct": 34.0
+  },
+  {
+   "name": "title_changed",
+   "type": "boolean",
+   "group": "Edits after publishing",
+   "meaning": "Whether a later poll saw a different title from the one in this file.",
+   "source": "collected",
+   "how": "Compared on every poll.",
+   "emptyPct": 0.0
+  },
+  {
+   "name": "description_changed",
+   "type": "boolean",
+   "group": "Edits after publishing",
+   "meaning": "Whether a later poll saw a different description.",
+   "source": "collected",
+   "how": "Compared by fingerprint on every poll.",
+   "emptyPct": 0.0
+  }
+ ]
+}

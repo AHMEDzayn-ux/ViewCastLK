@@ -22,6 +22,7 @@ from app.schemas import (
     BreakoutForecast,
     ChannelLookupRequest,
     ChannelStatsResponse,
+    CreatorInsightsResponse,
     DataCompleteness,
     DataCompletenessIssue,
     ErrorResponse,
@@ -40,6 +41,7 @@ from app.schemas import (
 from app.title_analysis import analyze_title_tone
 from app.youtube import ChannelLookupException, fetch_channel_stats
 from app.creator_store import CreatorStore, CreatorStoreUnavailable
+from app.creator_insights import compute_creator_insights
 from app.creator_lifecycle import disconnect_creator_connection
 from app.public_roster import (
     PublicRosterStore,
@@ -284,6 +286,34 @@ async def disconnect_youtube_connection(
         store=creator_store,
     )
     return YouTubeDisconnectResponse()
+
+
+@app.get(
+    "/creator/insights",
+    response_model=CreatorInsightsResponse,
+    responses={401: {"model": ErrorResponse}, 404: {"model": ErrorResponse},
+               503: {"model": ErrorResponse}},
+)
+async def creator_insights(
+    authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
+):
+    """The signed-in creator's own spacing, timing, format and growth pattern."""
+    connection = await creator_store.get_youtube_connection_status(
+        user_id=authenticated_user.id
+    )
+    if connection is None:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "message": "Connect your YouTube channel to see your own pattern.",
+                "code": "youtube_not_connected",
+            },
+        )
+    rows = await creator_store.get_video_history(user_id=authenticated_user.id)
+    return CreatorInsightsResponse(
+        channelTitle=connection.get("channel_title"),
+        **compute_creator_insights(rows),
+    )
 
 
 @app.post(

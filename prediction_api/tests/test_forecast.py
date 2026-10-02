@@ -1,10 +1,16 @@
 """Automated tests for POST /forecast endpoint."""
 
 from unittest.mock import AsyncMock, patch
+import numpy as np
+import pandas as pd
 import pytest
 from fastapi.testclient import TestClient
 
-from app.artifact import ACTIVE_ARTIFACT_VERSION, V8_ARTIFACT_VERSION
+from app.artifact import (
+    ACTIVE_ARTIFACT_VERSION,
+    V8_ARTIFACT_VERSION,
+    V9_BREAKOUT_MODEL_VERSION,
+)
 from app.main import app
 import app.main as main_module
 from app.schemas import ChannelStatsResponse
@@ -73,7 +79,7 @@ def test_6_model_metadata_identifies_monotonic_trajectory(mock_fetch):
     data = response.json()
     model = data.get("model", {})
     assert model.get("artifactVersion") == ACTIVE_ARTIFACT_VERSION
-    assert model.get("modelVersion") == ACTIVE_ARTIFACT_VERSION
+    assert model.get("modelVersion") == V9_BREAKOUT_MODEL_VERSION
     assert model.get("dataSource") == "prediction_api"
     assert model.get("status") == "experimental"
 
@@ -208,6 +214,8 @@ def test_personalization_is_scoped_to_authenticated_user_and_current_model(mock_
     assert body["estimates"][0]["cumulativeViews"] == round(
         body["personalization"]["sharedEstimates"][0]["cumulativeViews"] * 1.25
     )
+    for normal, upside in zip(body["estimates"], body["breakout"]["conditionalUpside"]):
+        assert upside["cumulativeViews"] > normal["cumulativeViews"]
     get_adjustments.assert_awaited_once_with(
         user_id="test-authenticated-user",
         model_version=ACTIVE_ARTIFACT_VERSION,
@@ -339,6 +347,51 @@ def test_v8_engine_returns_breakout_probability_and_conditional_upside(mock_fetc
     ]
     for normal, upside in zip(body["estimates"], body["breakout"]["conditionalUpside"]):
         assert upside["cumulativeViews"] > normal["cumulativeViews"]
+
+
+@patch("app.main.fetch_channel_stats", return_value=MOCK_CHANNEL_STATS)
+def test_v9_engine_uses_v9_normal_forecast_with_v8_breakout_scoring(mock_fetch):
+    v8_scenario = pd.DataFrame(
+        {
+            "normal_day_7_views": [10.0],
+            "normal_day_14_views": [20.0],
+            "normal_day_21_views": [30.0],
+            "normal_day_30_views": [40.0],
+            "breakout_probability": [0.42],
+            "viral_upside_day_7_views": [10_000.0],
+            "viral_upside_day_14_views": [12_000.0],
+            "viral_upside_day_21_views": [14_000.0],
+            "viral_upside_day_30_views": [16_000.0],
+        }
+    )
+    with (
+        patch.object(
+            main_module.model_registry,
+            "predict_trajectory",
+            return_value=np.array([[100.0, 200.0, 300.0, 400.0]]),
+        ),
+        patch.object(
+            main_module.v8_model_registry,
+            "predict_scenario",
+            return_value=v8_scenario,
+        ),
+    ):
+        response = client.post(
+            "/forecast",
+            json={**VALID_FORECAST_PAYLOAD, "modelEngine": "v9"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [row["cumulativeViews"] for row in body["estimates"]] == [
+        100,
+        200,
+        300,
+        400,
+    ]
+    assert body["breakout"]["probability"] == pytest.approx(0.42)
+    assert body["model"]["artifactVersion"] == ACTIVE_ARTIFACT_VERSION
+    assert body["model"]["modelVersion"] == V9_BREAKOUT_MODEL_VERSION
 
 
 def test_unknown_model_engine_fails_validation():

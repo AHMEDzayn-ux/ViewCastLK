@@ -90,21 +90,23 @@ rollback: change `ACTIVE_ARTIFACT_VERSION` and redeploy. A creator's stored
 adjustments are tied to the model that produced them, so after any swap they
 apply again only once that creator's history has been re-synced.
 
-### V8 breakout comparison mode
+### V9 trajectory with breakout scoring
 
 The API also ships `viewcastlk_viral_scenario_ensemble_20260915_v8`. The
-released v9 trajectory remains the default. Send `"modelEngine": "v8"` in a
-forecast request to compare against v8. That response uses v8 for its normal
-Day 7/14/21/30 trajectory and adds:
+released v9 trajectory remains the default and is combined with v8's validated
+breakout classifier and conditional-upside model. The default v9 response uses
+v9 for the normal Day 7/14/21/30 trajectory and adds:
 
 - `breakout.probability`, a calibrated pre-publication breakout probability;
 - `breakout.conditionalUpside`, the Day 7/14/21/30 view path conditional on a
   breakout occurring; and
 - `breakout.definition`, the channel-relative threshold used by v8.
 
-The conditional upside is not a second equally likely point prediction. Omit
-`modelEngine`, or send `"v9"`, to use the released v9 model without breakout
-fields.
+The conditional upside is not a second equally likely point prediction. Send
+`"modelEngine": "v8"` to compare against the full v8 normal trajectory while
+keeping the same v8 breakout outputs. The response model version identifies
+the v9-plus-v8 composition rather than claiming the v9 regressor itself
+produces a breakout probability.
 
 ## Setup & Running Locally
 

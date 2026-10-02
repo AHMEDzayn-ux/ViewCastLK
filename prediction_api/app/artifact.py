@@ -20,6 +20,9 @@ from pathlib import Path
 
 ACTIVE_ARTIFACT_VERSION = "viewcastlk_reconciled_latest_clean_20260918_v9"
 V8_ARTIFACT_VERSION = "viewcastlk_viral_scenario_ensemble_20260915_v8"
+V9_BREAKOUT_MODEL_VERSION = (
+    f"{ACTIVE_ARTIFACT_VERSION}+{V8_ARTIFACT_VERSION}-breakout"
+)
 
 ARTIFACT_DIR = (
     Path(__file__).resolve().parent.parent / "model_artifacts" / ACTIVE_ARTIFACT_VERSION

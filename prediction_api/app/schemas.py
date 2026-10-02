@@ -224,7 +224,10 @@ class ForecastResponse(BaseModel):
     )
     breakout: Optional[BreakoutForecast] = Field(
         None,
-        description="V8-only calibrated breakout chance and conditional upside trajectory",
+        description=(
+            "V8 breakout chance and conditional upside trajectory, available "
+            "alongside either the v8 or v9 primary trajectory"
+        ),
     )
     personalization: ForecastPersonalization
     channelStats: Optional[ChannelStatsResponse] = Field(

@@ -192,6 +192,42 @@ class ModelRegistry:
         }
 
 
+class ViralScenarioRegistry(ModelRegistry):
+    """Load and validate the v8 normal-plus-breakout scenario artifact."""
+
+    def predict_scenario(self, df: pd.DataFrame) -> pd.DataFrame:
+        scenario = self.load_model().predict_scenario_frame(df)
+        horizons = self.get_manifest().get("supported_horizons_days", [])
+        if len(scenario) != len(df):
+            raise ValueError("Viral model returned an unexpected row count")
+
+        normal_columns = [f"normal_day_{day}_views" for day in horizons]
+        viral_columns = [f"viral_upside_day_{day}_views" for day in horizons]
+        required = normal_columns + ["breakout_probability"] + viral_columns
+        missing = sorted(set(required) - set(scenario.columns))
+        if missing:
+            raise ValueError(
+                "Viral model omitted required outputs: " + ", ".join(missing)
+            )
+
+        normal = scenario[normal_columns].to_numpy(dtype=float)
+        viral = scenario[viral_columns].to_numpy(dtype=float)
+        probability = scenario["breakout_probability"].to_numpy(dtype=float)
+        if not np.isfinite(normal).all() or not np.isfinite(viral).all():
+            raise ValueError("Viral model returned non-finite trajectory values")
+        if not np.isfinite(probability).all() or ((probability < 0) | (probability > 1)).any():
+            raise ValueError("Viral model returned a probability outside [0, 1]")
+        if (normal < 0).any() or (viral < 0).any():
+            raise ValueError("Viral model returned negative trajectory values")
+        if (np.diff(normal, axis=1) < -1e-12).any():
+            raise ValueError("Viral model returned a decreasing normal trajectory")
+        if (np.diff(viral, axis=1) < -1e-12).any():
+            raise ValueError("Viral model returned a decreasing upside trajectory")
+        if (viral <= normal).any():
+            raise ValueError("Conditional viral upside must exceed the normal forecast")
+        return scenario
+
+
 def main() -> None:
     """Developer CLI entry point."""
     registry = ModelRegistry()

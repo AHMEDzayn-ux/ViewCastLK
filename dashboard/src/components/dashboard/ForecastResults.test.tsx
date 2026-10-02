@@ -102,4 +102,30 @@ describe("ForecastResults personalization", () => {
     expect(screen.getByText(/Your channel is connected, but this forecast used the shared model/)).toBeTruthy();
     expect(screen.queryByText("Personalised forecast")).toBeNull();
   });
+
+  it("shows the v8 breakout probability and conditional upside", () => {
+    render(
+      <ForecastResults
+        request={request}
+        response={{
+          ...baseResponse,
+          breakout: {
+            probability: 0.146,
+            definition: "A channel-relative breakout definition.",
+            conditionalUpside: [
+              { horizonDays: 7, cumulativeViews: 1_000 },
+              { horizonDays: 14, cumulativeViews: 1_400 },
+              { horizonDays: 21, cumulativeViews: 1_700 },
+              { horizonDays: 30, cumulativeViews: 2_000 },
+            ],
+          },
+        }}
+        onChangeInputs={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("Breakout potential")).toBeTruthy();
+    expect(screen.getByText("14.6%")).toBeTruthy();
+    expect(screen.getByText("2,000")).toBeTruthy();
+  });
 });

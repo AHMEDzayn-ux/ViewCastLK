@@ -40,6 +40,7 @@ export const PUBLISH_DAYS = [
 
 export type PublishDay = (typeof PUBLISH_DAYS)[number];
 export type ForecastHorizon = 7 | 14 | 21 | 30;
+export type ForecastEngine = "v8" | "v9";
 export type VideoFormatSelection = "" | "short" | "standard";
 
 export interface ChannelStats {
@@ -58,6 +59,7 @@ export interface ForecastRequest {
   channelIdentifier: string;
   plannedPublishDay: PublishDay | null;
   plannedPublishHour: number | null;
+  modelEngine?: ForecastEngine;
 }
 
 export interface ForecastFormValues {
@@ -75,6 +77,17 @@ export interface ForecastFormValues {
 export interface ForecastEstimate {
   horizonDays: ForecastHorizon;
   cumulativeViews: number;
+}
+
+export interface BreakoutForecast {
+  probability: number;
+  conditionalUpside: [
+    ForecastEstimate,
+    ForecastEstimate,
+    ForecastEstimate,
+    ForecastEstimate,
+  ];
+  definition: string;
 }
 
 export interface PersonalizationAdjustment {
@@ -170,6 +183,7 @@ export interface ForecastResponse {
     ForecastEstimate,
     ForecastEstimate,
   ];
+  breakout?: BreakoutForecast;
   personalization?: ForecastPersonalization;
   recommendations: Recommendation[];
   unavailableRecommendations: UnavailableRecommendation[];

@@ -1,6 +1,7 @@
 import { formatForecastViews } from "@/lib/forecast-format";
 import type { ForecastRequest, ForecastResponse } from "@/types/forecast";
 import DegradedNotice from "./DegradedNotice";
+import BreakoutSummary from "./BreakoutSummary";
 import ForecastChart from "./ForecastChart";
 import HorizonCards from "./HorizonCards";
 import RecommendationCards from "./RecommendationCards";
@@ -79,7 +80,11 @@ export default function ForecastResults({
         </div>
       )}
       <HorizonCards estimates={response.estimates} />
-      <ForecastChart estimates={response.estimates} />
+      {response.breakout && <BreakoutSummary breakout={response.breakout} />}
+      <ForecastChart
+        estimates={response.estimates}
+        conditionalUpside={response.breakout?.conditionalUpside}
+      />
       {response.personalization?.applied && (
         <details className="personalization-details">
           <summary>Compare with the shared model forecast</summary>

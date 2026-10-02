@@ -6,7 +6,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.model_registry import DEFAULT_ARTIFACT_DIR, ModelRegistry
+from app.artifact import V8_ARTIFACT_DIR, V8_ARTIFACT_VERSION
+from app.model_registry import DEFAULT_ARTIFACT_DIR, ModelRegistry, ViralScenarioRegistry
 
 
 def test_artifact_exists():
@@ -142,3 +143,45 @@ def test_a_category_stored_blank_in_training_reaches_the_model_blank():
         assert name in registry.known_categories()
     assert registry.model_category("Music") == "Music"
     assert registry.model_category("Made Up Category") == "Made Up Category"
+
+
+def test_v8_breakout_artifact_checksum_and_sample_contract():
+    registry = ViralScenarioRegistry(V8_ARTIFACT_DIR)
+    manifest = registry.get_manifest()
+    assert manifest["artifact_version"] == V8_ARTIFACT_VERSION
+    assert registry.verify_checksum() == manifest["model"]["sha256"]
+
+    sample = pd.read_csv(V8_ARTIFACT_DIR / "sample_input.csv", low_memory=False)
+    scenario = registry.predict_scenario(sample)
+    probability = float(scenario.iloc[0]["breakout_probability"])
+    assert 0 <= probability <= 1
+    for horizon in (7, 14, 21, 30):
+        assert scenario.iloc[0][f"viral_upside_day_{horizon}_views"] > scenario.iloc[0][
+            f"normal_day_{horizon}_views"
+        ]
+
+
+def test_v8_packaged_checksums_are_complete_and_valid():
+    import hashlib
+
+    entries = {}
+    for line in (V8_ARTIFACT_DIR / "SHA256SUMS.txt").read_text(
+        encoding="utf-8"
+    ).splitlines():
+        expected, relative_path = line.split(maxsplit=1)
+        entries[relative_path] = expected
+
+    packaged_files = {
+        path.relative_to(V8_ARTIFACT_DIR).as_posix()
+        for path in V8_ARTIFACT_DIR.rglob("*")
+        if path.is_file()
+        and path.name != "SHA256SUMS.txt"
+        and "__pycache__" not in path.parts
+        and path.suffix != ".pyc"
+    }
+    assert set(entries) == packaged_files
+    for relative_path, expected in entries.items():
+        assert (
+            hashlib.sha256((V8_ARTIFACT_DIR / relative_path).read_bytes()).hexdigest()
+            == expected
+        ), relative_path

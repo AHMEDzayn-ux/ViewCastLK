@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from app.artifact import ACTIVE_ARTIFACT_VERSION
+from app.artifact import ACTIVE_ARTIFACT_VERSION, V8_ARTIFACT_VERSION
 from app.main import app
 import app.main as main_module
 from app.schemas import ChannelStatsResponse
@@ -318,3 +318,33 @@ def test_nonprofits_is_not_reported_as_unknown_because_the_model_learned_it_blan
     assert response.status_code == 200
     issues = response.json()["completeness"]["issues"]
     assert not any(issue["source"] == "category" for issue in issues)
+
+
+@patch("app.main.fetch_channel_stats", return_value=MOCK_CHANNEL_STATS)
+def test_v8_engine_returns_breakout_probability_and_conditional_upside(mock_fetch):
+    response = client.post(
+        "/forecast",
+        json={**VALID_FORECAST_PAYLOAD, "modelEngine": "v8"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model"]["modelVersion"] == V8_ARTIFACT_VERSION
+    assert 0 <= body["breakout"]["probability"] <= 1
+    assert [row["horizonDays"] for row in body["breakout"]["conditionalUpside"]] == [
+        7,
+        14,
+        21,
+        30,
+    ]
+    for normal, upside in zip(body["estimates"], body["breakout"]["conditionalUpside"]):
+        assert upside["cumulativeViews"] > normal["cumulativeViews"]
+
+
+def test_unknown_model_engine_fails_validation():
+    response = client.post(
+        "/forecast",
+        json={**VALID_FORECAST_PAYLOAD, "modelEngine": "unknown"},
+    )
+    assert response.status_code == 400
+    assert response.json()["code"] == "invalid_request"

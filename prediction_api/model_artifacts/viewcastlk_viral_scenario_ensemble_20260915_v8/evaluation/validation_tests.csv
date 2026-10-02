@@ -1,0 +1,4 @@
+test,status
+development and reserved channels disjoint,PASS
+ensemble probabilities finite and bounded,PASS
+saved classifier reload,PASS

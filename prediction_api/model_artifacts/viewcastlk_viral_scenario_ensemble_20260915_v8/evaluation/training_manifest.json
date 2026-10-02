@@ -1,0 +1,149 @@
+{
+  "artifact_version": "checkpoint22_breakout_ensemble_20260915",
+  "status": "classifier_ensemble_promoted",
+  "selection_data": "nested channel-grouped development OOF only; reserved channels used once for release",
+  "selection_metric": "cross-calibrated log loss with Brier tie-break",
+  "candidate_definitions": [
+    {
+      "name": "xgb_current",
+      "algorithm": "xgboost",
+      "balanced": false,
+      "overrides": {}
+    },
+    {
+      "name": "xgb_shallow",
+      "algorithm": "xgboost",
+      "balanced": false,
+      "overrides": {
+        "max_depth": 3,
+        "min_child_weight": 20,
+        "reg_lambda": 3.0
+      }
+    },
+    {
+      "name": "xgb_balanced",
+      "algorithm": "xgboost",
+      "balanced": true,
+      "overrides": {}
+    },
+    {
+      "name": "lgb_standard",
+      "algorithm": "lightgbm",
+      "balanced": false,
+      "overrides": {}
+    },
+    {
+      "name": "lgb_balanced",
+      "algorithm": "lightgbm",
+      "balanced": true,
+      "overrides": {}
+    }
+  ],
+  "blend_recipe_count": 207,
+  "calibration_methods": [
+    "identity",
+    "platt",
+    "beta",
+    "isotonic"
+  ],
+  "selected_recipe": {
+    "recipe": "logit[xgb_balanced:0.10+lgb_standard:0.90]",
+    "blend_method": "logit",
+    "component_count": 2,
+    "calibration_method": "identity",
+    "weight_xgb_current": 0.0,
+    "weight_xgb_shallow": 0.0,
+    "weight_xgb_balanced": 0.1,
+    "weight_lgb_standard": 0.9,
+    "weight_lgb_balanced": 0.0
+  },
+  "classifier_path": "models/breakout_classifier_ensemble.joblib",
+  "classifier_sha256": "146386c8bf43f2207c66fdce54c03d20eab0cb07949c4f97949a6864b18e4065",
+  "model_path": "models/viral_scenario_trajectory.joblib",
+  "model_sha256": "af23fc39f4c550d52eff19fb7cf910e85c7682d84ad303cdb2e81b0b75a10f1f",
+  "scenario_model_path": "models/viral_scenario_trajectory.joblib",
+  "scenario_model_sha256": "af23fc39f4c550d52eff19fb7cf910e85c7682d84ad303cdb2e81b0b75a10f1f",
+  "development_rows": 28616,
+  "development_breakout_rows": 2817,
+  "reserved_test_rows": 7032,
+  "reserved_breakout_rows": 806,
+  "split_seed": 781,
+  "horizons": [
+    7,
+    14,
+    21,
+    30
+  ],
+  "output_contract": {
+    "primary": "normal_day_{horizon}_views",
+    "conditional_upside": "viral_upside_day_{horizon}_views",
+    "condition_probability": "breakout_probability",
+    "wording": "Normally expected around N views. There is a P% breakout chance; if that happens, around V views.",
+    "combined_weighted_prediction_exposed": false
+  },
+  "breakout_definition": {
+    "horizon_days": 7,
+    "minimum_views": 10000.0,
+    "baseline_multiplier": 5.0,
+    "minimum_history_count": 5,
+    "baseline": "prior day-7 channel median when at least five observations exist; otherwise point-in-time channel average"
+  },
+  "classifier_reserved_test": {
+    "rows": 7032,
+    "breakout_rows": 806,
+    "breakout_rate_pct": 11.461888509670079,
+    "roc_auc": 0.8604339920879304,
+    "average_precision": 0.4249635119012239,
+    "brier_score": 0.08454022317598892,
+    "log_loss": 0.2747447724441206
+  },
+  "limitations": [
+    "The breakout probability is pre-publication and cannot know future audience reactions.",
+    "The current structured title features do not encode the full title meaning or thumbnail content.",
+    "The viral-upside value is conditional on breakout, not a second equally likely point prediction."
+  ],
+  "comparison": {
+    "development_baseline": {
+      "method": "baseline_xgb_current_nested_platt",
+      "rows": 28616,
+      "breakout_rows": 2817,
+      "breakout_rate_pct": 9.844143136706737,
+      "roc_auc": 0.7984850744573334,
+      "average_precision": 0.34460934772029794,
+      "brier_score": 0.07880139101684402,
+      "log_loss": 0.2700455186484078
+    },
+    "development_ensemble": {
+      "method": "ensemble_nested_cross_selected",
+      "rows": 28616,
+      "breakout_rows": 2817,
+      "breakout_rate_pct": 9.844143136706737,
+      "roc_auc": 0.7959388549002631,
+      "average_precision": 0.36590542161341433,
+      "brier_score": 0.0757309596311866,
+      "log_loss": 0.2644212986721789
+    },
+    "reserved_baseline": {
+      "method": "existing_single_xgb_platt",
+      "rows": 7032,
+      "breakout_rows": 806,
+      "breakout_rate_pct": 11.461888509670079,
+      "roc_auc": 0.8532672160849523,
+      "average_precision": 0.4260541736976969,
+      "brier_score": 0.0853878682109142,
+      "log_loss": 0.27732707060185763
+    },
+    "reserved_ensemble": {
+      "method": "selected_classifier_ensemble",
+      "rows": 7032,
+      "breakout_rows": 806,
+      "breakout_rate_pct": 11.461888509670079,
+      "roc_auc": 0.8604339920879304,
+      "average_precision": 0.4249635119012239,
+      "brier_score": 0.08454022317598892,
+      "log_loss": 0.2747447724441206
+    },
+    "release_gate_passed": true
+  },
+  "release_gate": "development and reserved log loss plus Brier must not regress; reserved AUC and AP tolerance is 0.002"
+}

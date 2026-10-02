@@ -178,46 +178,55 @@ export interface ForecastResponse {
   model: ModelMetadata;
 }
 
-export type AccuracyMetricKey = "mape" | "mae" | "rmse" | "r2";
+// View counts are heavy-tailed: one viral video dominates an average error in
+// views, and a percentage error explodes on small counts. Accuracy is reported
+// as the share of forecasts within a factor of two, the typical multiple a
+// forecast is off by, and how well forecasts rank videos.
+export type AccuracyMetricKey = "within_2x" | "typical_factor" | "rank_correlation";
 
-export const ACCURACY_SCOPES = [
-  "combined",
-  "day_7",
-  "day_14",
-  "day_21",
-  "day_30",
-] as const;
+export const ACCURACY_SCOPES = ["day_7", "day_14", "day_21", "day_30"] as const;
 
 export type AccuracyScope = (typeof ACCURACY_SCOPES)[number];
+
+// Accuracy depends most on whether the channel's own history is known.
+export const ACCURACY_SEGMENTS = ["tracked_channel", "new_channel"] as const;
+
+export type AccuracySegment = (typeof ACCURACY_SEGMENTS)[number];
 
 export interface AccuracyMetric {
   key: AccuracyMetricKey;
   label: string;
   description: string;
-  unit: "percent" | "views" | "score";
+  unit: "percent" | "factor" | "score";
+  betterWhen: "higher" | "lower";
   modelValue: number | null;
   baselineValue: number | null;
 }
 
 export interface AccuracyEvaluation {
   scope: AccuracyScope;
+  segment: AccuracySegment;
+  segmentLabel: string;
+  videos: number;
+  baselineName: string;
   metrics: AccuracyMetric[];
+}
+
+export interface PendingAccuracyHorizon {
+  scope: AccuracyScope;
+  measurableFrom: string;
 }
 
 export interface AvailableAccuracyResponse {
   status: "available";
   modelName: string;
-  baselineName: string;
   evaluatedAt: string;
-  evaluations: [
-    AccuracyEvaluation,
-    AccuracyEvaluation,
-    AccuracyEvaluation,
-    AccuracyEvaluation,
-    AccuracyEvaluation,
-  ];
+  periodStart: string;
+  periodEnd: string;
+  method: string;
+  evaluations: AccuracyEvaluation[];
+  notYetMeasured: PendingAccuracyHorizon[];
   dataSource: "prediction_api" | "mock";
-  message?: string;
 }
 
 export interface UnavailableAccuracyResponse {

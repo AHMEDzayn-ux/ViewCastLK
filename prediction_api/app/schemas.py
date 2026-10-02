@@ -9,6 +9,47 @@ class HealthResponse(BaseModel):
     service: str = "viewcastlk-prediction-api"
 
 
+class AccuracyMetric(BaseModel):
+    # View counts are heavy-tailed, so error is reported as a multiple and as
+    # the share within a factor of two; one viral video would dominate an
+    # average error in views, and a percentage error explodes on small counts.
+    key: Literal["within_2x", "typical_factor", "rank_correlation"]
+    label: str
+    description: str
+    unit: Literal["percent", "factor", "score"]
+    betterWhen: Literal["higher", "lower"]
+    modelValue: Optional[float] = None
+    baselineValue: Optional[float] = None
+
+
+class AccuracyEvaluation(BaseModel):
+    scope: Literal["day_7", "day_14", "day_21", "day_30"]
+    # Accuracy depends most on whether the channel's own history is known, so
+    # the two are reported apart rather than averaged into one figure.
+    segment: Literal["tracked_channel", "new_channel"]
+    segmentLabel: str
+    videos: int = Field(..., ge=1)
+    baselineName: str
+    metrics: List[AccuracyMetric] = Field(..., min_length=1)
+
+
+class PendingHorizon(BaseModel):
+    scope: Literal["day_7", "day_14", "day_21", "day_30"]
+    measurableFrom: str
+
+
+class AvailableAccuracyResponse(BaseModel):
+    status: Literal["available"] = "available"
+    modelName: str
+    evaluatedAt: str
+    periodStart: str
+    periodEnd: str
+    method: str
+    evaluations: List[AccuracyEvaluation] = Field(..., min_length=1)
+    notYetMeasured: List[PendingHorizon] = Field(default_factory=list)
+    dataSource: Literal["prediction_api"] = "prediction_api"
+
+
 class AccuracyResponse(BaseModel):
     status: Literal["unavailable"] = "unavailable"
     modelName: str = Field(..., description="Active model artifact name")

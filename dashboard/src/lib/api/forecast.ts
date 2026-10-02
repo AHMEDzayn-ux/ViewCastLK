@@ -7,6 +7,7 @@ import type {
 } from "@/types/forecast";
 import {
   ACCURACY_SCOPES,
+  ACCURACY_SEGMENTS,
   PUBLISH_DAYS,
   RECOMMENDATION_TYPES,
 } from "@/types/forecast";
@@ -199,38 +200,57 @@ export function isAccuracyResponse(value: unknown): value is AccuracyResponse {
   if (candidate.status !== "available") return false;
 
   const available = candidate as Partial<AvailableAccuracyResponse>;
+  const isDate = (value: unknown) =>
+    typeof value === "string" && Number.isFinite(Date.parse(value));
+  const isNullableNumber = (value: unknown) =>
+    value === null || (typeof value === "number" && Number.isFinite(value));
+
   const validEvaluations =
     Array.isArray(available.evaluations) &&
-    available.evaluations.length === ACCURACY_SCOPES.length &&
+    available.evaluations.length > 0 &&
     available.evaluations.every(
       (evaluation) =>
         ACCURACY_SCOPES.includes(evaluation.scope) &&
+        ACCURACY_SEGMENTS.includes(evaluation.segment) &&
+        typeof evaluation.segmentLabel === "string" &&
+        typeof evaluation.baselineName === "string" &&
+        Number.isInteger(evaluation.videos) &&
+        evaluation.videos > 0 &&
         Array.isArray(evaluation.metrics) &&
-        evaluation.metrics.some((metric) => metric.key === "mape") &&
+        evaluation.metrics.length > 0 &&
         evaluation.metrics.every(
           (metric) =>
             typeof metric.label === "string" &&
             typeof metric.description === "string" &&
-            (metric.modelValue === null ||
-              Number.isFinite(metric.modelValue)) &&
-            (metric.baselineValue === null ||
-              Number.isFinite(metric.baselineValue)),
+            (metric.betterWhen === "higher" || metric.betterWhen === "lower") &&
+            isNullableNumber(metric.modelValue) &&
+            isNullableNumber(metric.baselineValue),
         ),
     );
-  const evaluationScopes = (available.evaluations ?? []).map(
-    (evaluation) => evaluation.scope,
+  // Each scope and segment pair is reported once; a duplicate would make the
+  // picker show two different answers under one label.
+  const pairs = (available.evaluations ?? []).map(
+    (evaluation) => `${evaluation.scope}/${evaluation.segment}`,
   );
+  const validPending =
+    Array.isArray(available.notYetMeasured) &&
+    available.notYetMeasured.every(
+      (pending) =>
+        ACCURACY_SCOPES.includes(pending.scope) && isDate(pending.measurableFrom),
+    );
 
   return (
     typeof available.modelName === "string" &&
-    typeof available.baselineName === "string" &&
-    typeof available.evaluatedAt === "string" &&
-    Number.isFinite(Date.parse(available.evaluatedAt)) &&
+    available.modelName.length > 0 &&
+    isDate(available.evaluatedAt) &&
+    isDate(available.periodStart) &&
+    isDate(available.periodEnd) &&
+    typeof available.method === "string" &&
     (available.dataSource === "prediction_api" ||
       available.dataSource === "mock") &&
     validEvaluations &&
-    new Set(evaluationScopes).size === ACCURACY_SCOPES.length &&
-    ACCURACY_SCOPES.every((scope) => evaluationScopes.includes(scope))
+    new Set(pairs).size === pairs.length &&
+    validPending
   );
 }
 

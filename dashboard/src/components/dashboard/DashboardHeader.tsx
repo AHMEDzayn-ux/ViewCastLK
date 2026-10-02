@@ -11,6 +11,7 @@ const NAVIGATION: { href: string; label: string; icon: StudioIconName; group: st
   { href: "/forecast", label: "New forecast", icon: "forecast", group: "Your workspace" },
   { href: "/history", label: "Forecast history", icon: "history", group: "Your workspace" },
   { href: "/account", label: "Your channel", icon: "channel", group: "Your workspace" },
+  { href: "/insights", label: "What works", icon: "spark", group: "Behind the forecast" },
   { href: "/accuracy", label: "Model accuracy", icon: "chart", group: "Behind the forecast" },
   { href: "/methodology", label: "How it works", icon: "book", group: "Behind the forecast" },
 ];

@@ -45,6 +45,7 @@ script, its outputs and, where there is one, its notebook.
 | `data_drift/` | Whether the data changes over the collection period. |
 | `channel_guidelines/` | Which creator advice holds for individual channels, not only on average. |
 | `thumbnails/` | Whether thumbnail properties add anything, on 30,554 measured images. |
+| `creator_insights/` | The figures on the dashboard's insights page (`/insights`): spacing, timing, length, format, growth and thumbnail faces. Writes `dashboard/src/data/insights.json`; rerun after rebuilding the training table. |
 
 ## Tools: `tools/`
 

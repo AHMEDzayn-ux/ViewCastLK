@@ -987,6 +987,7 @@ select.field-control {
 
 .forecast-results__header,
 .forecast-section,
+.breakout-summary,
 .forecast-chart,
 .recommendations,
 .title-guidance,
@@ -1047,6 +1048,7 @@ select.field-control {
 }
 
 .forecast-section,
+.breakout-summary,
 .forecast-chart,
 .recommendations,
 .title-guidance,
@@ -1097,6 +1099,58 @@ select.field-control {
 
 .forecast-chart {
   background: #faf9f4;
+}
+
+.breakout-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(220px, 0.8fr);
+  gap: 1.5rem;
+  background: #fbf5e9;
+}
+
+.breakout-summary h3,
+.breakout-summary p {
+  margin: 0;
+}
+
+.breakout-summary h3 {
+  margin: 0.2rem 0 0.55rem;
+}
+
+.breakout-summary p {
+  color: var(--text-secondary);
+}
+
+.breakout-summary__caveat {
+  margin-top: 0.8rem !important;
+  font-size: 0.86rem;
+}
+
+.breakout-summary__metrics {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.breakout-summary__metrics > div {
+  display: grid;
+  gap: 0.2rem;
+  padding: 1rem;
+  border: 1px solid #dcccad;
+  background: var(--surface);
+}
+
+.breakout-summary__metrics span {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.breakout-summary__metrics strong {
+  color: var(--accent-warm);
+  font-size: clamp(1.35rem, 3vw, 2rem);
+  font-variant-numeric: tabular-nums;
 }
 
 .forecast-chart__canvas {
@@ -1790,6 +1844,10 @@ select.field-control {
   .personalization-notice {
     flex-direction: column;
     gap: 0.75rem;
+  }
+
+  .breakout-summary {
+    grid-template-columns: 1fr;
   }
 }
 

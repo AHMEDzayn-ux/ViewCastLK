@@ -13,12 +13,13 @@ from app.auth import (
     optional_authenticated_user,
     require_authenticated_user,
 )
-from app.artifact import ACTIVE_ARTIFACT_VERSION
+from app.artifact import ACTIVE_ARTIFACT_VERSION, V8_ARTIFACT_DIR
 from app.channel_history import history_features_for_channel
 from app.feature_builder import build_candidate_feature_frame
-from app.model_registry import ModelRegistry
+from app.model_registry import ModelRegistry, ViralScenarioRegistry
 from app.schemas import (
     AccuracyResponse,
+    BreakoutForecast,
     ChannelLookupRequest,
     ChannelStatsResponse,
     DataCompleteness,
@@ -72,6 +73,7 @@ app.add_middleware(
 
 # Global model registry singleton
 model_registry = ModelRegistry()
+v8_model_registry = ViralScenarioRegistry(V8_ARTIFACT_DIR)
 creator_store = CreatorStore()
 public_roster_store = PublicRosterStore()
 
@@ -344,16 +346,50 @@ async def create_forecast(
             content={"message": "Failed to construct candidate model feature frame.", "code": "feature_building_error"},
         )
 
-    # 4. Perform one trajectory inference across all four horizons.
+    # 4. Perform one inference using released v9 by default or experimental v8
+    # when the caller explicitly asks for comparison testing.
+    horizons = (7, 14, 21, 30)
+    selected_registry = v8_model_registry if payload.modelEngine == "v8" else model_registry
+    breakout: BreakoutForecast | None = None
     try:
-        trajectory = model_registry.predict_trajectory(df)
+        if payload.modelEngine == "v8":
+            scenario = v8_model_registry.predict_scenario(df)
+            trajectory = scenario[
+                [f"normal_day_{horizon}_views" for horizon in horizons]
+            ].to_numpy(dtype=float)
+            breakout = BreakoutForecast(
+                probability=float(scenario.iloc[0]["breakout_probability"]),
+                conditionalUpside=[
+                    ForecastEstimate(
+                        horizonDays=horizon,
+                        cumulativeViews=max(
+                            0,
+                            int(
+                                round(
+                                    float(
+                                        scenario.iloc[0][
+                                            f"viral_upside_day_{horizon}_views"
+                                        ]
+                                    )
+                                )
+                            ),
+                        ),
+                    )
+                    for horizon in horizons
+                ],
+                definition=(
+                    "A breakout is at least 10,000 Day-7 views and five times "
+                    "the channel's prior Day-7 baseline when enough history exists."
+                ),
+            )
+        else:
+            trajectory = model_registry.predict_trajectory(df)
     except Exception:
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"message": "Trajectory model inference is currently unavailable.", "code": "inference_error"},
         )
 
-    horizons = (7, 14, 21, 30)
     raw_predictions: dict[int, float] = {}
     shared_estimates: list[ForecastEstimate] = []
 
@@ -374,7 +410,7 @@ async def create_forecast(
 
     # 6. Build response metadata & documentation fields
     forecast_id = f"fc_{uuid.uuid4().hex[:12]}"
-    manifest = model_registry.get_manifest()
+    manifest = selected_registry.get_manifest()
     artifact_ver = manifest.get("artifact_version", ACTIVE_ARTIFACT_VERSION)
 
     model_metadata = ModelMetadata(
@@ -442,7 +478,7 @@ async def create_forecast(
                 message="Subscriber count is hidden or unavailable for this channel.",
             )
         )
-    known_categories = model_registry.known_categories()
+    known_categories = selected_registry.known_categories()
     if known_categories is not None and payload.category not in known_categories:
         issues.append(
             DataCompletenessIssue(
@@ -469,6 +505,7 @@ async def create_forecast(
     return ForecastResponse(
         forecastId=forecast_id,
         estimates=estimates,
+        breakout=breakout,
         personalization=ForecastPersonalization(**personalization_payload),
         channelStats=channel_stats,
         recommendations=[],

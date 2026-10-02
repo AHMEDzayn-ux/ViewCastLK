@@ -109,6 +109,10 @@ class ForecastRequest(BaseModel):
     plannedPublishHour: Optional[int] = Field(
         None, description="Optional planned publish hour (0-23)"
     )
+    modelEngine: Literal["v8", "v9"] | None = Field(
+        None,
+        description="Optional test-only model selection; defaults to the released v9 model",
+    )
 
     @field_validator("title")
     @classmethod
@@ -151,6 +155,12 @@ class ForecastEstimate(BaseModel):
     cumulativeViews: int = Field(
         ..., description="Predicted cumulative view count (rounded non-negative integer)"
     )
+
+
+class BreakoutForecast(BaseModel):
+    probability: float = Field(..., ge=0, le=1)
+    conditionalUpside: List[ForecastEstimate]
+    definition: str
 
 
 class PersonalizationAdjustment(BaseModel):
@@ -211,6 +221,10 @@ class ForecastResponse(BaseModel):
     forecastId: str = Field(..., description="Unique forecast execution ID")
     estimates: List[ForecastEstimate] = Field(
         ..., description="Forecast estimates for horizons 7, 14, 21, 30"
+    )
+    breakout: Optional[BreakoutForecast] = Field(
+        None,
+        description="V8-only calibrated breakout chance and conditional upside trajectory",
     )
     personalization: ForecastPersonalization
     channelStats: Optional[ChannelStatsResponse] = Field(

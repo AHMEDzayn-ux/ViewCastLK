@@ -23,6 +23,10 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_PREDICTION_API_URL?.trim().replace(
 );
 const MOCK_MODE_REQUESTED =
   process.env.NEXT_PUBLIC_USE_MOCK_API?.trim().toLowerCase() === "true";
+const REQUESTED_MODEL_ENGINE =
+  process.env.NEXT_PUBLIC_FORECAST_ENGINE?.trim().toLowerCase() === "v8"
+    ? "v8"
+    : "v9";
 const USE_MOCK_API = MOCK_MODE_REQUESTED || !API_BASE_URL;
 const EXPECTED_HORIZONS = [7, 14, 21, 30];
 
@@ -72,6 +76,22 @@ function isForecastResponse(value: unknown): value is ForecastResponse {
       estimate.cumulativeViews >= 0
     );
   });
+
+  const validBreakout =
+    candidate.breakout === undefined ||
+    (Number.isFinite(candidate.breakout.probability) &&
+      candidate.breakout.probability >= 0 &&
+      candidate.breakout.probability <= 1 &&
+      typeof candidate.breakout.definition === "string" &&
+      candidate.breakout.definition.length > 0 &&
+      Array.isArray(candidate.breakout.conditionalUpside) &&
+      candidate.breakout.conditionalUpside.length === 4 &&
+      candidate.breakout.conditionalUpside.every(
+        (estimate, index) =>
+          estimate.horizonDays === EXPECTED_HORIZONS[index] &&
+          Number.isFinite(estimate.cumulativeViews) &&
+          estimate.cumulativeViews >= candidate.estimates![index].cumulativeViews,
+      ));
 
   const validPersonalization =
     candidate.personalization === undefined ||
@@ -161,6 +181,7 @@ function isForecastResponse(value: unknown): value is ForecastResponse {
   return (
     typeof candidate.forecastId === "string" &&
     validEstimates &&
+    validBreakout &&
     validPersonalization &&
     validRecommendations &&
     validUnavailableRecommendations &&
@@ -345,7 +366,10 @@ export async function generateForecast(
 
   const response = await requestJson<ForecastResponse>("/forecast", {
     method: "POST",
-    body: JSON.stringify(request),
+    body: JSON.stringify({
+      ...request,
+      modelEngine: request.modelEngine ?? REQUESTED_MODEL_ENGINE,
+    }),
     signal: options?.signal,
   }, "optional");
 

@@ -5,6 +5,7 @@ import {
   CartesianGrid,
   Area,
   AreaChart,
+  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -14,6 +15,7 @@ import type { ForecastEstimate } from "@/types/forecast";
 
 interface ForecastChartProps {
   estimates: ForecastEstimate[];
+  conditionalUpside?: ForecastEstimate[];
 }
 
 function formatAxisViews(value: number): string {
@@ -22,10 +24,16 @@ function formatAxisViews(value: number): string {
   return String(value);
 }
 
-export default function ForecastChart({ estimates }: ForecastChartProps) {
+export default function ForecastChart({
+  estimates,
+  conditionalUpside,
+}: ForecastChartProps) {
   const data = estimates.map((estimate) => ({
     day: estimate.horizonDays,
     cumulativeViews: estimate.cumulativeViews,
+    conditionalUpside: conditionalUpside?.find(
+      (upside) => upside.horizonDays === estimate.horizonDays,
+    )?.cumulativeViews,
   }));
 
   return (
@@ -40,7 +48,7 @@ export default function ForecastChart({ estimates }: ForecastChartProps) {
       <div
         className="forecast-chart__canvas"
         role="img"
-        aria-label="Line chart of cumulative forecast views on days 7, 14, 21, and 30"
+        aria-label="Chart of normal and conditional breakout forecast views on days 7, 14, 21, and 30"
       >
         <ResponsiveContainer width="100%" height={280}>
           <AreaChart
@@ -76,11 +84,11 @@ export default function ForecastChart({ estimates }: ForecastChartProps) {
                 boxShadow: "var(--shadow-small)",
               }}
               labelFormatter={(day) => `Day ${day}`}
-              formatter={(value) => [
+              formatter={(value, name) => [
                 typeof value === "number"
                   ? value.toLocaleString("en-LK")
                   : value,
-                "Cumulative views",
+                name,
               ]}
             />
             <Area
@@ -94,6 +102,19 @@ export default function ForecastChart({ estimates }: ForecastChartProps) {
               dot={{ fill: "var(--surface)", strokeWidth: 3, r: 5 }}
               activeDot={{ fill: "var(--accent)", strokeWidth: 0, r: 6 }}
             />
+            {conditionalUpside && (
+              <Line
+                type="monotone"
+                dataKey="conditionalUpside"
+                name="Conditional breakout upside"
+                stroke="var(--accent-warm)"
+                strokeWidth={2}
+                strokeDasharray="7 5"
+                isAnimationActive={false}
+                dot={{ fill: "var(--surface)", strokeWidth: 2, r: 4 }}
+                activeDot={{ fill: "var(--accent-warm)", strokeWidth: 0, r: 5 }}
+              />
+            )}
           </AreaChart>
         </ResponsiveContainer>
       </div>
@@ -104,6 +125,7 @@ export default function ForecastChart({ estimates }: ForecastChartProps) {
           <tr>
             <th>Horizon</th>
             <th>Cumulative views</th>
+            {conditionalUpside && <th>Conditional breakout views</th>}
           </tr>
         </thead>
         <tbody>
@@ -111,6 +133,15 @@ export default function ForecastChart({ estimates }: ForecastChartProps) {
             <tr key={estimate.horizonDays}>
               <td>Day {estimate.horizonDays}</td>
               <td>{formatForecastViews(estimate.cumulativeViews)}</td>
+              {conditionalUpside && (
+                <td>
+                  {formatForecastViews(
+                    conditionalUpside.find(
+                      (upside) => upside.horizonDays === estimate.horizonDays,
+                    )?.cumulativeViews ?? 0,
+                  )}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

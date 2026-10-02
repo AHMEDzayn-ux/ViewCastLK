@@ -93,6 +93,19 @@ describe("authenticated Prediction API requests", () => {
     expect(init?.headers).not.toHaveProperty("Authorization");
   });
 
+  it("accepts the null breakout returned by a v9 forecast", async () => {
+    const v9Response: ForecastResponse = { ...response, breakout: null };
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response(JSON.stringify(v9Response), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    const { generateForecast } = await import("./forecast");
+
+    await expect(generateForecast(request)).resolves.toEqual(v9Response);
+  });
+
   it("keeps the separate channel lookup authenticated", async () => {
     mocks.getSession.mockResolvedValueOnce({ data: { session: null }, error: null });
     const { lookupChannelStats } = await import("./forecast");

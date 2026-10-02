@@ -78,7 +78,7 @@ function isForecastResponse(value: unknown): value is ForecastResponse {
   });
 
   const validBreakout =
-    candidate.breakout === undefined ||
+    candidate.breakout == null ||
     (Number.isFinite(candidate.breakout.probability) &&
       candidate.breakout.probability >= 0 &&
       candidate.breakout.probability <= 1 &&

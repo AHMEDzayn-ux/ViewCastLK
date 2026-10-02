@@ -183,7 +183,7 @@ export interface ForecastResponse {
     ForecastEstimate,
     ForecastEstimate,
   ];
-  breakout?: BreakoutForecast;
+  breakout?: BreakoutForecast | null;
   personalization?: ForecastPersonalization;
   recommendations: Recommendation[];
   unavailableRecommendations: UnavailableRecommendation[];

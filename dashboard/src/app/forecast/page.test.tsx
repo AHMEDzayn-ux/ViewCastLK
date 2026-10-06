@@ -119,6 +119,13 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("ForecastPage history saving", () => {
+  it("opens directly on the forecast tools without the landing hero", () => {
+    render(<ForecastPage />);
+    expect(screen.getByRole("heading", { level: 1, name: "Create a forecast" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Run forecast" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /Before you hit publish/ })).toBeNull();
+  });
+
   it("opens and closes an explicitly labelled example without an API call or history write", () => {
     render(<ForecastPage />);
     fireEvent.click(screen.getAllByRole("button", { name: "Try an example" })[0]);

@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import AuthProvider from "@/components/auth/AuthProvider";
-import DashboardHeader from "@/components/dashboard/DashboardHeader";
+import SiteShell from "@/components/dashboard/SiteShell";
 import "./globals.css";
 import "./studio.css";
+import "./landing.css";
 
 export const metadata: Metadata = {
   title: {
@@ -24,24 +24,7 @@ export default function RootLayout({
     <html lang="en">
       <body>
         <AuthProvider>
-          <a className="skip-link" href="#main-content">
-            Skip to main content
-          </a>
-          <DashboardHeader />
-          <div id="main-content" className="site-content" tabIndex={-1}>
-            {children}
-          </div>
-          <footer className="site-footer">
-            <div>
-              <p>
-                Made for the next generation of Sri Lankan creators.
-              </p>
-              <p>
-                ViewCastLK · Research project · Not affiliated with or endorsed by YouTube or Google. ·{" "}
-                <Link href="/privacy">Privacy</Link>
-              </p>
-            </div>
-          </footer>
+          <SiteShell>{children}</SiteShell>
         </AuthProvider>
       </body>
     </html>

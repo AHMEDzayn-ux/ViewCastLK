@@ -30,6 +30,7 @@ Versions below match `package.json`:
 
 ## Dashboard Routes
 
+- `/` — public landing page with an illustrative preview and links into the studio.
 - `/forecast` — forecast request form, cumulative forecast result, trajectory,
   and recommendations.
 - `/accuracy` — combined model evaluation plus Day 7, 14, 21, and 30 views,

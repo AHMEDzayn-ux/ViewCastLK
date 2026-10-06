@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { isDevelopmentMockMode } from "@/lib/api/forecast";
 import StudioIcon, { type StudioIconName } from "./StudioIcon";
+import StudioBrand from "./StudioBrand";
 
 const NAVIGATION: { href: string; label: string; icon: StudioIconName; group: string }[] = [
   { href: "/forecast", label: "New forecast", icon: "forecast", group: "Your workspace" },
@@ -30,13 +31,30 @@ export default function DashboardHeader() {
     if (!(await signOut())) setSignOutError("We could not sign you out. Please try again.");
   }
 
+  if (pathname === "/") {
+    return (
+      <header className="landing-header">
+        <div className="landing-header__inner">
+          <StudioBrand />
+          <nav className="landing-nav" aria-label="Primary navigation">
+            <a href="#how-it-works">How it works</a>
+            <Link href="/accuracy">Model accuracy</Link>
+            <Link href="/methodology">Our approach</Link>
+          </nav>
+          <div className="landing-header__actions">
+            {!isLoading && !isAuthenticated && <Link href="/login" className="landing-signin">Sign in</Link>}
+            {!isLoading && isAuthenticated && <Link href="/account" className="topbar-avatar" aria-label="Your account">{displayName.slice(0, 1).toUpperCase()}</Link>}
+            <Link href="/forecast" className="landing-button landing-button--small">Open studio <StudioIcon name="arrow" width="16" height="16" /></Link>
+          </div>
+        </div>
+      </header>
+    );
+  }
+
   return (
     <>
       <aside className="studio-sidebar" aria-label="Creator workspace">
-        <Link className="studio-brand" href="/forecast" aria-label="ViewCastLK forecast home">
-          <span className="studio-brand__symbol" aria-hidden="true"><i /><i /><i /></span>
-          <span>ViewCast<span className="studio-brand__lk">LK</span><small>CREATOR STUDIO</small></span>
-        </Link>
+        <StudioBrand />
         <div className="workspace-label"><span className="workspace-label__icon">V</span><span>Your creative space<small>Sri Lanka edition</small></span><span className="workspace-label__dot" /></div>
         <nav className="studio-nav" aria-label="Primary navigation">
           {["Your workspace", "Behind the forecast"].map((group) => (

@@ -20,7 +20,8 @@
   --font-sans: "Segoe UI", "Noto Sans Sinhala", "Noto Sans Tamil", system-ui, -apple-system, sans-serif;
 }
 
-body { padding-left: var(--sidebar-width); background: var(--background); font-size: 14px; }
+body { background: var(--background); font-size: 14px; }
+.studio-shell { padding-left: var(--sidebar-width); }
 button, a { touch-action: manipulation; }
 button:disabled { cursor: not-allowed; }
 svg { flex-shrink: 0; }
@@ -328,7 +329,7 @@ textarea.field-control { min-height: 74px; line-height: 1.7; }
   .site-footer > div { flex-direction: column; justify-content: center; align-items: flex-start; gap: 3px; }
 }
 @media (max-width: 680px) {
-  body { padding-left: 0; }
+  .studio-shell { padding-left: 0; }
   .studio-sidebar { position: relative; width: 100%; padding: 17px 18px 0; border-right: 0; border-bottom: 1px solid var(--border); overflow: visible; }
   .studio-brand { font-size: 21px; width: fit-content; padding: 0; }
   .studio-brand__symbol { transform: skew(-13deg); }

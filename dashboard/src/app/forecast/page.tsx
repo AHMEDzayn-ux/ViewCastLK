@@ -156,23 +156,13 @@ export default function ForecastPage() {
 
   return (
     <main className="page-shell forecast-page">
-      <header className="studio-intro">
-        <div><p className="section-kicker"><span /> FROM IDEA TO WHAT’S NEXT</p>
-          <h1>Before you hit publish,<br />see the <em>possibilities.</em></h1>
-          <p>Give your next video a little foresight. Explore its first 30 days<br className="desktop-break" /> with forecasts made for Sri Lankan creators.</p>
-          <div className="studio-intro__links"><a href="#forecast-form">Start with your idea <StudioIcon name="arrow" width="16" height="16" /></a><button type="button" disabled={isLoading} onClick={showExample}><StudioIcon name="play" width="14" height="14" /> Try an example</button></div>
-        </div>
-        <div className="studio-art" aria-hidden="true">
-          <div className="studio-art__orbit studio-art__orbit--one" /><div className="studio-art__orbit studio-art__orbit--two" />
-          <span className="studio-art__star">✳</span>
-          <div className="studio-art__tile"><StudioIcon name="play" width="52" height="52" /></div>
-          <span className="studio-art__label studio-art__label--idea">YOUR NEXT BIG IDEA</span>
-          <span className="studio-art__label studio-art__label--days"><span>30</span> days of possibility <StudioIcon name="arrow" width="16" height="16" /></span>
-          <span className="studio-art__dot" />
+      <header className="forecast-heading">
+        <div><p className="section-kicker">YOUR CREATOR WORKSPACE</p><h1>Create a forecast</h1></div>
+        <div className="forecast-heading__actions">
+          <button type="button" disabled={isLoading} onClick={showExample}><StudioIcon name="play" width="14" height="14" /> Try an example</button>
+          <Link href="/methodology">How does this work? <StudioIcon name="arrow" width="15" height="15" /></Link>
         </div>
       </header>
-
-      <div className="workspace-heading"><div><span className="workspace-heading__number">01</span><h2>The forecast workspace</h2></div><Link href="/methodology">How does this work? <StudioIcon name="arrow" width="15" height="15" /></Link></div>
 
       <div className="forecast-workspace">
         <div className="forecast-workspace__form">

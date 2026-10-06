@@ -8,7 +8,6 @@ import ForecastResults from "@/components/dashboard/ForecastResults";
 import ForecastOnboarding, { type CreatorAudience } from "@/components/dashboard/ForecastOnboarding";
 import ErrorState from "@/components/dashboard/ErrorState";
 import LoadingState from "@/components/dashboard/LoadingState";
-import ForecastPreview from "@/components/dashboard/ForecastPreview";
 import StudioIcon from "@/components/dashboard/StudioIcon";
 import { generateForecast } from "@/lib/api/forecast";
 import { getYouTubeConnection } from "@/lib/api/youtube-connection";
@@ -30,6 +29,10 @@ type PageState =
 export default function ForecastPage() {
   const { isAuthenticated, isLoading: isAuthLoading, user } = useAuth();
   const [state, setState] = useState<PageState>({ status: "idle" });
+  const [isEditing, setIsEditing] = useState(true);
+  const isRunningRef = useRef(false);
+  const focusEditorRef = useRef(false);
+  const headingRef = useRef<HTMLHeadingElement>(null);
   const [connection, setConnection] = useState<{
     userId: string;
     audience: CreatorAudience;
@@ -59,21 +62,31 @@ export default function ForecastPage() {
     return () => { active = false; };
   }, [userId]);
   const userRef = useRef(user);
-  const outputRef = useRef<HTMLDivElement>(null);
-  const isShowingExample = state.status === "success" && Boolean(state.isExample);
 
   useEffect(() => {
     userRef.current = user;
   }, [user]);
 
   useEffect(() => {
-    if (isShowingExample && window.innerWidth <= 960) {
-      outputRef.current?.scrollIntoView({ block: "start" });
+    if (isEditing) {
+      if (focusEditorRef.current) {
+        focusEditorRef.current = false;
+        document.getElementById("title")?.focus();
+      }
+    } else {
+      headingRef.current?.focus({ preventScroll: true });
+      const bounds = headingRef.current?.getBoundingClientRect();
+      if (bounds && (bounds.top < 0 || bounds.bottom > window.innerHeight)) {
+        headingRef.current?.scrollIntoView?.({ block: "start" });
+      }
     }
-  }, [isShowingExample]);
+  }, [isEditing, state.status]);
 
   async function runForecast(request: ForecastRequest) {
+    if (isRunningRef.current) return;
+    isRunningRef.current = true;
     const forecastUserId = userRef.current?.id;
+    setIsEditing(false);
     setState({ status: "loading", request });
 
     try {
@@ -100,20 +113,27 @@ export default function ForecastPage() {
           ? error.message
           : "An unexpected error prevented the forecast.";
       setState({ status: "error", request, message });
+      setIsEditing(true);
+    } finally {
+      isRunningRef.current = false;
     }
   }
 
   function focusForm() {
-    document.getElementById("forecast-form-title")?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-    window.setTimeout(() => document.getElementById("title")?.focus(), 250);
+    focusEditorRef.current = true;
+    setIsEditing(true);
+  }
+
+  function closeExample() {
+    focusForm();
+    setState({ status: "idle" });
   }
 
   const isLoading = state.status === "loading";
 
   function showExample() {
+    if (isRunningRef.current) return;
+    setIsEditing(false);
     const request: ForecastRequest = {
       title: "A slow weekend in Ella | A Sri Lankan travel diary",
       category: "Travel & Events",
@@ -136,6 +156,16 @@ export default function ForecastPage() {
         forecastId: "illustrative-example", estimates,
         personalization: { applied: false, format: "long", modelVersion: "illustrative-example", sharedEstimates: estimates, adjustments: [] },
         recommendations: [], unavailableRecommendations: [],
+        breakout: {
+          probability: 0.04,
+          definition: "In this illustrative example, a breakout represents an unusually strong outcome relative to the channel’s usual performance.",
+          conditionalUpside: [
+            { horizonDays: 7, cumulativeViews: 38000 },
+            { horizonDays: 14, cumulativeViews: 42500 },
+            { horizonDays: 21, cumulativeViews: 44800 },
+            { horizonDays: 30, cumulativeViews: 45894 },
+          ],
+        },
         completeness: { status: "complete", issues: [] },
         model: { modelVersion: "illustrative-example", generatedAt: new Date().toISOString(), dataSource: "mock" },
       },
@@ -155,17 +185,17 @@ export default function ForecastPage() {
   }
 
   return (
-    <main className="page-shell forecast-page">
+    <main className={`page-shell forecast-page compact-forecast${isEditing ? " compact-forecast--editing" : " compact-forecast--review"}`}>
       <header className="forecast-heading">
-        <div><p className="section-kicker">YOUR CREATOR WORKSPACE</p><h1>Create a forecast</h1></div>
+        <div><p className="section-kicker">YOUR CREATOR WORKSPACE</p><h1 ref={headingRef} tabIndex={-1}>{isEditing ? "Create a forecast" : isLoading ? "Preparing your forecast" : "Your forecast"}</h1></div>
         <div className="forecast-heading__actions">
           <button type="button" disabled={isLoading} onClick={showExample}><StudioIcon name="play" width="14" height="14" /> Try an example</button>
           <Link href="/methodology">How does this work? <StudioIcon name="arrow" width="15" height="15" /></Link>
         </div>
       </header>
 
-      <div className="forecast-workspace">
-        <div className="forecast-workspace__form">
+      <div className="forecast-brief-editor" hidden={!isEditing}>
+          {state.status === "error" && <ErrorState message={state.message} onRetry={() => runForecast(state.request)} />}
           <ForecastForm
             onSubmit={runForecast}
             onReset={() => setState({ status: "idle" })}
@@ -176,37 +206,26 @@ export default function ForecastPage() {
               : null}
             isCheckingChannel={Boolean(user && connection?.userId !== user.id)}
           />
-        </div>
+      </div>
 
-        <div className="forecast-workspace__output" ref={outputRef} aria-live="polite">
-          {state.status === "idle" && (
-            <ForecastPreview onExample={showExample} audience={audience} />
-          )}
-
+      {!isEditing && <div className="forecast-review">
           {state.status === "loading" && <LoadingState />}
-
-          {state.status === "error" && (
-            <ErrorState
-              message={state.message}
-              onRetry={() => runForecast(state.request)}
-            />
-          )}
 
           {state.status === "success" && (
             <>
-            {state.isExample && <div className="example-notice" role="status"><div><strong>You’re exploring an example</strong><p>Illustrative numbers, not a real prediction. This example is not saved to your history.</p></div><button type="button" onClick={() => setState({ status: "idle" })}>Close example <span aria-hidden="true">×</span></button></div>}
+            {state.isExample && <div className="example-notice" role="status"><div><strong>You’re exploring an example</strong><p>Illustrative numbers, not a real prediction. This example is not saved to your history.</p></div><button type="button" onClick={closeExample}>Close example <span aria-hidden="true">×</span></button></div>}
             <ForecastResults
               request={state.request}
               response={state.response}
               historySaveNotice={state.historySaveNotice}
               onChangeInputs={focusForm}
               channelConnected={audience === "connected"}
+              detailsContent={!state.isExample ? <ForecastOnboarding audience={audience} /> : undefined}
             />
-            {!state.isExample && <ForecastOnboarding audience={audience} />}
             </>
           )}
-        </div>
-      </div>
+      </div>}
+      <p className="sr-only" role="status">{!isEditing && state.status === "success" ? "Forecast ready. Review your four view estimates in Overview." : ""}</p>
     </main>
   );
 }

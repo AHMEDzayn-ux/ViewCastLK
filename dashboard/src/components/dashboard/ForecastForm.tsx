@@ -166,18 +166,16 @@ function Field({
   children,
 }: FieldProps) {
   return (
-    <div className={`field${["title", "audioLanguage", "channelIdentifier"].includes(id) ? " field--wide" : ""}`}>
+    <div className={`field field--${id}${["title", "channelIdentifier"].includes(id) ? " field--wide" : ""}`}>
       <div className="field__heading">
         <label className="field__label" htmlFor={id}>
           {label}
         </label>
-        <span className={"field__requirement field__requirement--" + requirement}>
-          {requirement === "required" ? "Required" : "Optional"}
-        </span>
+        {requirement === "optional" && <span className="field__requirement">Optional</span>}
       </div>
       {children}
       {hint && (
-        <p className="field__hint" id={id + "-hint"}>
+        <p className={["title", "channelIdentifier"].includes(id) ? "field__hint" : "sr-only"} id={id + "-hint"}>
           {hint}
         </p>
       )}
@@ -309,6 +307,17 @@ export default function ForecastForm({
     requestAnimationFrame(() => document.getElementById("title")?.focus());
   }
 
+  function revealFocusedControl(event: React.FocusEvent<HTMLFormElement>) {
+    const control = event.target;
+    if (!(control instanceof HTMLElement) || !control.matches("input, textarea, select")) return;
+    const actions = event.currentTarget.querySelector<HTMLElement>(".brief-submit-actions");
+    if (!actions || window.getComputedStyle(actions).position !== "sticky") return;
+    const bounds = control.getBoundingClientRect();
+    if (bounds.bottom + 12 > actions.getBoundingClientRect().top || bounds.top < 12) {
+      control.scrollIntoView?.({ block: "center", behavior: "instant" });
+    }
+  }
+
 
   const inputClass = (error?: string) =>
     "field-control" + (error ? " field-control--invalid" : "");
@@ -324,14 +333,15 @@ export default function ForecastForm({
       id="forecast-form"
       className="forecast-form"
       onSubmit={handleSubmit}
+      onFocusCapture={revealFocusedControl}
       noValidate
       aria-labelledby="forecast-form-title"
       aria-busy={isLoading}
     >
       <div className="form-section__header">
         <span className="panel-icon"><StudioIcon name="play" /></span>
-        <div><h2 id="forecast-form-title">Your video brief</h2><p>Start with the details. We’ll take it from here.</p></div>
-        <span className="brief-badge">NEW IDEA</span>
+        <div><h2 id="forecast-form-title">Your video brief</h2><p>All fields required unless marked optional.</p></div>
+        <span className="brief-badge"><StudioIcon name="spark" width="14" height="14" /> NEW IDEA</span>
       </div>
 
       <div className="form-grid">
@@ -391,6 +401,53 @@ export default function ForecastForm({
             ))}
           </select>
         </Field>
+
+        <fieldset
+          className="field format-field"
+          aria-invalid={Boolean(errors.videoFormat)}
+          aria-describedby={[
+            "videoFormat-hint",
+            errors.videoFormat ? "videoFormat-error" : null,
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
+          <legend className="field__label">Video format</legend>
+          <p className="sr-only" id="videoFormat-hint">
+            Select the format you’ll publish on YouTube.
+          </p>
+          <div className="choice-group">
+            {[
+              { value: "short", label: "YouTube Short" },
+              { value: "standard", label: "Standard video" },
+            ].map((option) => (
+              <label className="choice-control" key={option.value}>
+                <input
+                  id={"videoFormat-" + option.value}
+                  type="radio"
+                  name="videoFormat"
+                  value={option.value}
+                  checked={values.videoFormat === option.value}
+                  disabled={isLoading}
+                  onChange={(event) =>
+                    setValue(
+                      "videoFormat",
+                      event.target.value as VideoFormatSelection,
+                      "videoFormat",
+                    )
+                  }
+                />
+                <StudioIcon name={option.value === "short" ? "spark" : "channel"} width="21" height="21" />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+          {errors.videoFormat && (
+            <p className="field__error" id="videoFormat-error" role="alert">
+              {errors.videoFormat}
+            </p>
+          )}
+        </fieldset>
 
         <Field
           id="durationMinutes"
@@ -458,58 +515,6 @@ export default function ForecastForm({
           </div>
         </Field>
 
-        <fieldset
-          className="field field--wide format-field"
-          aria-invalid={Boolean(errors.videoFormat)}
-          aria-describedby={[
-            "videoFormat-hint",
-            errors.videoFormat ? "videoFormat-error" : null,
-          ]
-            .filter(Boolean)
-            .join(" ")}
-        >
-          <div className="field__heading">
-            <legend className="field__label">Video format</legend>
-            <span className="field__requirement field__requirement--required">
-              Required
-            </span>
-          </div>
-          <p className="field__hint" id="videoFormat-hint">
-            Select the format you’ll publish on YouTube.
-          </p>
-          <div className="choice-group">
-            {[
-              { value: "short", label: "YouTube Short" },
-              { value: "standard", label: "Standard video" },
-            ].map((option) => (
-              <label className="choice-control" key={option.value}>
-                <input
-                  id={"videoFormat-" + option.value}
-                  type="radio"
-                  name="videoFormat"
-                  value={option.value}
-                  checked={values.videoFormat === option.value}
-                  disabled={isLoading}
-                  onChange={(event) =>
-                    setValue(
-                      "videoFormat",
-                      event.target.value as VideoFormatSelection,
-                      "videoFormat",
-                    )
-                  }
-                />
-                <StudioIcon name={option.value === "short" ? "spark" : "channel"} width="21" height="21" />
-                <span>{option.label}</span>
-              </label>
-            ))}
-          </div>
-          {errors.videoFormat && (
-            <p className="field__error" id="videoFormat-error" role="alert">
-              {errors.videoFormat}
-            </p>
-          )}
-        </fieldset>
-
         <Field
           id="audioLanguage"
           label="Audio language"
@@ -552,7 +557,7 @@ export default function ForecastForm({
         ) : connectedChannel ? (
           <div className="field field--wide">
             <div className="field__heading"><span className="field__label">YouTube channel</span></div>
-            <p>Using your connected channel: <strong>{connectedChannel.title || connectedChannel.id}</strong></p>
+            <p className="connected-channel-summary"><StudioIcon name="channel" width="20" height="20" /><span>Using your connected channel: <strong>{connectedChannel.title || connectedChannel.id}</strong></span><StudioIcon name="check" width="16" height="16" /></p>
           </div>
         ) : (
         <Field
@@ -733,7 +738,7 @@ export default function ForecastForm({
         </div>
       </details>
 
-      <div className="form-actions">
+      <div className="form-actions brief-submit-actions">
         <button className="primary-button" type="submit" disabled={isLoading || isCheckingChannel}>
           <StudioIcon name="spark" width="17" height="17" />
           {isLoading ? "Generating forecast…" : "Generate forecast"}

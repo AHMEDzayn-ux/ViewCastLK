@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { ForecastRequest, ForecastResponse } from "@/types/forecast";
 import ForecastResults from "./ForecastResults";
 
-vi.mock("./ForecastChart", () => ({ default: () => <div>Forecast chart</div> }));
+const chartMock = vi.hoisted(() => vi.fn());
+vi.mock("./ForecastChart", () => ({ default: (props: unknown) => { chartMock(props); return <div>Forecast chart</div>; } }));
 vi.mock("./HorizonCards", () => ({ default: () => <div>Horizon cards</div> }));
 vi.mock("./RecommendationCards", () => ({
   default: () => <div>Recommendations</div>,
@@ -41,7 +42,7 @@ const baseResponse: ForecastResponse = {
   },
 };
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
 describe("ForecastResults personalization", () => {
   it("labels a personalized forecast and exposes the shared comparison", () => {
@@ -70,7 +71,8 @@ describe("ForecastResults personalization", () => {
     );
 
     expect(screen.getByText("Personalised using your channel history")).toBeTruthy();
-    expect(screen.getByText("Personalised forecast")).toBeTruthy();
+    expect(screen.getByText("Channel-adjusted")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Details" }));
     expect(screen.getByText("Day 7: 100 shared views")).toBeTruthy();
   });
 
@@ -99,6 +101,8 @@ describe("ForecastResults personalization", () => {
 
   it("explains a connected creator's shared result without implying an adjustment", () => {
     render(<ForecastResults request={request} response={baseResponse} channelConnected onChangeInputs={vi.fn()} />);
+    expect(screen.getByText("Connected channel · no personal adjustment applied")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Details" }));
     expect(screen.getByText(/Your channel is connected, but this forecast used the shared model/)).toBeTruthy();
     expect(screen.queryByText("Personalised forecast")).toBeNull();
   });
@@ -124,8 +128,41 @@ describe("ForecastResults personalization", () => {
       />,
     );
 
-    expect(screen.getByText("Breakout potential")).toBeTruthy();
+    expect(chartMock).toHaveBeenLastCalledWith({ estimates: baseResponse.estimates });
+    expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toMatch(/tab-overview$/);
+    fireEvent.click(screen.getByRole("tab", { name: /Breakout scenario/ }));
+    expect(chartMock).toHaveBeenLastCalledWith({ estimates: expect.arrayContaining([{ horizonDays: 30, cumulativeViews: 2_000 }]), scenario: "breakout" });
+    expect(screen.getByRole("heading", { name: "Breakout potential" })).toBeTruthy();
     expect(screen.getByText("14.6%")).toBeTruthy();
     expect(screen.getByText("2,000")).toBeTruthy();
+  });
+
+  it("supports arrow, Home, and End keys without offering an absent breakout", () => {
+    render(<ForecastResults request={request} response={baseResponse} onChangeInputs={vi.fn()} />);
+    expect(screen.queryByRole("tab", { name: /Breakout scenario/ })).toBeNull();
+    const overview = screen.getByRole("tab", { name: "Overview" });
+    overview.focus();
+    fireEvent.keyDown(overview, { key: "ArrowRight" });
+    const guidance = screen.getByRole("tab", { name: "Guidance" });
+    expect(document.activeElement).toBe(guidance);
+    expect(guidance.getAttribute("aria-selected")).toBe("true");
+    fireEvent.keyDown(guidance, { key: "End" });
+    const details = screen.getByRole("tab", { name: "Details" });
+    expect(document.activeElement).toBe(details);
+    fireEvent.keyDown(details, { key: "Home" });
+    expect(document.activeElement).toBe(overview);
+    fireEvent.keyDown(overview, { key: "ArrowLeft" });
+    expect(document.activeElement).toBe(details);
+    expect(screen.getAllByRole("tabpanel")).toHaveLength(1);
+  });
+
+  it("keeps missing guidance concise and exposes limited-context issues", () => {
+    render(<ForecastResults request={request} response={{ ...baseResponse, unavailableRecommendations: [{ type: "timing", reason: "No supporting evaluation." }], completeness: { status: "degraded", issues: [{ source: "title_analysis", message: "Title analysis unavailable." }] } }} onChangeInputs={vi.fn()} />);
+    fireEvent.click(screen.getByRole("tab", { name: "Guidance" }));
+    expect(screen.getByRole("heading", { name: "Publishing guidance is unavailable for this forecast." })).toBeTruthy();
+    expect(screen.getByText("Why some publishing guidance is unavailable").parentElement?.hasAttribute("open")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: /Limited context/ }));
+    expect(screen.getByRole("tab", { name: "Details" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("heading", { name: "Some supporting information was unavailable" })).toBeTruthy();
   });
 });

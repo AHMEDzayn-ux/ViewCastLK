@@ -88,13 +88,19 @@ vi.mock("@/components/dashboard/ForecastResults", () => ({
   default: ({
     response: result,
     historySaveNotice,
+    detailsContent,
+    onChangeInputs,
   }: {
     response: ForecastResponse;
     historySaveNotice?: string;
+    detailsContent?: React.ReactNode;
+    onChangeInputs: () => void;
   }) => (
     <div>
       <span>Result {result.forecastId}</span>
       {historySaveNotice && <span>{historySaveNotice}</span>}
+      <button type="button" onClick={onChangeInputs}>Edit brief</button>
+      {detailsContent}
     </div>
   ),
 }));
@@ -136,19 +142,14 @@ describe("ForecastPage history saving", () => {
     expect(mocks.saveForecastHistory).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Close example" }));
-    expect(screen.getByRole("heading", { name: "Your forecast canvas" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Run forecast" })).toBeTruthy();
     expect(screen.queryByText("Result illustrative-example")).toBeNull();
   });
 
-  it("lets creators explore checkpoints without inventing a view estimate", () => {
+  it("keeps the initial view focused on the brief without a large illustrative canvas", () => {
     render(<ForecastPage />);
-    const firstWeek = screen.getByRole("button", { name: "Day 7" });
-    fireEvent.click(firstWeek);
-
-    expect(firstWeek.getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByRole("button", { name: "Day 30" }).getAttribute("aria-pressed")).toBe("false");
-    expect(screen.getByText("The first impression")).toBeTruthy();
-    expect(screen.getByLabelText("No forecast yet")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Run forecast" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Your forecast canvas" })).toBeNull();
     expect(mocks.generateForecast).not.toHaveBeenCalled();
   });
 
@@ -157,6 +158,33 @@ describe("ForecastPage history saving", () => {
     render(<ForecastPage />);
     fireEvent.click(screen.getByRole("button", { name: "Run forecast" }));
     expect((screen.getByRole("button", { name: "Try an example" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("prevents duplicate submissions and swaps between review and the mounted brief", async () => {
+    let resolveForecast!: (value: ForecastResponse) => void;
+    mocks.generateForecast.mockReturnValueOnce(new Promise<ForecastResponse>((resolve) => { resolveForecast = resolve; }));
+    render(<ForecastPage />);
+    const submit = screen.getByRole("button", { name: "Run forecast" });
+    fireEvent.click(submit);
+    fireEvent.click(submit);
+    expect(mocks.generateForecast).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Run forecast" })).toBeNull();
+    expect(screen.getByText("Loading")).toBeTruthy();
+    resolveForecast(response);
+    expect(await screen.findByText("Result forecast-1")).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 1, name: "Your forecast" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Edit brief" }));
+    expect(screen.getByRole("button", { name: "Run forecast" })).toBe(submit);
+    expect(screen.queryByText("Result forecast-1")).toBeNull();
+  });
+
+  it("restores the brief after a failed forecast", async () => {
+    mocks.generateForecast.mockRejectedValueOnce(new Error("Service temporarily unavailable."));
+    render(<ForecastPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Run forecast" }));
+    expect(await screen.findByText("Service temporarily unavailable.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Run forecast" })).toBeTruthy();
+    expect(mocks.saveForecastHistory).not.toHaveBeenCalled();
   });
 
   it("lets a guest open and submit the forecast without saving history", async () => {

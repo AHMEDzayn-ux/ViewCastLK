@@ -4,6 +4,7 @@ import SiteShell from "@/components/dashboard/SiteShell";
 import "./globals.css";
 import "./studio.css";
 import "./landing.css";
+import "./forecast.css";
 
 export const metadata: Metadata = {
   title: {

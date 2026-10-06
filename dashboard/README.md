@@ -60,6 +60,13 @@ Draft form values are stored in `sessionStorage`, so they remain available when
 the creator visits another dashboard route and returns during the same browser
 session. Clearing the form also clears the stored draft.
 
+The forecast workspace starts with a compact video brief. After generation,
+the result fills the workspace; **Edit brief** restores the same mounted form
+and its inputs. Overview shows the main estimates and chart. Experimental
+breakout scenarios use a separate tab and chart scale. Guidance and model
+details remain available through keyboard-accessible tabs. On mobile the
+Generate action stays accessible while scrolling through the brief.
+
 Channel statistics are retrieved automatically from the supplied channel
 identifier through the Prediction API abstraction. Subscriber count, total
 channel views, video count, and channel age are displayed as read-only context;

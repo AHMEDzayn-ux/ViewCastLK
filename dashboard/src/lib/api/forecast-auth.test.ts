@@ -79,6 +79,8 @@ describe("authenticated Prediction API requests", () => {
         }),
       }),
     );
+    const [, init] = vi.mocked(fetch).mock.calls[0];
+    expect(JSON.parse(String(init?.body))).toMatchObject({ modelEngine: "v10" });
   });
 
   it("sends a guest forecast without Authorization", async () => {

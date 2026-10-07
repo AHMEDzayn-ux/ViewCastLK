@@ -224,7 +224,11 @@ def export_artifact(
                 f"Missing source artifact file: {COMPLETE_EVALUATION_FILE}"
             )
         evaluation_files.append(COMPLETE_EVALUATION_FILE)
-    for optional_filename in ("feature_importance.csv",):
+    for optional_filename in (
+        "feature_importance.csv",
+        "date_split_day7_metrics.csv",
+        "date_split_day7_manifest.json",
+    ):
         if (source_dir / optional_filename).is_file():
             evaluation_files.append(optional_filename)
 
@@ -253,6 +257,9 @@ def export_artifact(
 
         destination_model = models_dir / "monotonic_trajectory.joblib"
         shutil.copy2(source_model, destination_model)
+        training_ids_source = source_dir / "training_video_ids.txt"
+        if training_ids_source.is_file():
+            shutil.copy2(training_ids_source, staging / "training_video_ids.txt")
         for module_name in RUNTIME_MODULES:
             shutil.copy2(
                 PROJECT_ROOT / "viewcastlk_ml" / module_name,
@@ -308,6 +315,20 @@ def export_artifact(
                 "construction": source_manifest["construction"],
                 "components": source_manifest["components"],
             },
+            "training_video_ids": (
+                {
+                    "path": "training_video_ids.txt",
+                    "sha256": sha256_file(staging / "training_video_ids.txt"),
+                    "count": sum(
+                        bool(line.strip())
+                        for line in (staging / "training_video_ids.txt")
+                        .read_text(encoding="utf-8")
+                        .splitlines()
+                    ),
+                }
+                if (staging / "training_video_ids.txt").is_file()
+                else None
+            ),
             "evaluation": {
                 "common_split": source_manifest["common_split"],
                 "experimental_test_used": True,

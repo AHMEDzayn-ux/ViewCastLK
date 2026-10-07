@@ -333,11 +333,14 @@ def test_current_training_id_artifact_is_unique_and_nonempty():
     from app.artifact import ARTIFACT_DIR
 
     identifiers = load_current_training_video_ids()
-    record = json.loads((ARTIFACT_DIR / "training_video_ids.json").read_text(encoding="utf-8"))
+    manifest = json.loads((ARTIFACT_DIR / "manifest.json").read_text(encoding="utf-8"))
+    record = manifest["training_video_ids"]
+    largest_component = max(
+        component["training_rows"] for component in manifest["model"]["components"]
+    )
 
     assert len(identifiers) == record["count"]
-    # A superset is only safe if it really covers what the model trained on.
-    assert len(identifiers) >= record["largest_component_training_rows"]
+    assert len(identifiers) >= largest_component
     assert all(identifier.strip() == identifier for identifier in identifiers)
 
 

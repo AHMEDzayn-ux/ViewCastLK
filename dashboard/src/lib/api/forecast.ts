@@ -23,10 +23,13 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_PREDICTION_API_URL?.trim().replace(
 );
 const MOCK_MODE_REQUESTED =
   process.env.NEXT_PUBLIC_USE_MOCK_API?.trim().toLowerCase() === "true";
+const configuredModelEngine = process.env.NEXT_PUBLIC_FORECAST_ENGINE
+  ?.trim()
+  .toLowerCase();
 const REQUESTED_MODEL_ENGINE =
-  process.env.NEXT_PUBLIC_FORECAST_ENGINE?.trim().toLowerCase() === "v8"
-    ? "v8"
-    : "v9";
+  configuredModelEngine === "v8" || configuredModelEngine === "v9"
+    ? configuredModelEngine
+    : "v10";
 const USE_MOCK_API = MOCK_MODE_REQUESTED || !API_BASE_URL;
 const EXPECTED_HORIZONS = [7, 14, 21, 30];
 

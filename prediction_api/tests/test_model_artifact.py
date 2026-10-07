@@ -6,7 +6,12 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.artifact import V8_ARTIFACT_DIR, V8_ARTIFACT_VERSION
+from app.artifact import (
+    BREAKOUT_ARTIFACT_DIR,
+    BREAKOUT_ARTIFACT_VERSION,
+    V8_ARTIFACT_DIR,
+    V8_ARTIFACT_VERSION,
+)
 from app.model_registry import DEFAULT_ARTIFACT_DIR, ModelRegistry, ViralScenarioRegistry
 
 
@@ -19,16 +24,13 @@ def test_artifact_exists():
 def test_training_video_ids_artifact_matches_manifest():
     import hashlib
 
-    # The release manifest is covered by SHA256SUMS, so the API records the
-    # training-ID provenance in a sidecar rather than editing the manifest.
     record = json.loads(
-        (DEFAULT_ARTIFACT_DIR / "training_video_ids.json").read_text(encoding="utf-8")
-    )
+        (DEFAULT_ARTIFACT_DIR / "manifest.json").read_text(encoding="utf-8")
+    )["training_video_ids"]
     path = DEFAULT_ARTIFACT_DIR / record["path"]
     identifiers = path.read_text(encoding="utf-8").splitlines()
 
     assert len(identifiers) == record["count"]
-    assert len(identifiers) >= record["largest_component_training_rows"]
     assert len(identifiers) == len(set(identifiers))
     assert hashlib.sha256(path.read_bytes()).hexdigest() == record["sha256"]
 
@@ -85,13 +87,6 @@ def test_artifact_package_checksums_file_is_complete_and_valid():
         expected, relative_path = line.split(maxsplit=1)
         entries[relative_path] = expected
 
-    # SHA256SUMS.txt intentionally does not include itself, and the files the
-    # API adds beside the release are listed in the sidecar, not the release.
-    added_by_api = set(
-        json.loads(
-            (DEFAULT_ARTIFACT_DIR / "training_video_ids.json").read_text(encoding="utf-8")
-        )["added_by_api"]
-    )
     packaged_files = {
         path.relative_to(DEFAULT_ARTIFACT_DIR).as_posix()
         for path in DEFAULT_ARTIFACT_DIR.rglob("*")
@@ -99,7 +94,6 @@ def test_artifact_package_checksums_file_is_complete_and_valid():
         and path.name != "SHA256SUMS.txt"
         and "__pycache__" not in path.parts
         and path.suffix != ".pyc"
-        and path.relative_to(DEFAULT_ARTIFACT_DIR).as_posix() not in added_by_api
     }
     assert set(entries) == packaged_files
 
@@ -161,19 +155,20 @@ def test_v8_breakout_artifact_checksum_and_sample_contract():
         ]
 
 
-def test_v8_packaged_checksums_are_complete_and_valid():
+@pytest.mark.parametrize("artifact_dir", [V8_ARTIFACT_DIR, BREAKOUT_ARTIFACT_DIR])
+def test_breakout_packaged_checksums_are_complete_and_valid(artifact_dir):
     import hashlib
 
     entries = {}
-    for line in (V8_ARTIFACT_DIR / "SHA256SUMS.txt").read_text(
+    for line in (artifact_dir / "SHA256SUMS.txt").read_text(
         encoding="utf-8"
     ).splitlines():
         expected, relative_path = line.split(maxsplit=1)
         entries[relative_path] = expected
 
     packaged_files = {
-        path.relative_to(V8_ARTIFACT_DIR).as_posix()
-        for path in V8_ARTIFACT_DIR.rglob("*")
+        path.relative_to(artifact_dir).as_posix()
+        for path in artifact_dir.rglob("*")
         if path.is_file()
         and path.name != "SHA256SUMS.txt"
         and "__pycache__" not in path.parts
@@ -182,6 +177,18 @@ def test_v8_packaged_checksums_are_complete_and_valid():
     assert set(entries) == packaged_files
     for relative_path, expected in entries.items():
         assert (
-            hashlib.sha256((V8_ARTIFACT_DIR / relative_path).read_bytes()).hexdigest()
+            hashlib.sha256((artifact_dir / relative_path).read_bytes()).hexdigest()
             == expected
         ), relative_path
+
+
+def test_v10_breakout_artifact_checksum_and_sample_contract():
+    registry = ViralScenarioRegistry(BREAKOUT_ARTIFACT_DIR)
+    manifest = registry.get_manifest()
+    assert manifest["artifact_version"] == BREAKOUT_ARTIFACT_VERSION
+    assert registry.verify_checksum() == manifest["model"]["sha256"]
+    assert manifest["training_video_ids"]["count"] == 70_015
+
+    sample = pd.read_csv(BREAKOUT_ARTIFACT_DIR / "sample_input.csv", low_memory=False)
+    scenario = registry.predict_scenario(sample)
+    assert 0 <= float(scenario.iloc[0]["breakout_probability"]) <= 1

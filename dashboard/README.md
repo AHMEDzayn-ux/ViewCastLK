@@ -108,7 +108,7 @@ public variables:
 
 ```dotenv
 NEXT_PUBLIC_USE_MOCK_API=true
-NEXT_PUBLIC_FORECAST_ENGINE=v9
+NEXT_PUBLIC_FORECAST_ENGINE=v10
 NEXT_PUBLIC_PREDICTION_API_URL=
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
@@ -116,9 +116,9 @@ NEXT_PUBLIC_TURNSTILE_SITE_KEY=
 ```
 
 - `NEXT_PUBLIC_USE_MOCK_API=true` explicitly enables mock mode.
-- `NEXT_PUBLIC_FORECAST_ENGINE=v9` uses the released trajectory model. Set it
-  to `v8` to test the normal trajectory, calibrated breakout probability, and
-  conditional viral-upside path from the v8 artifact.
+- `NEXT_PUBLIC_FORECAST_ENGINE=v10` uses the released 1 October normal model,
+  breakout probability, and conditional viral-upside path. V8 and v9 remain
+  available only for comparison testing.
 - If no Prediction API URL is configured, the dashboard also falls back to mock
   mode.
 - A configured `NEXT_PUBLIC_PREDICTION_API_URL` with mock mode set to `false`

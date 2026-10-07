@@ -40,7 +40,7 @@ export const PUBLISH_DAYS = [
 
 export type PublishDay = (typeof PUBLISH_DAYS)[number];
 export type ForecastHorizon = 7 | 14 | 21 | 30;
-export type ForecastEngine = "v8" | "v9";
+export type ForecastEngine = "v8" | "v9" | "v10";
 export type VideoFormatSelection = "" | "short" | "standard";
 
 export interface ChannelStats {

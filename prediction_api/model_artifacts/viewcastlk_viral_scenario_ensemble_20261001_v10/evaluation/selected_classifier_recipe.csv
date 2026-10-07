@@ -1,0 +1,2 @@
+recipe,blend_method,component_count,calibration_method,weight_xgb_current,weight_xgb_shallow,weight_xgb_balanced,weight_lgb_standard,weight_lgb_balanced
+logit[xgb_balanced:0.10+lgb_standard:0.90],logit,2,identity,0.0,0.0,0.1,0.9,0.0

@@ -153,9 +153,9 @@ class ForecastRequest(BaseModel):
     plannedPublishHour: Optional[int] = Field(
         None, description="Optional planned publish hour (0-23)"
     )
-    modelEngine: Literal["v8", "v9"] | None = Field(
+    modelEngine: Literal["v8", "v9", "v10"] | None = Field(
         None,
-        description="Optional test-only model selection; defaults to the released v9 model",
+        description="Optional model selection; defaults to the released v10 model",
     )
 
     @field_validator("title")
@@ -268,7 +268,7 @@ class ForecastResponse(BaseModel):
     )
     breakout: Optional[BreakoutForecast] = Field(
         None,
-        description="V8-only calibrated breakout chance and conditional upside trajectory",
+        description="Calibrated breakout chance and conditional upside trajectory",
     )
     personalization: ForecastPersonalization
     channelStats: Optional[ChannelStatsResponse] = Field(

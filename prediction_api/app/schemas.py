@@ -261,6 +261,16 @@ class TitleGuidance(BaseModel):
     )
 
 
+class GuidanceMetadata(BaseModel):
+    artifactVersion: str = Field(..., description="Versioned historical EDA artifact")
+    source: Literal["historical_eda"] = "historical_eda"
+    isolatedFromForecast: Literal[True] = True
+    associationWarning: str = Field(
+        ...,
+        description="Reminder that the historical comparisons are not causal claims",
+    )
+
+
 class ForecastResponse(BaseModel):
     forecastId: str = Field(..., description="Unique forecast execution ID")
     estimates: List[ForecastEstimate] = Field(
@@ -286,5 +296,9 @@ class ForecastResponse(BaseModel):
     )
     titleGuidance: Optional[TitleGuidance] = Field(
         None, description="Creator-facing title guidance"
+    )
+    guidance: Optional[GuidanceMetadata] = Field(
+        None,
+        description="Provenance for guidance generated independently of model inference",
     )
     model: ModelMetadata = Field(..., description="Model artifact metadata")

@@ -156,10 +156,32 @@ describe("ForecastResults personalization", () => {
     expect(screen.getAllByRole("tabpanel")).toHaveLength(1);
   });
 
+  it("identifies historical guidance as separate from the forecast model", () => {
+    render(
+      <ForecastResults
+        request={request}
+        response={{
+          ...baseResponse,
+          guidance: {
+            artifactVersion: "idea_optimization_20261001_v1",
+            source: "historical_eda",
+            isolatedFromForecast: true,
+            associationWarning: "Historical associations do not prove causation.",
+          },
+        }}
+        onChangeInputs={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Details" }));
+    expect(screen.getByText("idea_optimization_20261001_v1")).toBeTruthy();
+    expect(screen.getByText(/Guidance does not change the forecast/)).toBeTruthy();
+  });
+
   it("keeps missing guidance concise and exposes limited-context issues", () => {
     render(<ForecastResults request={request} response={{ ...baseResponse, unavailableRecommendations: [{ type: "timing", reason: "No supporting evaluation." }], completeness: { status: "degraded", issues: [{ source: "title_analysis", message: "Title analysis unavailable." }] } }} onChangeInputs={vi.fn()} />);
     fireEvent.click(screen.getByRole("tab", { name: "Guidance" }));
-    expect(screen.getByRole("heading", { name: "Publishing guidance is unavailable for this forecast." })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "No evidence-backed changes are suggested." })).toBeTruthy();
     expect(screen.getByText("Why some publishing guidance is unavailable").parentElement?.hasAttribute("open")).toBe(false);
     fireEvent.click(screen.getByRole("button", { name: /Limited context/ }));
     expect(screen.getByRole("tab", { name: "Details" }).getAttribute("aria-selected")).toBe("true");

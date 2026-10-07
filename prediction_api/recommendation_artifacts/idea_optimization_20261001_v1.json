@@ -1,0 +1,690 @@
+{
+  "artifactVersion": "idea_optimization_20261001_v1",
+  "generatedAt": "2026-10-02T16:39:32+00:00",
+  "source": {
+    "kind": "within-channel day-7 EDA",
+    "datasetPeriodStart": "2026-07-02",
+    "datasetPeriodEnd": "2026-10-01",
+    "videos": 93305,
+    "channels": 1643,
+    "outcome": "Day-7 views relative to the same channel's normal",
+    "trainingTableSha256": "65d7c0f20214ea8324a14f012ef4fd1113a0dd87270368bcd9b1d6f3193e5ab9",
+    "insightsSha256": "3f65af89ded5867bfff3c7d4c71e461dfd56e811b63193d49d9982b5ea6321e5"
+  },
+  "policy": {
+    "minVideos": 300,
+    "minChannels": 20,
+    "minImprovementPctPoints": 5.0,
+    "requireSeparatedIntervals": true,
+    "causalityWarning": "Historical associations do not prove that changing this choice will cause more views."
+  },
+  "timing": {
+    "days": [
+      {
+        "label": "Monday",
+        "videos": 14023,
+        "channels": 1331,
+        "effectPct": 1.3,
+        "lowPct": -2.1,
+        "highPct": 5.3
+      },
+      {
+        "label": "Tuesday",
+        "videos": 14251,
+        "channels": 1332,
+        "effectPct": -6.4,
+        "lowPct": -9.8,
+        "highPct": -3.1
+      },
+      {
+        "label": "Wednesday",
+        "videos": 14044,
+        "channels": 1383,
+        "effectPct": -1.0,
+        "lowPct": -3.5,
+        "highPct": 1.5
+      },
+      {
+        "label": "Thursday",
+        "videos": 13358,
+        "channels": 1348,
+        "effectPct": -0.3,
+        "lowPct": -3.4,
+        "highPct": 3.5
+      },
+      {
+        "label": "Friday",
+        "videos": 13490,
+        "channels": 1347,
+        "effectPct": 0.4,
+        "lowPct": -3.3,
+        "highPct": 4.5
+      },
+      {
+        "label": "Saturday",
+        "videos": 12102,
+        "channels": 1341,
+        "effectPct": 6.0,
+        "lowPct": 1.2,
+        "highPct": 10.0
+      },
+      {
+        "label": "Sunday",
+        "videos": 12037,
+        "channels": 1326,
+        "effectPct": 1.7,
+        "lowPct": -3.8,
+        "highPct": 6.7
+      }
+    ],
+    "hourBlocks": [
+      {
+        "label": "00:00-03:00",
+        "videos": 3600,
+        "channels": 433,
+        "effectPct": -2.9,
+        "lowPct": -15.0,
+        "highPct": 7.5,
+        "startHour": 0,
+        "endHour": 3
+      },
+      {
+        "label": "03:00-06:00",
+        "videos": 1977,
+        "channels": 307,
+        "effectPct": -19.2,
+        "lowPct": -41.4,
+        "highPct": 3.8,
+        "startHour": 3,
+        "endHour": 6
+      },
+      {
+        "label": "06:00-09:00",
+        "videos": 10817,
+        "channels": 788,
+        "effectPct": -3.2,
+        "lowPct": -13.1,
+        "highPct": 10.9,
+        "startHour": 6,
+        "endHour": 9
+      },
+      {
+        "label": "09:00-12:00",
+        "videos": 13572,
+        "channels": 1034,
+        "effectPct": -7.4,
+        "lowPct": -12.5,
+        "highPct": -1.5,
+        "startHour": 9,
+        "endHour": 12
+      },
+      {
+        "label": "12:00-15:00",
+        "videos": 15251,
+        "channels": 1049,
+        "effectPct": -6.5,
+        "lowPct": -13.6,
+        "highPct": 1.9,
+        "startHour": 12,
+        "endHour": 15
+      },
+      {
+        "label": "15:00-18:00",
+        "videos": 17062,
+        "channels": 1242,
+        "effectPct": -4.5,
+        "lowPct": -9.9,
+        "highPct": 0.8,
+        "startHour": 15,
+        "endHour": 18
+      },
+      {
+        "label": "18:00-21:00",
+        "videos": 19500,
+        "channels": 1338,
+        "effectPct": 19.0,
+        "lowPct": 8.1,
+        "highPct": 30.3,
+        "startHour": 18,
+        "endHour": 21
+      },
+      {
+        "label": "21:00-24:00",
+        "videos": 11526,
+        "channels": 907,
+        "effectPct": 3.1,
+        "lowPct": -8.7,
+        "highPct": 18.5,
+        "startHour": 21,
+        "endHour": 24
+      }
+    ],
+    "timeZone": "Asia/Colombo"
+  },
+  "duration": {
+    "byCategory": [
+      {
+        "category": "News & Politics",
+        "bands": [
+          {
+            "label": "Shorts",
+            "videos": 2216,
+            "channels": 29,
+            "effectPct": 130.6,
+            "lowPct": 4.5,
+            "highPct": 237.2,
+            "format": "short"
+          },
+          {
+            "label": "Under 4 min",
+            "videos": 17942,
+            "channels": 35,
+            "effectPct": -25.5,
+            "lowPct": -31.3,
+            "highPct": -15.8,
+            "format": "long",
+            "minSeconds": 0,
+            "maxSeconds": 240
+          },
+          {
+            "label": "4-8 min",
+            "videos": 3739,
+            "channels": 35,
+            "effectPct": 7.2,
+            "lowPct": -17.8,
+            "highPct": 31.8,
+            "format": "long",
+            "minSeconds": 240,
+            "maxSeconds": 480
+          },
+          {
+            "label": "8-15 min",
+            "videos": 2932,
+            "channels": 42,
+            "effectPct": 7.9,
+            "lowPct": -0.8,
+            "highPct": 24.4,
+            "format": "long",
+            "minSeconds": 480,
+            "maxSeconds": 900
+          },
+          {
+            "label": "15-30 min",
+            "videos": 766,
+            "channels": 31,
+            "effectPct": 53.7,
+            "lowPct": -4.2,
+            "highPct": 155.3,
+            "format": "long",
+            "minSeconds": 900,
+            "maxSeconds": 1800
+          },
+          {
+            "label": "30-60 min",
+            "videos": 1123,
+            "channels": 24,
+            "effectPct": 525.5,
+            "lowPct": 215.3,
+            "highPct": 1530.9,
+            "format": "long",
+            "minSeconds": 1800,
+            "maxSeconds": 3600
+          }
+        ]
+      },
+      {
+        "category": "Education",
+        "bands": [
+          {
+            "label": "Shorts",
+            "videos": 6842,
+            "channels": 269,
+            "effectPct": -0.1,
+            "lowPct": -5.7,
+            "highPct": 6.3,
+            "format": "short"
+          },
+          {
+            "label": "Under 4 min",
+            "videos": 1036,
+            "channels": 174,
+            "effectPct": -28.0,
+            "lowPct": -40.2,
+            "highPct": -14.5,
+            "format": "long",
+            "minSeconds": 0,
+            "maxSeconds": 240
+          },
+          {
+            "label": "4-8 min",
+            "videos": 1056,
+            "channels": 177,
+            "effectPct": -5.5,
+            "lowPct": -16.8,
+            "highPct": 4.3,
+            "format": "long",
+            "minSeconds": 240,
+            "maxSeconds": 480
+          },
+          {
+            "label": "8-15 min",
+            "videos": 1264,
+            "channels": 185,
+            "effectPct": 12.1,
+            "lowPct": -1.5,
+            "highPct": 29.2,
+            "format": "long",
+            "minSeconds": 480,
+            "maxSeconds": 900
+          },
+          {
+            "label": "15-30 min",
+            "videos": 791,
+            "channels": 163,
+            "effectPct": 13.5,
+            "lowPct": 3.4,
+            "highPct": 23.8,
+            "format": "long",
+            "minSeconds": 900,
+            "maxSeconds": 1800
+          },
+          {
+            "label": "30-60 min",
+            "videos": 1007,
+            "channels": 111,
+            "effectPct": -14.2,
+            "lowPct": -23.4,
+            "highPct": -0.2,
+            "format": "long",
+            "minSeconds": 1800,
+            "maxSeconds": 3600
+          },
+          {
+            "label": "Over 1 hour",
+            "videos": 821,
+            "channels": 106,
+            "effectPct": 47.7,
+            "lowPct": 17.9,
+            "highPct": 85.4,
+            "format": "long",
+            "minSeconds": 3600,
+            "maxSeconds": null
+          }
+        ]
+      },
+      {
+        "category": "Entertainment",
+        "bands": [
+          {
+            "label": "Shorts",
+            "videos": 3533,
+            "channels": 80,
+            "effectPct": -48.3,
+            "lowPct": -58.1,
+            "highPct": -22.5,
+            "format": "short"
+          },
+          {
+            "label": "Under 4 min",
+            "videos": 4722,
+            "channels": 54,
+            "effectPct": -15.6,
+            "lowPct": -35.5,
+            "highPct": 66.4,
+            "format": "long",
+            "minSeconds": 0,
+            "maxSeconds": 240
+          },
+          {
+            "label": "4-8 min",
+            "videos": 829,
+            "channels": 37,
+            "effectPct": 18.2,
+            "lowPct": -40.6,
+            "highPct": 170.5,
+            "format": "long",
+            "minSeconds": 240,
+            "maxSeconds": 480
+          },
+          {
+            "label": "8-15 min",
+            "videos": 394,
+            "channels": 37,
+            "effectPct": -20.4,
+            "lowPct": -47.0,
+            "highPct": 2.6,
+            "format": "long",
+            "minSeconds": 480,
+            "maxSeconds": 900
+          },
+          {
+            "label": "15-30 min",
+            "videos": 1799,
+            "channels": 42,
+            "effectPct": 326.8,
+            "lowPct": 18.8,
+            "highPct": 884.5,
+            "format": "long",
+            "minSeconds": 900,
+            "maxSeconds": 1800
+          },
+          {
+            "label": "30-60 min",
+            "videos": 319,
+            "channels": 43,
+            "effectPct": 18.3,
+            "lowPct": -36.1,
+            "highPct": 105.3,
+            "format": "long",
+            "minSeconds": 1800,
+            "maxSeconds": 3600
+          }
+        ]
+      },
+      {
+        "category": "Travel & Events",
+        "bands": [
+          {
+            "label": "Shorts",
+            "videos": 6195,
+            "channels": 257,
+            "effectPct": 11.8,
+            "lowPct": 7.2,
+            "highPct": 17.6,
+            "format": "short"
+          },
+          {
+            "label": "Under 4 min",
+            "videos": 347,
+            "channels": 93,
+            "effectPct": -74.6,
+            "lowPct": -81.8,
+            "highPct": -64.4,
+            "format": "long",
+            "minSeconds": 0,
+            "maxSeconds": 240
+          },
+          {
+            "label": "15-30 min",
+            "videos": 346,
+            "channels": 80,
+            "effectPct": 1.4,
+            "lowPct": -14.1,
+            "highPct": 18.3,
+            "format": "long",
+            "minSeconds": 900,
+            "maxSeconds": 1800
+          }
+        ]
+      },
+      {
+        "category": "Music",
+        "bands": [
+          {
+            "label": "Shorts",
+            "videos": 4506,
+            "channels": 158,
+            "effectPct": 13.4,
+            "lowPct": 5.7,
+            "highPct": 22.8,
+            "format": "short"
+          },
+          {
+            "label": "Under 4 min",
+            "videos": 912,
+            "channels": 127,
+            "effectPct": -44.1,
+            "lowPct": -58.6,
+            "highPct": -23.8,
+            "format": "long",
+            "minSeconds": 0,
+            "maxSeconds": 240
+          },
+          {
+            "label": "4-8 min",
+            "videos": 532,
+            "channels": 99,
+            "effectPct": -20.1,
+            "lowPct": -49.0,
+            "highPct": 7.7,
+            "format": "long",
+            "minSeconds": 240,
+            "maxSeconds": 480
+          }
+        ]
+      },
+      {
+        "category": "People & Blogs",
+        "bands": [
+          {
+            "label": "Shorts",
+            "videos": 1389,
+            "channels": 84,
+            "effectPct": 16.0,
+            "lowPct": -2.1,
+            "highPct": 49.1,
+            "format": "short"
+          },
+          {
+            "label": "Under 4 min",
+            "videos": 1865,
+            "channels": 44,
+            "effectPct": -35.3,
+            "lowPct": -38.5,
+            "highPct": -8.0,
+            "format": "long",
+            "minSeconds": 0,
+            "maxSeconds": 240
+          },
+          {
+            "label": "4-8 min",
+            "videos": 513,
+            "channels": 41,
+            "effectPct": 35.0,
+            "lowPct": -31.2,
+            "highPct": 50.7,
+            "format": "long",
+            "minSeconds": 240,
+            "maxSeconds": 480
+          },
+          {
+            "label": "8-15 min",
+            "videos": 380,
+            "channels": 48,
+            "effectPct": 26.4,
+            "lowPct": -23.2,
+            "highPct": 77.2,
+            "format": "long",
+            "minSeconds": 480,
+            "maxSeconds": 900
+          },
+          {
+            "label": "15-30 min",
+            "videos": 362,
+            "channels": 40,
+            "effectPct": 21.5,
+            "lowPct": -13.7,
+            "highPct": 62.3,
+            "format": "long",
+            "minSeconds": 900,
+            "maxSeconds": 1800
+          },
+          {
+            "label": "30-60 min",
+            "videos": 450,
+            "channels": 25,
+            "effectPct": 36.3,
+            "lowPct": -48.4,
+            "highPct": 108.3,
+            "format": "long",
+            "minSeconds": 1800,
+            "maxSeconds": 3600
+          }
+        ]
+      },
+      {
+        "category": "Gaming",
+        "bands": [
+          {
+            "label": "Shorts",
+            "videos": 2193,
+            "channels": 103,
+            "effectPct": 26.0,
+            "lowPct": 9.2,
+            "highPct": 45.5,
+            "format": "short"
+          },
+          {
+            "label": "15-30 min",
+            "videos": 393,
+            "channels": 71,
+            "effectPct": -9.9,
+            "lowPct": -42.1,
+            "highPct": 33.5,
+            "format": "long",
+            "minSeconds": 900,
+            "maxSeconds": 1800
+          },
+          {
+            "label": "30-60 min",
+            "videos": 328,
+            "channels": 68,
+            "effectPct": -19.7,
+            "lowPct": -36.3,
+            "highPct": -3.9,
+            "format": "long",
+            "minSeconds": 1800,
+            "maxSeconds": 3600
+          },
+          {
+            "label": "Over 1 hour",
+            "videos": 953,
+            "channels": 84,
+            "effectPct": -2.2,
+            "lowPct": -14.5,
+            "highPct": 11.4,
+            "format": "long",
+            "minSeconds": 3600,
+            "maxSeconds": null
+          }
+        ]
+      }
+    ]
+  },
+  "format": {
+    "shortsVsLongByCategory": [
+      {
+        "label": "News & Politics",
+        "videos": 29189,
+        "channels": 55,
+        "effectPct": 142.9,
+        "lowPct": -1.6,
+        "highPct": 268.0
+      },
+      {
+        "label": "Education",
+        "videos": 12817,
+        "channels": 390,
+        "effectPct": -0.2,
+        "lowPct": -12.1,
+        "highPct": 13.3
+      },
+      {
+        "label": "Entertainment",
+        "videos": 11852,
+        "channels": 135,
+        "effectPct": -59.4,
+        "lowPct": -76.6,
+        "highPct": -24.2
+      },
+      {
+        "label": "Travel & Events",
+        "videos": 7590,
+        "channels": 284,
+        "effectPct": 85.9,
+        "lowPct": 51.4,
+        "highPct": 138.1
+      },
+      {
+        "label": "Music",
+        "videos": 6543,
+        "channels": 221,
+        "effectPct": 47.7,
+        "lowPct": 19.9,
+        "highPct": 88.5
+      },
+      {
+        "label": "People & Blogs",
+        "videos": 5074,
+        "channels": 125,
+        "effectPct": 26.6,
+        "lowPct": 0.2,
+        "highPct": 96.7
+      },
+      {
+        "label": "Gaming",
+        "videos": 4480,
+        "channels": 148,
+        "effectPct": 56.6,
+        "lowPct": 17.9,
+        "highPct": 106.7
+      },
+      {
+        "label": "Howto & Style",
+        "videos": 2823,
+        "channels": 108,
+        "effectPct": 8.2,
+        "lowPct": -6.5,
+        "highPct": 30.0
+      },
+      {
+        "label": "Sports",
+        "videos": 2242,
+        "channels": 65,
+        "effectPct": 38.8,
+        "lowPct": -1.6,
+        "highPct": 118.0
+      },
+      {
+        "label": "Autos & Vehicles",
+        "videos": 2216,
+        "channels": 85,
+        "effectPct": 43.4,
+        "lowPct": -5.8,
+        "highPct": 141.1
+      },
+      {
+        "label": "Comedy",
+        "videos": 2072,
+        "channels": 54,
+        "effectPct": 22.0,
+        "lowPct": -12.5,
+        "highPct": 76.2
+      },
+      {
+        "label": "Pets & Animals",
+        "videos": 1993,
+        "channels": 53,
+        "effectPct": 484.8,
+        "lowPct": 39.1,
+        "highPct": 1176.3
+      },
+      {
+        "label": "Film & Animation",
+        "videos": 1905,
+        "channels": 95,
+        "effectPct": -4.2,
+        "lowPct": -37.8,
+        "highPct": 46.0
+      },
+      {
+        "label": "Science & Technology",
+        "videos": 1809,
+        "channels": 89,
+        "effectPct": -11.1,
+        "lowPct": -32.5,
+        "highPct": 10.0
+      }
+    ]
+  }
+}

@@ -2,8 +2,9 @@ import asyncio
 from datetime import datetime, timezone
 import uuid
 from typing import Any
+from urllib.parse import urlencode
 
-from fastapi import Depends, FastAPI, Query, Request, status
+from fastapi import Depends, FastAPI, Query, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -46,6 +47,8 @@ from app.schemas import (
     TitleGuidance,
     UnavailableRecommendation,
     YouTubeAuthorizationResponse,
+    YouTubeOAuthCompletionRequest,
+    YouTubeOAuthCompletionResponse,
     YouTubeConnectionResponse,
     YouTubeDisconnectResponse,
 )
@@ -70,10 +73,15 @@ from app.youtube_oauth import (
     exchange_authorization_code,
     fetch_authenticated_channel,
     generate_oauth_state,
+    generate_session_binding_nonce,
     hash_oauth_state,
+    hash_session_binding,
     oauth_state_expiry,
 )
 from app.personalization import apply_forecast_adjustments, synchronize_creator_history
+from app.oauth_logging import protect_oauth_access_logs
+
+protect_oauth_access_logs()
 
 app = FastAPI(
     title="ViewCastLK Prediction API",
@@ -192,19 +200,31 @@ async def accuracy_status():
     responses={401: {"model": ErrorResponse}, 503: {"model": ErrorResponse}},
 )
 async def start_youtube_oauth(
+    response: Response,
     authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
 ):
+    if not authenticated_user.session_id:
+        raise YouTubeOAuthException(
+            status_code=401, message="Sign in again to connect your YouTube channel.",
+            code="oauth_session_required",
+        )
     state_value = generate_oauth_state()
+    binding_nonce = generate_session_binding_nonce()
     authorization_url = build_authorization_url(state_value)
     await creator_store.create_oauth_state(
         state_hash=hash_oauth_state(state_value),
         user_id=authenticated_user.id,
+        session_id=authenticated_user.session_id,
+        binding_hash=hash_session_binding(binding_nonce),
         expires_at=oauth_state_expiry(),
     )
     # A JSON URL lets the browser authenticate this API request with its bearer
     # token, then perform a normal top-level redirect without putting that token
     # into a query string.
-    return YouTubeAuthorizationResponse(authorizationUrl=authorization_url)
+    response.headers["Cache-Control"] = "no-store"
+    return YouTubeAuthorizationResponse(
+        authorizationUrl=authorization_url, state=state_value, bindingNonce=binding_nonce
+    )
 
 
 @app.get(
@@ -216,23 +236,54 @@ async def youtube_oauth_callback(
     code: str | None = Query(default=None, max_length=4096),
     error: str | None = Query(default=None, max_length=256),
 ):
+    # Google navigates here without a Supabase bearer. This route only relays
+    # the response to the receiving tab; it never persists/exchanges the code.
+    if not await creator_store.oauth_state_is_pending(state_hash=hash_oauth_state(state_value)):
+        raise _invalid_oauth_completion()
+    if not code and not error:
+        raise _invalid_oauth_completion()
+    parameters = {"youtube_state": state_value}
+    if error:
+        parameters["youtube_denied"] = "1"
+    else:
+        parameters["youtube_code"] = code
+    return RedirectResponse(
+        url=f"{DASHBOARD_ORIGIN.rstrip('/')}/account/youtube-callback#{urlencode(parameters)}",
+        status_code=303,
+        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+    )
+
+
+def _invalid_oauth_completion() -> YouTubeOAuthException:
+    return YouTubeOAuthException(
+        status_code=400,
+        message="This YouTube connection request is invalid or has expired. Start again from your account.",
+        code="invalid_oauth_state",
+    )
+
+
+@app.post("/auth/youtube/complete", response_model=YouTubeOAuthCompletionResponse)
+async def complete_youtube_oauth(
+    payload: YouTubeOAuthCompletionRequest,
+    response: Response,
+    authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
+):
+    response.headers["Cache-Control"] = "no-store"
+    if not authenticated_user.session_id or (not payload.code and not payload.denied):
+        raise _invalid_oauth_completion()
     state_record = await creator_store.consume_oauth_state(
-        state_hash=hash_oauth_state(state_value)
+        state_hash=hash_oauth_state(payload.state),
+        user_id=authenticated_user.id,
+        session_id=authenticated_user.session_id,
+        binding_hash=hash_session_binding(payload.bindingNonce),
     )
     if state_record is None:
-        raise YouTubeOAuthException(
-            status_code=400,
-            message="This YouTube connection request is invalid or has expired.",
-            code="invalid_oauth_state",
-        )
+        raise _invalid_oauth_completion()
 
-    if error or not code:
-        return RedirectResponse(
-            url=f"{DASHBOARD_ORIGIN.rstrip('/')}/account?youtube=not_connected",
-            status_code=303,
-        )
+    if payload.denied:
+        return YouTubeOAuthCompletionResponse(connected=False)
 
-    tokens = await exchange_authorization_code(code)
+    tokens = await exchange_authorization_code(payload.code)
     channel = await fetch_authenticated_channel(tokens.access_token)
     encrypted_refresh_token = encrypt_refresh_token(
         tokens.refresh_token, user_id=state_record.user_id
@@ -262,10 +313,7 @@ async def youtube_oauth_callback(
         await creator_store.set_youtube_connection_status(
             user_id=state_record.user_id, status="error"
         )
-    return RedirectResponse(
-        url=f"{DASHBOARD_ORIGIN.rstrip('/')}/account?youtube=connected",
-        status_code=303,
-    )
+    return YouTubeOAuthCompletionResponse(connected=True)
 
 
 @app.get(

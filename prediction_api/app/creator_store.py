@@ -30,32 +30,65 @@ class CreatorStore:
             raise CreatorStoreUnavailable("Creator storage is unavailable.") from exc
 
     async def create_oauth_state(
-        self, *, state_hash: str, user_id: str, expires_at: datetime
+        self, *, state_hash: str, user_id: str, session_id: str,
+        binding_hash: str, expires_at: datetime
     ) -> None:
         await asyncio.to_thread(
             self._create_oauth_state,
             state_hash=state_hash,
             user_id=user_id,
+            session_id=session_id,
+            binding_hash=binding_hash,
             expires_at=expires_at,
         )
 
     def _create_oauth_state(
-        self, *, state_hash: str, user_id: str, expires_at: datetime
+        self, *, state_hash: str, user_id: str, session_id: str,
+        binding_hash: str, expires_at: datetime
     ) -> None:
         with self._connect() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    insert into creator.oauth_states (state_hash, user_id, expires_at)
-                    values (%s, %s, %s)
+                    insert into creator.oauth_states
+                        (state_hash, user_id, session_id, binding_hash, expires_at)
+                    values (%s, %s, %s, %s, %s)
                     """,
-                    (state_hash, user_id, expires_at),
+                    (state_hash, user_id, session_id, binding_hash, expires_at),
                 )
 
-    async def consume_oauth_state(self, *, state_hash: str) -> OAuthStateRecord | None:
-        return await asyncio.to_thread(self._consume_oauth_state, state_hash=state_hash)
+    async def oauth_state_is_pending(self, *, state_hash: str) -> bool:
+        return await asyncio.to_thread(self._oauth_state_is_pending, state_hash=state_hash)
 
-    def _consume_oauth_state(self, *, state_hash: str) -> OAuthStateRecord | None:
+    def _oauth_state_is_pending(self, *, state_hash: str) -> bool:
+        with self._connect() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    select 1 from creator.oauth_states
+                    where state_hash = %s and consumed_at is null and expires_at > now()
+                      and binding_hash is not null and session_id is not null
+                      and exists (
+                          select 1 from auth.sessions s
+                          where s.id = creator.oauth_states.session_id
+                            and s.user_id = creator.oauth_states.user_id
+                      )
+                    """,
+                    (state_hash,),
+                )
+                return cursor.fetchone() is not None
+
+    async def consume_oauth_state(
+        self, *, state_hash: str, user_id: str, session_id: str, binding_hash: str
+    ) -> OAuthStateRecord | None:
+        return await asyncio.to_thread(
+            self._consume_oauth_state, state_hash=state_hash, user_id=user_id,
+            session_id=session_id, binding_hash=binding_hash,
+        )
+
+    def _consume_oauth_state(
+        self, *, state_hash: str, user_id: str, session_id: str, binding_hash: str
+    ) -> OAuthStateRecord | None:
         with self._connect() as connection:
             with connection.cursor(cursor_factory=RealDictCursor) as cursor:
                 cursor.execute(
@@ -65,9 +98,17 @@ class CreatorStore:
                     where state_hash = %s
                       and consumed_at is null
                       and expires_at > now()
+                      and user_id = %s
+                      and session_id = %s
+                      and binding_hash = %s
+                      and exists (
+                          select 1 from auth.sessions s
+                          where s.id = creator.oauth_states.session_id
+                            and s.user_id = creator.oauth_states.user_id
+                      )
                     returning user_id
                     """,
-                    (state_hash,),
+                    (state_hash, user_id, session_id, binding_hash),
                 )
                 row = cursor.fetchone()
         if not row:

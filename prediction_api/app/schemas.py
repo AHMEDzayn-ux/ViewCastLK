@@ -110,6 +110,21 @@ class ErrorResponse(BaseModel):
 
 class YouTubeAuthorizationResponse(BaseModel):
     authorizationUrl: str
+    state: str
+    bindingNonce: str
+
+
+class YouTubeOAuthCompletionRequest(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    state: str = Field(min_length=1, max_length=512)
+    bindingNonce: str = Field(min_length=43, max_length=43, pattern=r"^[A-Za-z0-9_-]{43}$")
+    code: str | None = Field(default=None, min_length=1, max_length=4096)
+    denied: bool = False
+
+
+class YouTubeOAuthCompletionResponse(BaseModel):
+    connected: bool
 
 
 class YouTubeConnectionResponse(BaseModel):

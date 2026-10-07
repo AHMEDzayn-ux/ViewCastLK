@@ -27,6 +27,18 @@ from app.youtube_oauth import (
 
 client = TestClient(app)
 TEST_KEY = base64.urlsafe_b64encode(bytes(range(32))).decode("ascii")
+TEST_SESSION = "00000000-0000-0000-0000-000000000001"
+TEST_BINDING = "a" * 43
+
+
+def _complete(payload):
+    app.dependency_overrides[require_authenticated_user] = lambda: AuthenticatedUser(
+        id="user-a", session_id=TEST_SESSION
+    )
+    try:
+        return client.post("/auth/youtube/complete", json={"bindingNonce": TEST_BINDING, **payload})
+    finally:
+        app.dependency_overrides.pop(require_authenticated_user, None)
 
 
 def _configure_oauth(monkeypatch):
@@ -62,7 +74,7 @@ def test_oauth_start_binds_random_state_to_authenticated_user(monkeypatch):
     store = AsyncMock()
     monkeypatch.setattr(main_module, "creator_store", store)
     app.dependency_overrides[require_authenticated_user] = lambda: AuthenticatedUser(
-        id="user-a"
+        id="user-a", session_id=TEST_SESSION
     )
     try:
         first = client.get("/auth/youtube/start")
@@ -83,13 +95,18 @@ def test_oauth_start_binds_random_state_to_authenticated_user(monkeypatch):
     assert store.create_oauth_state.await_count == 2
     first_call = store.create_oauth_state.await_args_list[0].kwargs
     assert first_call["user_id"] == "user-a"
+    assert first_call["session_id"] == TEST_SESSION
+    assert first_call["binding_hash"] != first.json()["bindingNonce"]
+    assert first.json()["bindingNonce"] != second.json()["bindingNonce"]
+    assert first.json()["bindingNonce"] not in first.json()["authorizationUrl"]
+    assert first.headers["cache-control"] == "no-store"
     assert first_call["state_hash"] != first_query["state"][0]
     assert first_call["expires_at"] > datetime.now(timezone.utc)
 
 
 def test_callback_rejects_invalid_expired_or_replayed_state(monkeypatch):
     store = AsyncMock()
-    store.consume_oauth_state.return_value = None
+    store.oauth_state_is_pending.return_value = False
     monkeypatch.setattr(main_module, "creator_store", store)
 
     response = client.get(
@@ -100,7 +117,7 @@ def test_callback_rejects_invalid_expired_or_replayed_state(monkeypatch):
     assert response.json()["code"] == "invalid_oauth_state"
 
 
-def test_callback_encrypts_refresh_token_and_redirects_without_tokens(monkeypatch):
+def test_completion_encrypts_refresh_token_and_responds_without_tokens(monkeypatch):
     _configure_oauth(monkeypatch)
     store = AsyncMock()
     store.consume_oauth_state.return_value = OAuthStateRecord(user_id="user-a")
@@ -128,16 +145,15 @@ def test_callback_encrypts_refresh_token_and_redirects_without_tokens(monkeypatc
         ),
     )
 
-    response = client.get(
-        "/auth/youtube/callback",
-        params={"state": "one-time-state", "code": "authorization-code"},
-        follow_redirects=False,
-    )
+    monkeypatch.setattr(main_module, "synchronize_creator_history", AsyncMock())
+    response = _complete({"state": "one-time-state", "code": "authorization-code"})
 
-    assert response.status_code == 303
-    assert response.headers["location"].endswith("/account?youtube=connected")
-    assert "test-access-token" not in response.headers["location"]
-    assert "test-refresh-token" not in response.headers["location"]
+    assert response.status_code == 200
+    assert response.json() == {"connected": True}
+    assert response.headers["cache-control"] == "no-store"
+    assert "test-access-token" not in response.text
+    assert "test-refresh-token" not in response.text
+    assert "authorization-code" not in response.text
     saved = store.upsert_youtube_connection.await_args.kwargs
     assert saved["user_id"] == "user-a"
     assert saved["channel_id"] == "UC-test-channel"
@@ -150,24 +166,20 @@ def test_callback_encrypts_refresh_token_and_redirects_without_tokens(monkeypatc
     )
 
 
-def test_callback_state_is_consumed_before_google_denial(monkeypatch):
+def test_completion_state_is_consumed_before_google_denial(monkeypatch):
     store = AsyncMock()
     store.consume_oauth_state.return_value = OAuthStateRecord(user_id="user-a")
     monkeypatch.setattr(main_module, "creator_store", store)
 
-    response = client.get(
-        "/auth/youtube/callback",
-        params={"state": "one-time-state", "error": "access_denied"},
-        follow_redirects=False,
-    )
+    response = _complete({"state": "one-time-state", "denied": True})
 
-    assert response.status_code == 303
-    assert response.headers["location"].endswith("/account?youtube=not_connected")
+    assert response.status_code == 200
+    assert response.json() == {"connected": False}
     store.consume_oauth_state.assert_awaited_once()
     store.upsert_youtube_connection.assert_not_awaited()
 
 
-def test_callback_succeeds_without_warehouse_database(monkeypatch):
+def test_completion_succeeds_without_warehouse_database(monkeypatch):
     _configure_oauth(monkeypatch)
     monkeypatch.setattr(config, "SUPABASE_WAREHOUSE_DB_URL", "")
     store = AsyncMock()
@@ -199,14 +211,10 @@ def test_callback_succeeds_without_warehouse_database(monkeypatch):
         main_module, "synchronize_creator_history", AsyncMock()
     )
 
-    response = client.get(
-        "/auth/youtube/callback",
-        params={"state": "one-time-state", "code": "authorization-code"},
-        follow_redirects=False,
-    )
+    response = _complete({"state": "one-time-state", "code": "authorization-code"})
 
-    assert response.status_code == 303
-    assert response.headers["location"].endswith("/account?youtube=connected")
+    assert response.status_code == 200
+    assert response.json() == {"connected": True}
     store.upsert_youtube_connection.assert_awaited_once()
 
 

@@ -94,7 +94,11 @@ def main() -> None:
             "channels": source["dataset"]["channels"],
             "outcome": "Day-7 views relative to the same channel's normal",
             "trainingTableSha256": TRAINING_TABLE_SHA256,
-            "insightsSha256": hashlib.sha256(source_bytes).hexdigest(),
+            # Line endings normalised: a Windows checkout stores the file with
+            # CRLF and Linux with LF, and the hash must match on both.
+            "insightsSha256": hashlib.sha256(
+                source_bytes.replace(b"\r\n", b"\n")
+            ).hexdigest(),
         },
         "policy": {
             "minVideos": source["dataset"]["minVideos"],

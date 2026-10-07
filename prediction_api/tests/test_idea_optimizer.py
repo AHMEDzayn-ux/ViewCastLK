@@ -34,6 +34,8 @@ def test_released_artifact_records_exact_eda_and_training_sources():
     artifact = load_recommendation_artifact()
     repo = Path(__file__).resolve().parents[2]
     insights = (repo / "dashboard" / "src" / "data" / "insights.json").read_bytes()
+    # CRLF on a Windows checkout, LF on Linux: hash the same text on both.
+    insights = insights.replace(b"\r\n", b"\n")
 
     assert artifact["source"]["insightsSha256"] == hashlib.sha256(insights).hexdigest()
     assert artifact["source"]["trainingTableSha256"] == (

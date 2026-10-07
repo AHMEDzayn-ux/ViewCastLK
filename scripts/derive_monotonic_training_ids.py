@@ -83,7 +83,7 @@ def choose_common_test_channels(
     return best[2], best[1], best[3]
 
 
-def derive_training_ids(project_root: Path) -> set[str]:
+def derive_training_ids(project_root: Path, manifest_path: Path) -> set[str]:
     assignments = load_assignments(project_root)
     transitions = {
         pair: transition_metadata(assignments, *pair) for pair in TRANSITIONS
@@ -93,14 +93,6 @@ def derive_training_ids(project_root: Path) -> set[str]:
         + [transitions[pair]["channel_id"] for pair in TRANSITIONS]
     )
 
-    manifest_path = (
-        project_root
-        / "prediction_api"
-        / "model_artifacts"
-        / "viewcastlk_monotonic_trajectory_experimental_v1"
-        / "evaluation"
-        / "training_manifest.json"
-    )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     expected_split = manifest["common_split"]
     if seed != expected_split["selection_seed"]:
@@ -153,6 +145,19 @@ def derive_training_ids(project_root: Path) -> set[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--project-root", type=Path, default=PROJECT_ROOT)
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=(
+            PROJECT_ROOT
+            / "prediction_api"
+            / "model_artifacts"
+            / "viewcastlk_monotonic_trajectory_experimental_v1"
+            / "evaluation"
+            / "training_manifest.json"
+        ),
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -165,7 +170,7 @@ def main() -> None:
         ),
     )
     args = parser.parse_args()
-    training_ids = derive_training_ids(PROJECT_ROOT)
+    training_ids = derive_training_ids(args.project_root, args.manifest)
     count = write_training_video_ids(training_ids, args.output)
     print(f"Verified and wrote {count:,} exact training video IDs to {args.output}")
 

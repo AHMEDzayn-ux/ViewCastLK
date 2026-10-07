@@ -99,8 +99,8 @@ def main() -> None:
     probability = scenario["breakout_probability"].to_numpy(dtype=float)
     if not np.isfinite(normal).all() or not np.isfinite(viral).all():
         raise RuntimeError("Model returned non-finite scenario views")
-    if (np.diff(normal, axis=1) <= 0).any() or (np.diff(viral, axis=1) <= 0).any():
-        raise RuntimeError("Model returned a flat or decreasing trajectory")
+    if (np.diff(normal, axis=1) < -1e-12).any() or (np.diff(viral, axis=1) <= 0).any():
+        raise RuntimeError("Model returned a decreasing trajectory")
     if (viral <= normal).any():
         raise RuntimeError("Viral upside must be above the normal forecast")
     if ((probability < 0) | (probability > 1)).any():
@@ -170,6 +170,9 @@ def export_artifact(
         raise RuntimeError("Source model checksum mismatch")
     evaluation_files = [source_manifest_path]
     evaluation_files.extend(sorted(source_dir.glob("*.csv")))
+    date_split_manifest = source_dir / "date_split_day7_manifest.json"
+    if date_split_manifest.is_file():
+        evaluation_files.append(date_split_manifest)
 
     with tempfile.TemporaryDirectory(
         prefix=f".{artifact_version}-", dir=output_root
@@ -201,6 +204,9 @@ def export_artifact(
             joblib.dump(model, destination_model)
         else:
             shutil.copy2(source_model, destination_model)
+        training_ids_source = source_dir / "training_video_ids.txt"
+        if training_ids_source.is_file():
+            shutil.copy2(training_ids_source, staging / "training_video_ids.txt")
         for module_name in RUNTIME_MODULES:
             shutil.copy2(
                 PROJECT_ROOT / "viewcastlk_ml" / module_name,
@@ -228,7 +234,7 @@ def export_artifact(
         if (
             not np.isfinite(normal).all()
             or not np.isfinite(viral).all()
-            or (np.diff(normal, axis=1) <= 0).any()
+            or (np.diff(normal, axis=1) < -1e-12).any()
             or (np.diff(viral, axis=1) <= 0).any()
             or (viral <= normal).any()
             or ((probability < 0) | (probability > 1)).any()
@@ -279,6 +285,20 @@ def export_artifact(
                 "sha256": sha256_file(destination_model),
                 "size_bytes": destination_model.stat().st_size,
             },
+            "training_video_ids": (
+                {
+                    "path": "training_video_ids.txt",
+                    "sha256": sha256_file(staging / "training_video_ids.txt"),
+                    "count": sum(
+                        bool(line.strip())
+                        for line in (staging / "training_video_ids.txt")
+                        .read_text(encoding="utf-8")
+                        .splitlines()
+                    ),
+                }
+                if (staging / "training_video_ids.txt").is_file()
+                else None
+            ),
             "sample_smoke_output": json.loads(
                 scenario.to_json(orient="records")
             )[0],

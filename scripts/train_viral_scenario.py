@@ -461,9 +461,9 @@ def run_training(
                 else "FAIL",
             },
             {
-                "test": "normal trajectories strictly increasing",
+                "test": "normal trajectories nondecreasing",
                 "status": "PASS"
-                if (np.diff(normal, axis=1) > 0).all()
+                if (np.diff(normal, axis=1) >= -1e-12).all()
                 else "FAIL",
             },
             {

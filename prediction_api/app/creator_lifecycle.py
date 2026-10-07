@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections import Counter
 from typing import Any
 
@@ -16,6 +17,18 @@ from app.youtube_oauth import (
 )
 
 
+def _report(user_id: str, stage: str, exc: Exception) -> None:
+    """Say why a creator was not refreshed, without echoing credentials.
+
+    Every failure is caught so one creator cannot stop the rest, which also
+    meant the job used to exit 1 with no hint of the cause. The exception's
+    type and a short message are enough to diagnose; tokens never appear in
+    them because they travel in request bodies and headers, not messages.
+    """
+    message = str(exc).splitlines()[0][:200] if str(exc) else ""
+    print(f"creator {user_id}: {stage} failed: {type(exc).__name__}: {message}", file=sys.stderr)
+
+
 async def refresh_creator_connection(
     *, connection: dict[str, Any], store, model_registry, roster_store
 ) -> str:
@@ -28,9 +41,10 @@ async def refresh_creator_connection(
     except GoogleCredentialRevoked:
         await store.delete_creator_data(user_id=user_id)
         return "revoked"
-    except Exception:
+    except Exception as exc:
         # Crypto/configuration and temporary provider/network failures are not
         # evidence of revocation. Preserve private rows so a later run can retry.
+        _report(user_id, "token refresh", exc)
         await store.set_youtube_connection_status(user_id=user_id, status="error")
         return "temporary_failure"
 
@@ -48,7 +62,8 @@ async def refresh_creator_connection(
             store=roster_store,
             channel_id=channel.channel_id,
         )
-    except Exception:
+    except Exception as exc:
+        _report(user_id, "history sync", exc)
         await store.set_youtube_connection_status(user_id=user_id, status="error")
         return "temporary_failure"
     return "refreshed"
@@ -81,9 +96,10 @@ async def run_creator_refresh_job(*, store, model_registry, roster_store) -> dic
                 model_registry=model_registry,
                 roster_store=roster_store,
             )
-        except Exception:
+        except Exception as exc:
             # One malformed row or transient per-user failure must not prevent
             # other connected creators from being refreshed in the same run.
+            _report(str(connection.get("user_id")), "refresh", exc)
             result = "temporary_failure"
         results[result] += 1
     return {

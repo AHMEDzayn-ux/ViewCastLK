@@ -227,3 +227,28 @@ async def test_refresh_job_continues_after_one_unexpected_failure(monkeypatch):
 
     assert result == {"refreshed": 1, "revoked": 0, "temporary_failure": 1}
     assert process.await_count == 2
+
+
+def test_a_failed_refresh_says_why_without_stopping_the_run(capsys):
+    import asyncio
+
+    from app import creator_lifecycle
+
+    class Store:
+        async def list_refreshable_connections(self):
+            return [{"user_id": "u1", "encrypted_refresh_token": "not-a-token"}]
+
+        async def set_youtube_connection_status(self, *, user_id, status):
+            self.status = status
+
+    store = Store()
+    results = asyncio.run(
+        creator_lifecycle.run_creator_refresh_job(
+            store=store, model_registry=None, roster_store=None
+        )
+    )
+    assert results["temporary_failure"] == 1
+    assert store.status == "error"
+    err = capsys.readouterr().err
+    assert "creator u1: token refresh failed:" in err
+    assert "not-a-token" not in err

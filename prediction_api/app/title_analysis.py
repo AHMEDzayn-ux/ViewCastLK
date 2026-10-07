@@ -1,9 +1,16 @@
 import logging
 import math
+import time
 from typing import Optional, Tuple
 from pydantic import BaseModel, Field, field_validator
 from app.config import GEMINI_API_KEY, GEMINI_FALLBACK_MODELS, GEMINI_MODEL
 from app.schemas import TitleGuidance
+
+# Title guidance is optional, so it must never hold a forecast hostage. Each
+# model gets PER_MODEL_TIMEOUT_MS, and no further model is tried once
+# TOTAL_BUDGET_SECONDS have passed; the forecast is then returned without it.
+PER_MODEL_TIMEOUT_MS = 8_000
+TOTAL_BUDGET_SECONDS = 15.0
 
 logger = logging.getLogger(__name__)
 
@@ -108,7 +115,8 @@ def analyze_title_tone(
         client = genai.Client(
             api_key=GEMINI_API_KEY,
             http_options=types.HttpOptions(
-                retry_options=types.HttpRetryOptions(attempts=1)
+                timeout=PER_MODEL_TIMEOUT_MS,
+                retry_options=types.HttpRetryOptions(attempts=1),
             ),
         )
         config = types.GenerateContentConfig(
@@ -123,7 +131,14 @@ def analyze_title_tone(
         return None, None
 
     models = _gemini_model_candidates()
+    started = time.monotonic()
     for index, model in enumerate(models):
+        if index and time.monotonic() - started > TOTAL_BUDGET_SECONDS:
+            logger.warning(
+                "Gemini title analysis gave up after %.0fs without a usable model.",
+                time.monotonic() - started,
+            )
+            return None, None
         has_fallback = index < len(models) - 1
         try:
             response = client.models.generate_content(

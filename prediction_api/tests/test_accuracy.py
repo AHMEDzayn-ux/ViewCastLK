@@ -76,3 +76,41 @@ def test_endpoint_says_unavailable_when_nothing_is_published():
 
     assert response.status_code == 200
     assert response.json() == UNAVAILABLE
+
+
+def test_published_figures_match_the_models_own_evaluation():
+    """The page must quote the evaluation shipped with the model, to display precision."""
+    import csv
+
+    evaluation_dir = PUBLISHED_ACCURACY_PATH.parent / "evaluation"
+    rows = {
+        (row["population"], row["method"]): row
+        for row in csv.DictReader(
+            (evaluation_dir / "date_split_day7_metrics.csv").open(encoding="utf-8")
+        )
+    }
+    populations = {
+        "tracked_channel": "channels_with_prior_history",
+        "new_channel": "channels_without_prior_history",
+    }
+    columns = {
+        "within_2x": "within_factor_two_pct",
+        "typical_factor": "typical_error_multiple",
+        "rank_correlation": "spearman_ranking",
+    }
+    # Half of the last decimal shown: percent to 1 place, factor 2, score 3.
+    tolerance = {"within_2x": 0.051, "typical_factor": 0.0051, "rank_correlation": 0.00051}
+    published = _published()
+    for evaluation in published["evaluations"]:
+        population = populations[evaluation["segment"]]
+        model_row = next(r for (p, m), r in rows.items() if p == population and m != "channel_prior_day7_median")
+        baseline_row = rows[(population, "channel_prior_day7_median")]
+        assert evaluation["videos"] == int(model_row["rows"])
+        for metric in evaluation["metrics"]:
+            column = columns[metric["key"]]
+            allowed = tolerance[metric["key"]]
+            assert abs(metric["modelValue"] - float(model_row[column])) < allowed
+            if baseline_row[column]:
+                assert abs(metric["baselineValue"] - float(baseline_row[column])) < allowed
+            else:
+                assert metric["baselineValue"] is None

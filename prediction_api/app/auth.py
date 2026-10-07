@@ -1,4 +1,7 @@
+import base64
+import json
 from dataclasses import dataclass
+from uuid import UUID
 from typing import Any
 
 import httpx
@@ -11,6 +14,28 @@ from app.config import SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL
 @dataclass(frozen=True)
 class AuthenticatedUser:
     id: str
+    session_id: str | None = None
+
+
+def _validated_session_id(access_token: str, user_id: str) -> str | None:
+    """Read claims ONLY after Supabase accepted this exact bearer token.
+
+    This is not standalone JWT validation. Missing session claims only disable
+    session-sensitive OAuth, preserving other existing authenticated features.
+    """
+    try:
+        parts = access_token.split(".")
+        if len(parts) != 3:
+            return None
+        encoded = parts[1]
+        claims = json.loads(base64.urlsafe_b64decode(encoded + "=" * (-len(encoded) % 4)))
+        if not isinstance(claims, dict) or claims.get("sub") != user_id:
+            return None
+        if not isinstance(claims.get("session_id"), str):
+            return None
+        return str(UUID(claims["session_id"]))
+    except (ValueError, TypeError, KeyError, UnicodeError):
+        return None
 
 
 class AuthenticationException(Exception):
@@ -92,7 +117,9 @@ async def validate_access_token(access_token: str) -> AuthenticatedUser:
     if payload.get("is_anonymous") is True:
         raise _invalid_session()
 
-    return AuthenticatedUser(id=user_id)
+    return AuthenticatedUser(
+        id=user_id, session_id=_validated_session_id(access_token, user_id)
+    )
 
 
 async def require_authenticated_user(

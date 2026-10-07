@@ -78,6 +78,14 @@ def generate_oauth_state() -> str:
     return secrets.token_urlsafe(32)
 
 
+def generate_session_binding_nonce() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def hash_session_binding(nonce: str) -> str:
+    return hashlib.sha256(f"viewcastlk-oauth-binding:{nonce}".encode("utf-8")).hexdigest()
+
+
 def hash_oauth_state(state: str) -> str:
     return hashlib.sha256(state.encode("utf-8")).hexdigest()
 

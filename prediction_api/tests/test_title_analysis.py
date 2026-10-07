@@ -339,3 +339,29 @@ def test_11_model_predictions_remain_unchanged():
             res_with_gemini = client.post("/forecast", json=payload).json()
 
     assert res_without_gemini["estimates"] == res_with_gemini["estimates"]
+
+
+def test_stops_trying_models_once_the_time_budget_is_spent():
+    """A slow Gemini must not hold a forecast for minutes across fallbacks."""
+    from unittest.mock import MagicMock
+
+    from app import title_analysis
+
+    calls = []
+
+    def slow_failure(**kwargs):
+        calls.append(kwargs["model"])
+        raise RuntimeError("deadline exceeded")
+
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = slow_failure
+    clock = iter([0.0] + [20.0] * 10)  # start, then every later reading is 20 s on
+    with patch.object(title_analysis, "GEMINI_API_KEY", "test-key"), \
+         patch.object(title_analysis, "_gemini_model_candidates", return_value=("a", "b", "c")), \
+         patch.object(title_analysis, "_should_try_next_model", return_value=True), \
+         patch.object(title_analysis.time, "monotonic", side_effect=lambda: next(clock)), \
+         patch("google.genai.Client", return_value=mock_client):
+        guidance, internal = title_analysis.analyze_title_tone("Test Title")
+
+    assert guidance is None and internal is None
+    assert calls == ["a"]

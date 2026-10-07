@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 import uuid
 from typing import Any
@@ -370,7 +371,12 @@ async def create_forecast(
     channel_stats = fetch_channel_stats(payload.channelIdentifier, YOUTUBE_API_KEY)
 
     # 2. Analyze submitted title using Gemini server-side adapter
-    title_guidance, internal_tone_analysis = analyze_title_tone(payload.title)
+    # The Gemini client is synchronous. Run it on a worker thread so a slow
+    # model cannot block the event loop, and with it every other request on
+    # this single-instance service.
+    title_guidance, internal_tone_analysis = await asyncio.to_thread(
+        analyze_title_tone, payload.title
+    )
 
     # 3. Build 30-column model-ready raw feature frame
     #

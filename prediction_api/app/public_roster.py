@@ -10,6 +10,7 @@ import asyncio
 from urllib.parse import urlparse, urlunparse
 
 import psycopg2
+from app.database_limits import connection_options
 
 from app import config
 
@@ -30,7 +31,7 @@ class PublicRosterStore:
             clean_url = urlunparse(
                 urlparse(config.SUPABASE_WAREHOUSE_DB_URL)._replace(query="")
             )
-            return psycopg2.connect(clean_url, connect_timeout=5)
+            return psycopg2.connect(clean_url, connect_timeout=5, options=connection_options())
         except psycopg2.Error as exc:
             raise PublicRosterUnavailable(
                 "Public roster storage is unavailable."

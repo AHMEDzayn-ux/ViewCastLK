@@ -1,7 +1,12 @@
 from typing import Any, List, Literal, Optional
+import unicodedata
 from pydantic import BaseModel, Field, field_validator
 
 from app.artifact import ACTIVE_ARTIFACT_VERSION
+from app.identifiers import parse_channel_identifier
+
+AudioLanguage = Literal["Sinhala", "Tamil", "English", "Mixed / multilingual", "Other"]
+PublishDay = Literal["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 
 class HealthResponse(BaseModel):
@@ -65,10 +70,18 @@ class AccuracyResponse(BaseModel):
 
 
 class ChannelLookupRequest(BaseModel):
+    model_config = {"extra": "forbid"}
     channelIdentifier: str = Field(
         ...,
+        min_length=1, max_length=512,
         description="YouTube channel handle (@handle), channel ID (UC...), or YouTube URL",
     )
+
+    @field_validator("channelIdentifier")
+    @classmethod
+    def validate_identifier(cls, value: str) -> str:
+        parse_channel_identifier(value)
+        return value.strip()
 
 
 class ChannelStatsResponse(BaseModel):
@@ -185,29 +198,33 @@ class YouTubeDisconnectResponse(BaseModel):
 
 
 class ForecastRequest(BaseModel):
+    model_config = {"extra": "forbid"}
     title: str = Field(
-        ..., description="Pre-publication video title (non-empty)"
+        ..., min_length=1, max_length=100, description="Pre-publication video title (non-empty)"
     )
     category: str = Field(
-        ..., description="YouTube category name (e.g. Music, Entertainment)"
+        ..., min_length=1, max_length=100,
+        description="YouTube category name (e.g. Music, Entertainment)"
     )
     durationSeconds: float = Field(
-        ..., description="Planned video duration in seconds (must be > 0)"
+        ..., gt=0, le=43200, allow_inf_nan=False,
+        description="Planned video duration in seconds (must be > 0; at most 12 hours)"
     )
     isShort: bool | None = Field(
         None, description="Creator's own choice of Short or standard video format"
     )
-    audioLanguage: str = Field(
+    audioLanguage: AudioLanguage = Field(
         ..., description="Primary audio language (e.g. English, Sinhala, Tamil)"
     )
     channelIdentifier: str = Field(
-        ..., description="YouTube channel handle (@handle), channel ID (UC...), or YouTube URL"
+        ..., min_length=1, max_length=512,
+        description="YouTube channel handle (@handle), channel ID (UC...), or YouTube URL"
     )
-    plannedPublishDay: Optional[str] = Field(
+    plannedPublishDay: Optional[PublishDay] = Field(
         None, description="Optional planned publish day of week"
     )
     plannedPublishHour: Optional[int] = Field(
-        None, description="Optional planned publish hour (0-23)"
+        None, ge=0, le=23, strict=True, description="Optional planned publish hour (0-23)"
     )
     modelEngine: Literal["v8", "v9", "v10"] | None = Field(
         None,
@@ -217,14 +234,14 @@ class ForecastRequest(BaseModel):
     @field_validator("title")
     @classmethod
     def validate_title(cls, v: str) -> str:
-        if not v or not v.strip():
+        if not v or not v.strip() or any(unicodedata.category(char) in {"Cc", "Cs"} for char in v):
             raise ValueError("Enter a valid video title.")
         return v.strip()
 
     @field_validator("category")
     @classmethod
     def validate_category(cls, v: str) -> str:
-        if not v or not v.strip():
+        if not v or not v.strip() or not v.isprintable():
             raise ValueError("Select a valid category.")
         return v.strip()
 
@@ -238,6 +255,7 @@ class ForecastRequest(BaseModel):
     @field_validator("channelIdentifier")
     @classmethod
     def validate_channel_identifier(cls, v: str) -> str:
+        parse_channel_identifier(v)
         if not v or not v.strip():
             raise ValueError("Enter a valid YouTube channel URL, handle, or channel ID.")
         return v.strip()

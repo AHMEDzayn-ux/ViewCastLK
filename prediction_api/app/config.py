@@ -26,7 +26,7 @@ GOOGLE_OAUTH_REDIRECT_URI = os.getenv(
 ).strip()
 TOKEN_ENCRYPTION_KEY = os.getenv("TOKEN_ENCRYPTION_KEY", "").strip()
 CREATOR_HISTORY_VIDEO_LIMIT = max(
-    1, int(os.getenv("CREATOR_HISTORY_VIDEO_LIMIT", "200"))
+    1, min(500, int(os.getenv("CREATOR_HISTORY_VIDEO_LIMIT", "200")))
 )
 YOUTUBE_ANALYTICS_BATCH_SIZE = max(
     1, min(10, int(os.getenv("YOUTUBE_ANALYTICS_BATCH_SIZE", "10")))

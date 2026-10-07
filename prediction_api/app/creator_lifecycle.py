@@ -6,8 +6,10 @@ import sys
 from collections import Counter
 from typing import Any
 
-from app.personalization import synchronize_creator_history
+from app.service_limits import bounded_creator_sync as synchronize_creator_history
 from app.public_roster import request_channel_collection_if_available
+from app.rate_limits import enforce_user_limit, RateLimitExceeded
+from app.log_safety import redact
 from app.youtube_oauth import (
     GoogleCredentialRevoked,
     decrypt_refresh_token,
@@ -20,19 +22,20 @@ from app.youtube_oauth import (
 def _report(user_id: str, stage: str, exc: Exception) -> None:
     """Say why a creator was not refreshed, without echoing credentials.
 
-    Every failure is caught so one creator cannot stop the rest, which also
-    meant the job used to exit 1 with no hint of the cause. The exception's
-    type and a short message are enough to diagnose; tokens never appear in
-    them because they travel in request bodies and headers, not messages.
+    Keep the stage/class for diagnosis. Arbitrary exception strings may contain
+    tokens, database URLs or provider payloads and must never be printed.
     """
-    message = str(exc).splitlines()[0][:200] if str(exc) else ""
-    print(f"creator {user_id}: {stage} failed: {type(exc).__name__}: {message}", file=sys.stderr)
+    print(redact(f"creator {user_id}: {stage} failed: {type(exc).__name__}"), file=sys.stderr)
 
 
 async def refresh_creator_connection(
     *, connection: dict[str, Any], store, model_registry, roster_store
 ) -> str:
     user_id = str(connection["user_id"])
+    try:
+        await enforce_user_limit("creator_sync", user_id)
+    except RateLimitExceeded:
+        return "cooldown"
     try:
         refresh_token = decrypt_refresh_token(
             str(connection["encrypted_refresh_token"]), user_id=user_id
@@ -102,8 +105,11 @@ async def run_creator_refresh_job(*, store, model_registry, roster_store) -> dic
             _report(str(connection.get("user_id")), "refresh", exc)
             result = "temporary_failure"
         results[result] += 1
-    return {
+    summary = {
         "refreshed": results["refreshed"],
         "revoked": results["revoked"],
         "temporary_failure": results["temporary_failure"],
     }
+    if results["cooldown"]:
+        summary["cooldown"] = results["cooldown"]
+    return summary

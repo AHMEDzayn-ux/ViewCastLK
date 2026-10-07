@@ -56,7 +56,7 @@ jobs:
             --cpu=1 \
             --max-retries=0 \
             --task-timeout=1800 \
-            --set-secrets="SUPABASE_AUTH_DB_URL=viewcastlk-supabase-auth-db-url:latest,SUPABASE_WAREHOUSE_DB_URL=SUPABASE_WAREHOUSE_DB_URL:latest,GOOGLE_OAUTH_CLIENT_ID=viewcastlk-google-oauth-client-id:latest,GOOGLE_OAUTH_CLIENT_SECRET=viewcastlk-google-oauth-client-secret:latest,TOKEN_ENCRYPTION_KEY=viewcastlk-token-encryption-key:latest" \
+            --set-secrets="SUPABASE_AUTH_DB_URL=viewcastlk-supabase-auth-db-url:latest,RATE_LIMIT_HASH_KEY=viewcastlk-rate-limit-hash-key:latest,SUPABASE_WAREHOUSE_DB_URL=SUPABASE_WAREHOUSE_DB_URL:latest,GOOGLE_OAUTH_CLIENT_ID=viewcastlk-google-oauth-client-id:latest,GOOGLE_OAUTH_CLIENT_SECRET=viewcastlk-google-oauth-client-secret:latest,TOKEN_ENCRYPTION_KEY=viewcastlk-token-encryption-key:latest" \
             --execute-now \
             --wait \
             --quiet

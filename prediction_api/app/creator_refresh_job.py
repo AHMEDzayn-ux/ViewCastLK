@@ -8,6 +8,7 @@ from app.creator_lifecycle import run_creator_refresh_job
 from app.creator_store import CreatorStore
 from app.model_registry import ModelRegistry
 from app.public_roster import PublicRosterStore
+from app.log_safety import protect_sensitive_logs
 
 
 async def _run() -> dict[str, int]:
@@ -19,6 +20,7 @@ async def _run() -> dict[str, int]:
 
 
 def main() -> None:
+    protect_sensitive_logs()
     results = asyncio.run(_run())
     print(
         "Creator refresh complete: "

@@ -1,6 +1,7 @@
 """Redact Google's callback query from application access logs only."""
 
 import logging
+from app.log_safety import protect_sensitive_logs
 
 
 class OAuthCallbackAccessFilter(logging.Filter):
@@ -19,6 +20,7 @@ class OAuthCallbackAccessFilter(logging.Filter):
 
 
 def protect_oauth_access_logs() -> None:
+    protect_sensitive_logs()
     logger = logging.getLogger("uvicorn.access")
     if not any(isinstance(item, OAuthCallbackAccessFilter) for item in logger.filters):
         logger.addFilter(OAuthCallbackAccessFilter())

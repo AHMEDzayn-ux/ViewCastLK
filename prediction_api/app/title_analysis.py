@@ -130,64 +130,72 @@ def analyze_title_tone(
         )
         return None, None
 
-    models = _gemini_model_candidates()
-    started = time.monotonic()
-    for index, model in enumerate(models):
-        if index and time.monotonic() - started > TOTAL_BUDGET_SECONDS:
-            logger.warning(
-                "Gemini title analysis gave up after %.0fs without a usable model.",
-                time.monotonic() - started,
-            )
-            return None, None
-        has_fallback = index < len(models) - 1
-        try:
-            response = client.models.generate_content(
-                model=model,
-                contents=prompt,
-                config=config,
-            )
-        except Exception as exc:
-            status_code = _gemini_error_status_code(exc)
-            if has_fallback and _should_try_next_model(exc):
+    try:
+        models = _gemini_model_candidates()[:3]
+        started = time.monotonic()
+        for index, model in enumerate(models):
+            if index and time.monotonic() - started > TOTAL_BUDGET_SECONDS:
                 logger.warning(
-                    "Gemini model %s failed with status %s; trying next model.",
+                    "Gemini title analysis gave up after %.0fs without a usable model.",
+                    time.monotonic() - started,
+                )
+                return None, None
+            remaining = TOTAL_BUDGET_SECONDS if index == 0 else TOTAL_BUDGET_SECONDS - (time.monotonic() - started)
+            if remaining <= 0:
+                return None, None
+            config.http_options = types.HttpOptions(timeout=max(1, min(PER_MODEL_TIMEOUT_MS, int(remaining * 1000))))
+            has_fallback = index < len(models) - 1
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=prompt,
+                    config=config,
+                )
+            except Exception as exc:
+                status_code = _gemini_error_status_code(exc)
+                if has_fallback and _should_try_next_model(exc):
+                    logger.warning(
+                        "Gemini model %s failed with status %s; trying next model.",
+                        model,
+                        status_code,
+                    )
+                    time.sleep(min(0.25 * 2**index, max(0, TOTAL_BUDGET_SECONDS - (time.monotonic() - started))))
+                    continue
+                logger.warning(
+                    "Gemini title analysis stopped at model %s (status=%s, error=%s).",
                     model,
                     status_code,
+                    type(exc).__name__,
                 )
-                continue
-            logger.warning(
-                "Gemini title analysis stopped at model %s (status=%s, error=%s).",
-                model,
-                status_code,
-                type(exc).__name__,
+                return None, None
+
+            if not response or not response.text:
+                logger.warning("Gemini model %s returned an empty response.", model)
+                if has_fallback:
+                    continue
+                return None, None
+
+            try:
+                internal_analysis = TitleToneAnalysisInternal.model_validate_json(
+                    response.text
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Gemini model %s returned unusable structured output (%s).",
+                    model,
+                    type(exc).__name__,
+                )
+                if has_fallback:
+                    continue
+                return None, None
+
+            guidance = TitleGuidance(
+                summary=internal_analysis.summary,
+                suggestions=internal_analysis.suggestions,
             )
-            return None, None
+            logger.info("Gemini title analysis succeeded with model %s.", model)
+            return guidance, internal_analysis
 
-        if not response or not response.text:
-            logger.warning("Gemini model %s returned an empty response.", model)
-            if has_fallback:
-                continue
-            return None, None
-
-        try:
-            internal_analysis = TitleToneAnalysisInternal.model_validate_json(
-                response.text
-            )
-        except Exception as exc:
-            logger.warning(
-                "Gemini model %s returned unusable structured output (%s).",
-                model,
-                type(exc).__name__,
-            )
-            if has_fallback:
-                continue
-            return None, None
-
-        guidance = TitleGuidance(
-            summary=internal_analysis.summary,
-            suggestions=internal_analysis.suggestions,
-        )
-        logger.info("Gemini title analysis succeeded with model %s.", model)
-        return guidance, internal_analysis
-
-    return None, None
+        return None, None
+    finally:
+        client.close()

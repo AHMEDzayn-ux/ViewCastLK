@@ -78,8 +78,12 @@ from app.youtube_oauth import (
     hash_session_binding,
     oauth_state_expiry,
 )
-from app.personalization import apply_forecast_adjustments, synchronize_creator_history
+from app.personalization import apply_forecast_adjustments
 from app.oauth_logging import protect_oauth_access_logs
+from app.request_limits import RequestLimitMiddleware
+from app.service_limits import bounded_creator_sync as synchronize_creator_history, bounded_channel_lookup
+from app.rate_limits import (RateLimitMiddleware, RateLimitExceeded,
+                             RateLimitUnavailable, enforce_user_limit, limiter, public_identity)
 
 protect_oauth_access_logs()
 
@@ -90,11 +94,16 @@ app = FastAPI(
 )
 
 app.add_middleware(
+    RateLimitMiddleware,
+)
+app.add_middleware(RequestLimitMiddleware)
+app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Accept", "Authorization", "Content-Type"],
+    expose_headers=["Retry-After"],
 )
 
 # Global model registry singleton
@@ -104,6 +113,18 @@ v8_model_registry = ViralScenarioRegistry(V8_ARTIFACT_DIR)
 breakout_model_registry = ViralScenarioRegistry(BREAKOUT_ARTIFACT_DIR)
 creator_store = CreatorStore()
 public_roster_store = PublicRosterStore()
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exception_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(status_code=429,
+        content={"message": "Too many requests. Please try again later.", "code": "rate_limited"},
+        headers={"Retry-After": str(exc.retry_after), "Cache-Control": "no-store"})
+
+@app.exception_handler(RateLimitUnavailable)
+async def rate_limit_unavailable_handler(request: Request, exc: RateLimitUnavailable):
+    return JSONResponse(status_code=503, content={
+        "message": "This service is temporarily unavailable. Please try again later.",
+        "code": "rate_limit_unavailable"})
 
 
 @app.exception_handler(AuthenticationException)
@@ -165,7 +186,9 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
         if "channelIdentifier" in loc or "invalid_channel_identifier" in msg:
             code = "invalid_channel_identifier"
-            first_msg = "Enter a valid YouTube channel URL, handle, or channel ID."
+            first_msg = ("The channel URL or identifier should not contain spaces."
+                         if msg == "The channel URL or identifier should not contain spaces."
+                         else "Enter a valid YouTube channel URL, handle, or channel ID.")
 
     return JSONResponse(
         status_code=status.HTTP_400_BAD_REQUEST,
@@ -203,6 +226,7 @@ async def start_youtube_oauth(
     response: Response,
     authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
 ):
+    await enforce_user_limit("oauth_start", authenticated_user.id)
     if not authenticated_user.session_id:
         raise YouTubeOAuthException(
             status_code=401, message="Sign in again to connect your YouTube channel.",
@@ -268,6 +292,7 @@ async def complete_youtube_oauth(
     response: Response,
     authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
 ):
+    await enforce_user_limit("oauth_complete", authenticated_user.id)
     response.headers["Cache-Control"] = "no-store"
     if not authenticated_user.session_id or (not payload.code and not payload.denied):
         raise _invalid_oauth_completion()
@@ -283,6 +308,7 @@ async def complete_youtube_oauth(
     if payload.denied:
         return YouTubeOAuthCompletionResponse(connected=False)
 
+    await enforce_user_limit("creator_sync", authenticated_user.id)
     tokens = await exchange_authorization_code(payload.code)
     channel = await fetch_authenticated_channel(tokens.access_token)
     encrypted_refresh_token = encrypt_refresh_token(
@@ -324,6 +350,7 @@ async def complete_youtube_oauth(
 async def youtube_connection_status(
     authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
 ):
+    await enforce_user_limit("creator_read", authenticated_user.id)
     connection = await creator_store.get_youtube_connection_status(
         user_id=authenticated_user.id
     )
@@ -351,6 +378,7 @@ async def youtube_connection_status(
 async def disconnect_youtube_connection(
     authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
 ):
+    await enforce_user_limit("disconnect", authenticated_user.id)
     await disconnect_creator_connection(
         user_id=authenticated_user.id,
         store=creator_store,
@@ -368,6 +396,7 @@ async def creator_insights(
     authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
 ):
     """The signed-in creator's own spacing, timing, format and growth pattern."""
+    await enforce_user_limit("creator_read", authenticated_user.id)
     connection = await creator_store.get_youtube_connection_status(
         user_id=authenticated_user.id
     )
@@ -402,7 +431,8 @@ async def channel_lookup(
     payload: ChannelLookupRequest,
     _authenticated_user: AuthenticatedUser = Depends(require_authenticated_user),
 ):
-    return fetch_channel_stats(payload.channelIdentifier, YOUTUBE_API_KEY)
+    await enforce_user_limit("channel_lookup", _authenticated_user.id)
+    return await bounded_channel_lookup(fetch_channel_stats, payload.channelIdentifier, YOUTUBE_API_KEY)
 
 
 @app.post(
@@ -419,10 +449,15 @@ async def channel_lookup(
 )
 async def create_forecast(
     payload: ForecastRequest,
+    request: Request,
     authenticated_user: AuthenticatedUser | None = Depends(optional_authenticated_user),
 ):
+    if authenticated_user:
+        await enforce_user_limit("forecast_user", authenticated_user.id)
+    else:
+        await limiter.check("forecast_guest", public_identity(request))
     # 1. Resolve real YouTube channel statistics using reusable service
-    channel_stats = fetch_channel_stats(payload.channelIdentifier, YOUTUBE_API_KEY)
+    channel_stats = await bounded_channel_lookup(fetch_channel_stats, payload.channelIdentifier, YOUTUBE_API_KEY)
 
     # 2. Analyze submitted title using Gemini server-side adapter
     # The Gemini client is synchronous. Run it on a worker thread so a slow

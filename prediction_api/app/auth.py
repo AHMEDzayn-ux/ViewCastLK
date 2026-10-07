@@ -5,6 +5,7 @@ from uuid import UUID
 from typing import Any
 
 import httpx
+from app.outbound import request as outbound_request
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -77,15 +78,15 @@ async def _request_supabase_user(access_token: str) -> httpx.Response:
     if not SUPABASE_URL or not SUPABASE_PUBLISHABLE_KEY:
         raise _auth_service_unavailable()
 
-    async with httpx.AsyncClient(timeout=5.0) as client:
-        return await client.get(
-            f"{SUPABASE_URL.rstrip('/')}/auth/v1/user",
-            headers={
-                "apikey": SUPABASE_PUBLISHABLE_KEY,
-                "Authorization": f"Bearer {access_token}",
-                "Accept": "application/json",
-            },
-        )
+    return await outbound_request("GET",
+        f"{SUPABASE_URL.rstrip('/')}/auth/v1/user",
+        headers={
+            "apikey": SUPABASE_PUBLISHABLE_KEY,
+            "Authorization": f"Bearer {access_token}",
+            "Accept": "application/json",
+        },
+        timeout=5.0, budget=12.0,
+    )
 
 
 async def validate_access_token(access_token: str) -> AuthenticatedUser:

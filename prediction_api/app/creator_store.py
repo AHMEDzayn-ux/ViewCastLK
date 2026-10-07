@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 
 import psycopg2
+from app.database_limits import connection_options
 from psycopg2.extras import RealDictCursor, execute_values
 
 from app.config import SUPABASE_AUTH_DB_URL
@@ -25,7 +26,7 @@ class CreatorStore:
         if not SUPABASE_AUTH_DB_URL:
             raise CreatorStoreUnavailable("Creator storage is not configured.")
         try:
-            return psycopg2.connect(SUPABASE_AUTH_DB_URL, connect_timeout=5)
+            return psycopg2.connect(SUPABASE_AUTH_DB_URL, connect_timeout=5, options=connection_options())
         except psycopg2.Error as exc:
             raise CreatorStoreUnavailable("Creator storage is unavailable.") from exc
 

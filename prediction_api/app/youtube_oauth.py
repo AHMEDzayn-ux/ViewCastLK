@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 import httpx
+from app.outbound import request as outbound_request
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from app import config
@@ -112,18 +113,18 @@ def build_authorization_url(state: str) -> str:
 async def exchange_authorization_code(code: str) -> GoogleTokenResponse:
     require_oauth_configuration()
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                GOOGLE_TOKEN_URL,
-                data={
-                    "client_id": config.GOOGLE_OAUTH_CLIENT_ID,
-                    "client_secret": config.GOOGLE_OAUTH_CLIENT_SECRET,
-                    "code": code,
-                    "grant_type": "authorization_code",
-                    "redirect_uri": config.GOOGLE_OAUTH_REDIRECT_URI,
-                },
-                headers={"Accept": "application/json"},
-            )
+        response = await outbound_request("POST",
+            GOOGLE_TOKEN_URL,
+            data={
+                "client_id": config.GOOGLE_OAUTH_CLIENT_ID,
+                "client_secret": config.GOOGLE_OAUTH_CLIENT_SECRET,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": config.GOOGLE_OAUTH_REDIRECT_URI,
+            },
+            headers={"Accept": "application/json"},
+            timeout=10.0, budget=20.0,
+        )
     except httpx.HTTPError as exc:
         raise _oauth_exchange_failed() from exc
 
@@ -164,17 +165,17 @@ async def refresh_access_token(refresh_token: str) -> GoogleRefreshResponse:
     """Exchange a server-held refresh credential without exposing it to clients."""
     require_oauth_configuration()
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                GOOGLE_TOKEN_URL,
-                data={
-                    "client_id": config.GOOGLE_OAUTH_CLIENT_ID,
-                    "client_secret": config.GOOGLE_OAUTH_CLIENT_SECRET,
-                    "refresh_token": refresh_token,
-                    "grant_type": "refresh_token",
-                },
-                headers={"Accept": "application/json"},
-            )
+        response = await outbound_request("POST",
+            GOOGLE_TOKEN_URL,
+            data={
+                "client_id": config.GOOGLE_OAUTH_CLIENT_ID,
+                "client_secret": config.GOOGLE_OAUTH_CLIENT_SECRET,
+                "refresh_token": refresh_token,
+                "grant_type": "refresh_token",
+            },
+            headers={"Accept": "application/json"},
+            timeout=10.0, budget=20.0,
+        )
     except httpx.HTTPError as exc:
         raise _refresh_failed() from exc
 
@@ -204,15 +205,15 @@ async def refresh_access_token(refresh_token: str) -> GoogleRefreshResponse:
 async def revoke_google_token(refresh_token: str) -> None:
     """Revoke a Google grant; an already-invalid token is treated idempotently."""
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                GOOGLE_REVOCATION_URL,
-                data={"token": refresh_token},
-                headers={
-                    "Accept": "application/json",
-                    "Content-Type": "application/x-www-form-urlencoded",
-                },
-            )
+        response = await outbound_request("POST",
+            GOOGLE_REVOCATION_URL,
+            data={"token": refresh_token},
+            headers={
+                "Accept": "application/json",
+                "Content-Type": "application/x-www-form-urlencoded",
+            },
+            timeout=10.0, budget=20.0,
+        )
     except httpx.HTTPError as exc:
         raise YouTubeOAuthException(
             status_code=502,
@@ -245,18 +246,18 @@ def _refresh_failed() -> YouTubeOAuthException:
 
 async def fetch_authenticated_channel(access_token: str) -> YouTubeChannelIdentity:
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
-                YOUTUBE_CHANNELS_URL,
-                params={
-                    "part": "id,snippet,contentDetails,statistics",
-                    "mine": "true",
-                },
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/json",
-                },
-            )
+        response = await outbound_request("GET",
+            YOUTUBE_CHANNELS_URL,
+            params={
+                "part": "id,snippet,contentDetails,statistics",
+                "mine": "true",
+            },
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/json",
+            },
+            timeout=10.0, budget=20.0,
+        )
     except httpx.HTTPError as exc:
         raise _channel_lookup_failed() from exc
 

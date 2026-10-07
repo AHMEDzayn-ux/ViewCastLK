@@ -7,6 +7,7 @@ from typing import Iterable, Iterator
 from zoneinfo import ZoneInfo
 
 import httpx
+from app.outbound import request as outbound_request
 
 from app import config
 
@@ -122,15 +123,15 @@ async def _google_get(
     url: str, *, access_token: str, params: dict[str, str | int]
 ) -> dict:
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(
-                url,
-                params=params,
-                headers={
-                    "Authorization": f"Bearer {access_token}",
-                    "Accept": "application/json",
-                },
-            )
+        response = await outbound_request("GET",
+            url,
+            params=params,
+            headers={
+                "Authorization": f"Bearer {access_token}",
+                "Accept": "application/json",
+            },
+            timeout=15.0, budget=30.0,
+        )
     except httpx.HTTPError as exc:
         raise CreatorSyncException("YouTube data is temporarily unavailable") from exc
     if response.status_code != 200:
@@ -149,7 +150,10 @@ async def fetch_upload_video_ids(
 ) -> list[str]:
     identifiers: list[str] = []
     page_token: str | None = None
-    while len(identifiers) < limit:
+    seen_tokens: set[str] = set()
+    for _ in range(min(20, (limit + 49) // 50 + 2)):
+        if len(identifiers) >= limit:
+            break
         params: dict[str, str | int] = {
             "part": "contentDetails",
             "playlistId": uploads_playlist_id,
@@ -165,8 +169,9 @@ async def fetch_upload_video_ids(
             if isinstance(video_id, str) and video_id:
                 identifiers.append(video_id)
         page_token = payload.get("nextPageToken")
-        if not page_token:
+        if not page_token or page_token in seen_tokens:
             break
+        seen_tokens.add(page_token)
     return identifiers[:limit]
 
 

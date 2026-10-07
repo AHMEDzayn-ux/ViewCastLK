@@ -1,5 +1,7 @@
+"""Local regression suites never contact hosted limiter/storage services."""
+from unittest.mock import AsyncMock
 import pytest
-
+from app import rate_limits
 from app.auth import AuthenticatedUser, optional_authenticated_user, require_authenticated_user
 from app.main import app
 
@@ -18,3 +20,7 @@ def authenticated_api():
     finally:
         app.dependency_overrides.pop(require_authenticated_user, None)
         app.dependency_overrides.pop(optional_authenticated_user, None)
+
+@pytest.fixture(autouse=True)
+def isolated_rate_limits(monkeypatch):
+    monkeypatch.setattr(rate_limits.limiter, "check", AsyncMock())

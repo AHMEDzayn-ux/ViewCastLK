@@ -1,8 +1,11 @@
 from datetime import datetime, timezone
-import re
 from typing import Optional, Tuple
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+import httplib2
+import socket
+import time
+from app.outbound import TRANSIENT_STATUSES, retry_delay
 
 from app.schemas import ChannelStatsResponse
 
@@ -16,81 +19,14 @@ class ChannelLookupException(Exception):
 
 
 def parse_channel_identifier(raw_input: str) -> Tuple[str, str]:
-    if not raw_input or not isinstance(raw_input, str):
+    from app.identifiers import parse_channel_identifier as validated_identifier
+    try:
+        return validated_identifier(raw_input)
+    except ValueError:
         raise ChannelLookupException(
             message="Enter a valid YouTube channel URL, handle, or channel ID.",
-            code="invalid_channel_identifier",
-            status_code=400,
-        )
-
-    cleaned = raw_input.strip()
-    if not cleaned:
-        raise ChannelLookupException(
-            message="Enter a valid YouTube channel URL, handle, or channel ID.",
-            code="invalid_channel_identifier",
-            status_code=400,
-        )
-
-    # Strip protocol
-    cleaned = re.sub(r"^https?://", "", cleaned, flags=re.IGNORECASE)
-    # Strip domain prefix (www.youtube.com, youtube.com, m.youtube.com, etc.)
-    cleaned = re.sub(r"^(www\.|m\.)?youtube\.com/", "", cleaned, flags=re.IGNORECASE)
-    cleaned = re.sub(r"^(www\.|m\.)?youtu\.be/", "", cleaned, flags=re.IGNORECASE)
-
-    # Strip query parameters and trailing slashes
-    cleaned = cleaned.split("?")[0].split("#")[0].strip("/")
-
-    if not cleaned:
-        raise ChannelLookupException(
-            message="Enter a valid YouTube channel URL, handle, or channel ID.",
-            code="invalid_channel_identifier",
-            status_code=400,
-        )
-
-    # Check for channel/UC...
-    if cleaned.lower().startswith("channel/"):
-        channel_id = cleaned[8:].strip("/")
-        if channel_id.startswith("UC") and len(channel_id) == 24:
-            return ("id", channel_id)
-        if channel_id.startswith("UC"):
-            return ("id", channel_id)
-        raise ChannelLookupException(
-            message="Enter a valid YouTube channel URL, handle, or channel ID.",
-            code="invalid_channel_identifier",
-            status_code=400,
-        )
-
-    # Check for c/handle or user/handle
-    if cleaned.lower().startswith("c/"):
-        cleaned = cleaned[2:].strip("/")
-    elif cleaned.lower().startswith("user/"):
-        cleaned = cleaned[5:].strip("/")
-
-    # If starts with @
-    if cleaned.startswith("@"):
-        handle_body = cleaned[1:]
-        if not handle_body or re.search(r"\s", handle_body):
-            raise ChannelLookupException(
-                message="The channel URL or identifier should not contain spaces.",
-                code="invalid_channel_identifier",
-                status_code=400,
-            )
-        return ("handle", cleaned)
-
-    # Check for bare UC ID (24 characters starting with UC)
-    if cleaned.startswith("UC") and len(cleaned) == 24:
-        return ("id", cleaned)
-
-    # Any whitespace inside is invalid
-    if re.search(r"\s", cleaned):
-        raise ChannelLookupException(
-            message="The channel URL or identifier should not contain spaces.",
-            code="invalid_channel_identifier",
-            status_code=400,
-        )
-
-    # Fallback: treat as handle name (prepend @ if not present)
-    return ("handle", f"@{cleaned}" if not cleaned.startswith("@") else cleaned)
+            code="invalid_channel_identifier", status_code=400,
+        ) from None
 
 
 def calculate_channel_age_days(published_at_iso: str) -> Optional[int]:
@@ -121,27 +57,31 @@ def fetch_channel_stats(
             status_code=500,
         )
 
+    owned_http = None
     try:
-        client = youtube_client or build("youtube", "v3", developerKey=api_key)
-
-        if lookup_type == "id":
-            response = (
-                client.channels()
-                .list(
-                    part="snippet,statistics,topicDetails",
-                    id=normalized_value,
-                )
-                .execute(num_retries=3)
-            )
+        if youtube_client is not None:
+            client = youtube_client
         else:
-            response = (
-                client.channels()
-                .list(
-                    part="snippet,statistics,topicDetails",
-                    forHandle=normalized_value,
-                )
-                .execute(num_retries=3)
-            )
+            owned_http = httplib2.Http(timeout=8)
+            client = build("youtube", "v3", developerKey=api_key,
+                           http=owned_http, cache_discovery=False, num_retries=0)
+
+        parameters = {"part": "snippet,statistics,topicDetails",
+                      "id" if lookup_type == "id" else "forHandle": normalized_value}
+        request = client.channels().list(**parameters)
+        for attempt in range(3):
+            try:
+                response = request.execute(num_retries=0)
+                break
+            except HttpError as exc:
+                if exc.resp.status not in TRANSIENT_STATUSES or attempt == 2:
+                    raise
+                delay = retry_delay(attempt, type("Response", (), {"headers": exc.resp})())
+                if delay is None: raise
+                time.sleep(delay)
+            except (socket.timeout, ConnectionError):
+                if attempt == 2: raise
+                time.sleep(retry_delay(attempt))
 
         items = response.get("items", [])
         if not items:
@@ -223,3 +163,6 @@ def fetch_channel_stats(
             code="channel_stats_unavailable",
             status_code=500,
         )
+    finally:
+        if owned_http is not None:
+            owned_http.close()

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type {
+  AccuracyEvaluation,
   AccuracyMetric,
   AccuracyResponse,
   AccuracyScope,
@@ -14,18 +15,31 @@ interface AccuracySummaryProps {
 }
 
 const SCOPE_LABELS: Record<AccuracyScope, string> = {
-  combined: "Combined model",
   day_7: "Day 7",
   day_14: "Day 14",
   day_21: "Day 21",
   day_30: "Day 30",
 };
 
+function evaluationKey(evaluation: AccuracyEvaluation): string {
+  return `${evaluation.scope}/${evaluation.segment}`;
+}
+
 function formatMetric(metric: AccuracyMetric, value: number | null): string {
-  if (value === null) return "Not published";
+  if (value === null) return "Not applicable";
   if (metric.unit === "percent") return `${value.toFixed(1)}%`;
-  if (metric.unit === "views") return value.toLocaleString("en-LK");
-  return value.toFixed(3);
+  if (metric.unit === "factor") return `${value.toFixed(1)}\u00d7`;
+  return value.toFixed(2);
+}
+
+function directionNote(metric: AccuracyMetric): string {
+  return metric.betterWhen === "higher"
+    ? "A higher value is better."
+    : "A lower value is better.";
+}
+
+function formatDate(value: string): string {
+  return new Date(value).toLocaleDateString("en-LK", { dateStyle: "long" });
 }
 
 function UnavailableAccuracySummary({
@@ -53,37 +67,34 @@ function AvailableAccuracySummary({
 }: {
   accuracy: AvailableAccuracyResponse;
 }) {
-  const [selectedScope, setSelectedScope] =
-    useState<AccuracyScope>("combined");
+  const [selectedKey, setSelectedKey] = useState<string>(
+    evaluationKey(accuracy.evaluations[0]),
+  );
   const selectedEvaluation =
     accuracy.evaluations.find(
-      (evaluation) => evaluation.scope === selectedScope,
+      (evaluation) => evaluationKey(evaluation) === selectedKey,
     ) ?? accuracy.evaluations[0];
-  const primaryMetric = selectedEvaluation.metrics.find(
-    (metric) => metric.key === "mape",
-  );
-  const supportingMetrics = selectedEvaluation.metrics.filter(
-    (metric) => metric.key !== "mape",
-  );
+  const [primaryMetric, ...supportingMetrics] = selectedEvaluation.metrics;
 
   return (
     <div className="accuracy-summary">
       <div className="accuracy-scope-control">
         <div>
           <label htmlFor="accuracy-scope">Accuracy view</label>
-          <p>Compare the combined model or one forecast horizon.</p>
+          <p>
+            Accuracy depends most on whether we already track the channel, so
+            the two are shown separately.
+          </p>
         </div>
         <select
           id="accuracy-scope"
           className="field-control"
-          value={selectedScope}
-          onChange={(event) =>
-            setSelectedScope(event.target.value as AccuracyScope)
-          }
+          value={evaluationKey(selectedEvaluation)}
+          onChange={(event) => setSelectedKey(event.target.value)}
         >
           {accuracy.evaluations.map((evaluation) => (
-            <option value={evaluation.scope} key={evaluation.scope}>
-              {SCOPE_LABELS[evaluation.scope]}
+            <option value={evaluationKey(evaluation)} key={evaluationKey(evaluation)}>
+              {SCOPE_LABELS[evaluation.scope]}: {evaluation.segmentLabel}
             </option>
           ))}
         </select>
@@ -93,22 +104,28 @@ function AvailableAccuracySummary({
         <section className="primary-metric" aria-labelledby="primary-metric-title">
           <div>
             <p className="section-kicker">
-              {SCOPE_LABELS[selectedEvaluation.scope]} accuracy
+              {SCOPE_LABELS[selectedEvaluation.scope]} accuracy,{" "}
+              {selectedEvaluation.segmentLabel.toLowerCase()}
             </p>
             <h2 id="primary-metric-title">{primaryMetric.label}</h2>
             <p>{primaryMetric.description}</p>
+            <p>
+              Measured on {selectedEvaluation.videos.toLocaleString("en-LK")}{" "}
+              videos published {formatDate(accuracy.periodStart)} to{" "}
+              {formatDate(accuracy.periodEnd)}.
+            </p>
           </div>
           <dl className="metric-comparison">
             <div>
-              <dt>{accuracy.modelName}</dt>
+              <dt>ViewCastLK forecast</dt>
               <dd>{formatMetric(primaryMetric, primaryMetric.modelValue)}</dd>
             </div>
             <div>
-              <dt>{accuracy.baselineName}</dt>
+              <dt>{selectedEvaluation.baselineName}</dt>
               <dd>{formatMetric(primaryMetric, primaryMetric.baselineValue)}</dd>
             </div>
           </dl>
-          <p className="metric-direction">For MAPE, a lower value is better.</p>
+          <p className="metric-direction">{directionNote(primaryMetric)}</p>
         </section>
       )}
 
@@ -129,15 +146,17 @@ function AvailableAccuracySummary({
               <tr>
                 <th scope="col">Metric</th>
                 <th scope="col">Meaning</th>
-                <th scope="col">Model</th>
-                <th scope="col">Baseline</th>
+                <th scope="col">ViewCastLK forecast</th>
+                <th scope="col">{selectedEvaluation.baselineName}</th>
               </tr>
             </thead>
             <tbody>
               {supportingMetrics.map((metric) => (
                 <tr key={metric.key}>
                   <th scope="row">{metric.label}</th>
-                  <td>{metric.description}</td>
+                  <td>
+                    {metric.description} {directionNote(metric)}
+                  </td>
                   <td>{formatMetric(metric, metric.modelValue)}</td>
                   <td>{formatMetric(metric, metric.baselineValue)}</td>
                 </tr>
@@ -151,24 +170,25 @@ function AvailableAccuracySummary({
         <h2 id="accuracy-notes-title">How to read this page</h2>
         <ul>
           <li>
-            The baseline is a simple benchmark. Comparing against it shows
-            whether the forecasting model adds useful predictive value.
+            The comparison is the simple guess a creator could make without
+            ViewCastLK. Beating it shows the forecast adds something.
           </li>
-          <li>
-            Evaluation results should come from held-out videos that were not
-            used to fit the model.
-          </li>
+          <li>{accuracy.method}</li>
+          {accuracy.notYetMeasured.map((pending) => (
+            <li key={pending.scope}>
+              {SCOPE_LABELS[pending.scope]} accuracy can be measured from{" "}
+              {formatDate(pending.measurableFrom)}, once those videos are old
+              enough.
+            </li>
+          ))}
           <li>
             A strong average result does not guarantee an accurate forecast for
             every individual video.
           </li>
         </ul>
         <p>
-          Evaluation last updated{" "}
-          {new Date(accuracy.evaluatedAt).toLocaleDateString("en-LK", {
-            dateStyle: "long",
-          })}
-          .
+          Evaluation last updated {formatDate(accuracy.evaluatedAt)}. Model:{" "}
+          {accuracy.modelName}.
         </p>
       </section>
     </div>

@@ -1,0 +1,95 @@
+{
+  "modelName": "viewcastlk_reconciled_latest_clean_20261001_v10",
+  "evaluatedAt": "2026-10-07T08:53:38Z",
+  "periodStart": "2026-09-12",
+  "periodEnd": "2026-09-24",
+  "method": "The same model setup was trained only on videos published up to 12 September 2026, then scored on the 17,328 videos published from 12 to 24 September, which it never saw. Each forecast is compared with the views the video actually had seven days after publishing. The live model was then retrained on all data up to 1 October.",
+  "evaluations": [
+    {
+      "scope": "day_7",
+      "segment": "tracked_channel",
+      "segmentLabel": "Channels ViewCastLK already tracks",
+      "videos": 17136,
+      "baselineName": "The channel's usual views",
+      "metrics": [
+        {
+          "key": "within_2x",
+          "label": "Forecasts within a factor of two",
+          "description": "Share of videos whose actual views were between half and double the forecast.",
+          "unit": "percent",
+          "betterWhen": "higher",
+          "modelValue": 45.0,
+          "baselineValue": 42.5
+        },
+        {
+          "key": "typical_factor",
+          "label": "Typical error",
+          "description": "How far off a typical forecast is, as a multiple: 2.0 means half or double the actual views.",
+          "unit": "factor",
+          "betterWhen": "lower",
+          "modelValue": 2.2,
+          "baselineValue": 2.37
+        },
+        {
+          "key": "rank_correlation",
+          "label": "Ranking accuracy",
+          "description": "How well the forecasts order videos from fewest to most views, from 0 to 1.",
+          "unit": "score",
+          "betterWhen": "higher",
+          "modelValue": 0.835,
+          "baselineValue": 0.733
+        }
+      ]
+    },
+    {
+      "scope": "day_7",
+      "segment": "new_channel",
+      "segmentLabel": "Channels new to ViewCastLK",
+      "videos": 192,
+      "baselineName": "Typical views across all channels",
+      "metrics": [
+        {
+          "key": "within_2x",
+          "label": "Forecasts within a factor of two",
+          "description": "Share of videos whose actual views were between half and double the forecast.",
+          "unit": "percent",
+          "betterWhen": "higher",
+          "modelValue": 21.9,
+          "baselineValue": 26.6
+        },
+        {
+          "key": "typical_factor",
+          "label": "Typical error",
+          "description": "How far off a typical forecast is, as a multiple: 2.0 means half or double the actual views.",
+          "unit": "factor",
+          "betterWhen": "lower",
+          "modelValue": 3.98,
+          "baselineValue": 8.47
+        },
+        {
+          "key": "rank_correlation",
+          "label": "Ranking accuracy",
+          "description": "How well the forecasts order videos from fewest to most views, from 0 to 1.",
+          "unit": "score",
+          "betterWhen": "higher",
+          "modelValue": 0.741,
+          "baselineValue": null
+        }
+      ]
+    }
+  ],
+  "notYetMeasured": [
+    {
+      "scope": "day_14",
+      "measurableFrom": "2026-10-15"
+    },
+    {
+      "scope": "day_21",
+      "measurableFrom": "2026-10-22"
+    },
+    {
+      "scope": "day_30",
+      "measurableFrom": "2026-10-31"
+    }
+  ]
+}

@@ -13,6 +13,7 @@ from app.auth import (
     optional_authenticated_user,
     require_authenticated_user,
 )
+from app.accuracy import load_published_accuracy
 from app.artifact import (
     ACTIVE_ARTIFACT_VERSION,
     BREAKOUT_ARTIFACT_DIR,
@@ -26,6 +27,7 @@ from app.feature_builder import build_candidate_feature_frame
 from app.model_registry import ModelRegistry, ViralScenarioRegistry
 from app.schemas import (
     AccuracyResponse,
+    AvailableAccuracyResponse,
     BreakoutForecast,
     ChannelLookupRequest,
     ChannelStatsResponse,
@@ -161,11 +163,15 @@ async def health_check():
     return HealthResponse(status="ok", service="viewcastlk-prediction-api")
 
 
-@app.get("/accuracy", response_model=AccuracyResponse)
+@app.get("/accuracy", response_model=AvailableAccuracyResponse | AccuracyResponse)
 async def accuracy_status():
     manifest = model_registry.get_manifest()
+    model_name = manifest.get("artifact_version", ACTIVE_ARTIFACT_VERSION)
+    published = load_published_accuracy(model_name)
+    if published is not None:
+        return published
     return AccuracyResponse(
-        modelName=manifest.get("artifact_version", ACTIVE_ARTIFACT_VERSION),
+        modelName=model_name,
         message=(
             "Evaluation results are not available yet. No approved held-out "
             "MAPE, baseline comparison, or accuracy values are published."

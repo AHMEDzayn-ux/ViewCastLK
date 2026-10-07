@@ -92,6 +92,8 @@ def test_artifact_package_checksums_file_is_complete_and_valid():
         for path in DEFAULT_ARTIFACT_DIR.rglob("*")
         if path.is_file()
         and path.name != "SHA256SUMS.txt"
+        # Written by the API after evaluation, not part of the trained package.
+        and path.name != "published_accuracy.json"
         and "__pycache__" not in path.parts
         and path.suffix != ".pyc"
     }
@@ -171,6 +173,8 @@ def test_breakout_packaged_checksums_are_complete_and_valid(artifact_dir):
         for path in artifact_dir.rglob("*")
         if path.is_file()
         and path.name != "SHA256SUMS.txt"
+        # Written by the API after evaluation, not part of the trained package.
+        and path.name != "published_accuracy.json"
         and "__pycache__" not in path.parts
         and path.suffix != ".pyc"
     }

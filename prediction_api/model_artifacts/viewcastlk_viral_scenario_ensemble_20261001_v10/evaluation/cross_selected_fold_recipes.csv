@@ -1,0 +1,6 @@
+held_out_fold,training_rows,validation_rows,recipe,blend_method,component_count,calibration_method,weight_xgb_current,weight_xgb_shallow,weight_xgb_balanced,weight_lgb_standard,weight_lgb_balanced
+1,34064,8516,logit[xgb_current:0.90+xgb_balanced:0.10],logit,2,identity,0.9,0.0,0.1,0.0,0.0
+2,34064,8516,logit[xgb_current:0.90+xgb_balanced:0.10],logit,2,identity,0.9,0.0,0.1,0.0,0.0
+3,34064,8516,arithmetic[xgb_current:0.40+lgb_standard:0.60],arithmetic,2,platt,0.4,0.0,0.0,0.6,0.0
+4,34064,8516,arithmetic[xgb_balanced:0.10+lgb_standard:0.90],arithmetic,2,identity,0.0,0.0,0.1,0.9,0.0
+5,34064,8516,logit[xgb_balanced:0.10+lgb_standard:0.90],logit,2,identity,0.0,0.0,0.1,0.9,0.0

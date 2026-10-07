@@ -1,0 +1,297 @@
+{
+  "artifact_version": "checkpoint32_breakout_ensemble_20261001",
+  "status": "classifier_ensemble_promoted",
+  "selection_data": "nested channel-grouped development OOF only; reserved channels used once for release",
+  "selection_metric": "cross-calibrated log loss with Brier tie-break",
+  "candidate_definitions": [
+    {
+      "name": "xgb_current",
+      "algorithm": "xgboost",
+      "balanced": false,
+      "overrides": {}
+    },
+    {
+      "name": "xgb_shallow",
+      "algorithm": "xgboost",
+      "balanced": false,
+      "overrides": {
+        "max_depth": 3,
+        "min_child_weight": 20,
+        "reg_lambda": 3.0
+      }
+    },
+    {
+      "name": "xgb_balanced",
+      "algorithm": "xgboost",
+      "balanced": true,
+      "overrides": {}
+    },
+    {
+      "name": "lgb_standard",
+      "algorithm": "lightgbm",
+      "balanced": false,
+      "overrides": {}
+    },
+    {
+      "name": "lgb_balanced",
+      "algorithm": "lightgbm",
+      "balanced": true,
+      "overrides": {}
+    }
+  ],
+  "blend_recipe_count": 207,
+  "calibration_methods": [
+    "identity",
+    "platt",
+    "beta",
+    "isotonic"
+  ],
+  "selected_recipe": {
+    "recipe": "logit[xgb_balanced:0.10+lgb_standard:0.90]",
+    "blend_method": "logit",
+    "component_count": 2,
+    "calibration_method": "identity",
+    "weight_xgb_current": 0.0,
+    "weight_xgb_shallow": 0.0,
+    "weight_xgb_balanced": 0.1,
+    "weight_lgb_standard": 0.9,
+    "weight_lgb_balanced": 0.0
+  },
+  "classifier_path": "models/breakout_classifier_ensemble.joblib",
+  "classifier_sha256": "89ce958ab6dbaa3f3918ff7aeb609955af8e4d5cca4d24684477c1ad5fd34c1b",
+  "model_path": "models/viral_scenario_trajectory.joblib",
+  "model_sha256": "9bb8616795379b482eb0ed9fa7612cafc9c6f26dead8cc1bd1d6069234ec93ed",
+  "scenario_model_path": "models/viral_scenario_trajectory.joblib",
+  "scenario_model_sha256": "9bb8616795379b482eb0ed9fa7612cafc9c6f26dead8cc1bd1d6069234ec93ed",
+  "development_rows": 42580,
+  "development_breakout_rows": 3553,
+  "reserved_test_rows": 10521,
+  "reserved_breakout_rows": 1259,
+  "split_seed": 745,
+  "horizons": [
+    7,
+    14,
+    21,
+    30
+  ],
+  "output_contract": {
+    "primary": "normal_day_{horizon}_views",
+    "conditional_upside": "viral_upside_day_{horizon}_views",
+    "condition_probability": "breakout_probability",
+    "wording": "Normally expected around N views. There is a P% breakout chance; if that happens, around V views.",
+    "combined_weighted_prediction_exposed": false
+  },
+  "breakout_definition": {
+    "horizon_days": 7,
+    "minimum_views": 10000.0,
+    "baseline_multiplier": 5.0,
+    "minimum_history_count": 5,
+    "baseline": "prior day-7 channel median when at least five observations exist; otherwise point-in-time channel average"
+  },
+  "classifier": {
+    "recipe": "logit[xgb_balanced:0.10+lgb_standard:0.90]",
+    "calibration_method": "identity",
+    "training_rows": 42580,
+    "training_channels": 1655
+  },
+  "classifier_reserved_test": {
+    "rows": 10521,
+    "breakout_rows": 1259,
+    "breakout_rate_pct": 11.966543104267654,
+    "roc_auc": 0.8282310358294389,
+    "average_precision": 0.3297403324736886,
+    "brier_score": 0.09453125324577982,
+    "log_loss": 0.30310435952299564
+  },
+  "normal_trajectory_source": {
+    "artifact_version": "checkpoint30_reconciled_latest_clean_20261001",
+    "model_sha256": "80cf198567df7d844957bf6c6d2e9596e9ccd1d083ff755515f464c1907ea2e3"
+  },
+  "viral_training_rows": 3553,
+  "viral_training_channels": 280,
+  "common_split": {
+    "type": "channel_grouped_shared_across_all_horizons",
+    "selection_seed": 745,
+    "test_channels": 453,
+    "source_test_row_fractions": {
+      "day_7": 0.2004547658071516,
+      "day_7_to_14": 0.20011998852283694,
+      "day_14_to_21": 0.2005057750040669,
+      "day_21_to_30": 0.19983945707301054
+    }
+  },
+  "feature_contract": {
+    "target_encoded_source": "category_name",
+    "raw_numeric": [
+      "duration_seconds",
+      "ch_subs_at_publish",
+      "ch_avg_views_per_video_at_publish",
+      "ch_videos_at_publish",
+      "channel_age_days_at_publish",
+      "publish_hour_sin",
+      "publish_hour_cos",
+      "publish_dow_sin",
+      "publish_dow_cos",
+      "title_length",
+      "title_word_count",
+      "title_upper_ratio",
+      "tag_count",
+      "description_length",
+      "prior_channel_video_count",
+      "uploads_previous_7d",
+      "uploads_previous_30d",
+      "days_since_previous_upload",
+      "prior_d7_view_count",
+      "prior_d7_median_views",
+      "prior_d7_mean_log_views",
+      "prior_d7_std_log_views",
+      "prior_d7_last_views",
+      "prior_d7_recent5_median_views",
+      "prior_same_category_d7_count",
+      "prior_same_category_d7_median_views",
+      "prior_d30_view_count",
+      "prior_d30_median_views",
+      "prior_d30_mean_log_views"
+    ],
+    "engineered_numeric": [
+      "ch_videos_per_day"
+    ],
+    "boolean": [
+      "is_short",
+      "publish_is_weekend",
+      "title_has_number",
+      "title_has_question",
+      "title_has_exclaim",
+      "topic_entertainment",
+      "topic_fashion",
+      "topic_food",
+      "topic_gaming",
+      "topic_health",
+      "topic_hobby",
+      "topic_humour",
+      "topic_knowledge",
+      "topic_lifestyle",
+      "topic_music",
+      "topic_pet",
+      "topic_politics",
+      "topic_religion",
+      "topic_society",
+      "topic_sports",
+      "topic_technology",
+      "topic_tourism",
+      "topic_vehicle",
+      "topic_missing"
+    ],
+    "one_hot_categorical": [
+      "default_language",
+      "publish_time_bucket",
+      "subscriber_tier",
+      "title_script"
+    ],
+    "llm_scores_available_for_later": [
+      "title_urgency",
+      "title_emotional_appeal",
+      "title_seriousness",
+      "title_curiosity_gap"
+    ],
+    "llm_scores_enabled": false,
+    "enhanced_features_enabled": true,
+    "enhanced_source_numeric": [
+      "prior_d7_recent_log_trend",
+      "prior_same_format_d7_count",
+      "prior_same_format_d7_median_views"
+    ],
+    "enhanced_engineered_numeric": [
+      "prior_d7_recent_to_all_log_ratio",
+      "prior_d7_last_to_all_log_ratio",
+      "prior_same_category_to_channel_log_ratio",
+      "prior_same_format_to_channel_log_ratio",
+      "prior_d7_views_per_subscriber_log_ratio",
+      "channel_avg_views_per_subscriber_log_ratio",
+      "upload_rate_7d_to_30d_log_ratio"
+    ],
+    "enhanced_boolean": [
+      "has_prior_d7_history",
+      "has_prior_d30_history",
+      "has_prior_same_category_d7_history",
+      "has_prior_same_format_d7_history",
+      "channel_average_missing"
+    ],
+    "rare_category_compaction": {
+      "enabled": true,
+      "minimum_count": 100,
+      "columns": [
+        "default_language",
+        "title_script"
+      ],
+      "replacement": "__OTHER__"
+    },
+    "dropped_features": [
+      "publish_dow_sin",
+      "publish_dow_cos",
+      "title_has_question",
+      "topic_technology"
+    ],
+    "explicitly_excluded": [
+      "definition",
+      "caption",
+      "made_for_kids",
+      "publish_hour_slt",
+      "publish_dow_slt",
+      "ch_views_at_publish",
+      "video_id",
+      "channel_id",
+      "published_at"
+    ]
+  },
+  "source_training_table_sha256": "65d7c0f20214ea8324a14f012ef4fd1113a0dd87270368bcd9b1d6f3193e5ab9",
+  "limitations": [
+    "The breakout probability is pre-publication and cannot know future audience reactions.",
+    "The current structured title features do not encode the full title meaning or thumbnail content.",
+    "The viral-upside value is conditional on breakout, not a second equally likely point prediction."
+  ],
+  "comparison": {
+    "development_baseline": {
+      "method": "baseline_xgb_current_nested_platt",
+      "rows": 42580,
+      "breakout_rows": 3553,
+      "breakout_rate_pct": 8.34429309534993,
+      "roc_auc": 0.8032946202471372,
+      "average_precision": 0.318551055369561,
+      "brier_score": 0.06605699189118702,
+      "log_loss": 0.234488904572583
+    },
+    "development_ensemble": {
+      "method": "ensemble_nested_cross_selected",
+      "rows": 42580,
+      "breakout_rows": 3553,
+      "breakout_rate_pct": 8.34429309534993,
+      "roc_auc": 0.8032000275545885,
+      "average_precision": 0.31924281954374367,
+      "brier_score": 0.06589773406749383,
+      "log_loss": 0.2341745841713405
+    },
+    "reserved_baseline": {
+      "method": "existing_single_xgb_platt",
+      "rows": 10521,
+      "breakout_rows": 1259,
+      "breakout_rate_pct": 11.966543104267654,
+      "roc_auc": 0.8247572348449831,
+      "average_precision": 0.3310533015949459,
+      "brier_score": 0.09464733354576725,
+      "log_loss": 0.3049849140085478
+    },
+    "reserved_ensemble": {
+      "method": "selected_classifier_ensemble",
+      "rows": 10521,
+      "breakout_rows": 1259,
+      "breakout_rate_pct": 11.966543104267654,
+      "roc_auc": 0.8282310358294389,
+      "average_precision": 0.3297403324736886,
+      "brier_score": 0.09453125324577982,
+      "log_loss": 0.30310435952299564
+    },
+    "release_gate_passed": true
+  },
+  "release_gate": "development and reserved log loss plus Brier must not regress; reserved AUC and AP tolerance is 0.002"
+}

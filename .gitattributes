@@ -2,3 +2,5 @@
 prediction_api/model_artifacts/viewcastlk_monotonic_trajectory_experimental_v1/** -text -whitespace
 prediction_api/model_artifacts/viewcastlk_reconciled_latest_clean_20260918_v9/** -text -whitespace
 prediction_api/model_artifacts/viewcastlk_viral_scenario_ensemble_20260915_v8/** -text -whitespace
+prediction_api/model_artifacts/viewcastlk_reconciled_latest_clean_20261001_v10/** -text -whitespace
+prediction_api/model_artifacts/viewcastlk_viral_scenario_ensemble_20261001_v10/** -text -whitespace

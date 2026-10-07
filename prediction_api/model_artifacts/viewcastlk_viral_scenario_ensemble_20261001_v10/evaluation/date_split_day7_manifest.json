@@ -1,0 +1,21 @@
+{
+  "method": "newest matured Day-7 labels by publication time",
+  "test_fraction": 0.2,
+  "training_rows": 69310,
+  "test_rows": 17328,
+  "training_end_utc": "2026-09-12T02:47:36+00:00",
+  "test_start_utc": "2026-09-12T02:47:44+00:00",
+  "test_end_utc": "2026-09-24T10:27:36+00:00",
+  "selected_n_estimators": 131,
+  "feature_options": {
+    "include_enhanced_features": true,
+    "collapse_rare_categories": true,
+    "rare_category_min_count": 100,
+    "drop_features": [
+      "publish_dow_sin",
+      "publish_dow_cos",
+      "title_has_question",
+      "topic_technology"
+    ]
+  }
+}

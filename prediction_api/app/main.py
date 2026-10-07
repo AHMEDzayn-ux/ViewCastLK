@@ -13,7 +13,14 @@ from app.auth import (
     optional_authenticated_user,
     require_authenticated_user,
 )
-from app.artifact import ACTIVE_ARTIFACT_VERSION, V8_ARTIFACT_DIR
+from app.artifact import (
+    ACTIVE_ARTIFACT_VERSION,
+    BREAKOUT_ARTIFACT_DIR,
+    V8_ARTIFACT_DIR,
+    V9_ARTIFACT_DIR,
+    V9_BREAKOUT_MODEL_VERSION,
+    V10_BREAKOUT_MODEL_VERSION,
+)
 from app.channel_history import history_features_for_channel
 from app.feature_builder import build_candidate_feature_frame
 from app.model_registry import ModelRegistry, ViralScenarioRegistry
@@ -75,7 +82,9 @@ app.add_middleware(
 
 # Global model registry singleton
 model_registry = ModelRegistry()
+v9_model_registry = ModelRegistry(V9_ARTIFACT_DIR)
 v8_model_registry = ViralScenarioRegistry(V8_ARTIFACT_DIR)
+breakout_model_registry = ViralScenarioRegistry(BREAKOUT_ARTIFACT_DIR)
 creator_store = CreatorStore()
 public_roster_store = PublicRosterStore()
 
@@ -376,44 +385,40 @@ async def create_forecast(
             content={"message": "Failed to construct candidate model feature frame.", "code": "feature_building_error"},
         )
 
-    # 4. Perform one inference using released v9 by default or experimental v8
-    # when the caller explicitly asks for comparison testing.
+    # 4. Select a primary normal trajectory and its paired breakout model.
+    # V10 is the released default; v8 and v9 remain comparison modes.
     horizons = (7, 14, 21, 30)
-    selected_registry = v8_model_registry if payload.modelEngine == "v8" else model_registry
-    breakout: BreakoutForecast | None = None
+    engine = payload.modelEngine or "v10"
+    if engine == "v8":
+        selected_registry = v8_model_registry
+        selected_breakout_registry = v8_model_registry
+        model_version = v8_model_registry.get_manifest().get(
+            "artifact_version", "v8"
+        )
+    elif engine == "v9":
+        selected_registry = v9_model_registry
+        selected_breakout_registry = v8_model_registry
+        model_version = V9_BREAKOUT_MODEL_VERSION
+    else:
+        selected_registry = model_registry
+        selected_breakout_registry = breakout_model_registry
+        model_version = V10_BREAKOUT_MODEL_VERSION
+
+    breakout_probability: float
+    raw_conditional_upside: list[float]
     try:
-        if payload.modelEngine == "v8":
-            scenario = v8_model_registry.predict_scenario(df)
+        scenario = selected_breakout_registry.predict_scenario(df)
+        if engine == "v8":
             trajectory = scenario[
                 [f"normal_day_{horizon}_views" for horizon in horizons]
             ].to_numpy(dtype=float)
-            breakout = BreakoutForecast(
-                probability=float(scenario.iloc[0]["breakout_probability"]),
-                conditionalUpside=[
-                    ForecastEstimate(
-                        horizonDays=horizon,
-                        cumulativeViews=max(
-                            0,
-                            int(
-                                round(
-                                    float(
-                                        scenario.iloc[0][
-                                            f"viral_upside_day_{horizon}_views"
-                                        ]
-                                    )
-                                )
-                            ),
-                        ),
-                    )
-                    for horizon in horizons
-                ],
-                definition=(
-                    "A breakout is at least 10,000 Day-7 views and five times "
-                    "the channel's prior Day-7 baseline when enough history exists."
-                ),
-            )
         else:
-            trajectory = model_registry.predict_trajectory(df)
+            trajectory = selected_registry.predict_trajectory(df)
+        breakout_probability = float(scenario.iloc[0]["breakout_probability"])
+        raw_conditional_upside = [
+            float(scenario.iloc[0][f"viral_upside_day_{horizon}_views"])
+            for horizon in horizons
+        ]
     except Exception:
         return JSONResponse(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -445,7 +450,7 @@ async def create_forecast(
 
     model_metadata = ModelMetadata(
         artifactVersion=artifact_ver,
-        modelVersion=artifact_ver,
+        modelVersion=model_version,
         generatedAt=datetime.now(timezone.utc).isoformat(),
         dataSource="prediction_api",
         status="experimental",
@@ -480,6 +485,33 @@ async def create_forecast(
         ForecastEstimate(horizonDays=horizon, cumulativeViews=displayed_predictions[horizon])
         for horizon in horizons
     ]
+
+    # Personalization may raise the displayed primary trajectory. Keep the
+    # conditional path strictly above it and nondecreasing after rounding.
+    conditional_upside: list[ForecastEstimate] = []
+    previous_upside = -1
+    for horizon, raw_upside in zip(horizons, raw_conditional_upside):
+        normalized_upside = max(
+            int(round(raw_upside)),
+            displayed_predictions[horizon] + 1,
+            previous_upside + 1,
+        )
+        conditional_upside.append(
+            ForecastEstimate(
+                horizonDays=horizon,
+                cumulativeViews=normalized_upside,
+            )
+        )
+        previous_upside = normalized_upside
+
+    breakout = BreakoutForecast(
+        probability=breakout_probability,
+        conditionalUpside=conditional_upside,
+        definition=(
+            "A breakout is at least 10,000 Day-7 views and five times "
+            "the channel's prior Day-7 baseline when enough history exists."
+        ),
+    )
 
     unavailable_recs = [
         UnavailableRecommendation(

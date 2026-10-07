@@ -72,39 +72,37 @@ the next model; invalid credentials and invalid requests stop immediately.
 ## Active model artifact
 
 The served model is named once, in `app/artifact.py`. It is currently
-`model_artifacts/viewcastlk_reconciled_latest_clean_20260918_v9`: four
-horizon-specific regressors trained on 36,484 videos with complete day-7, 14,
-21 and 30 labels, reconciled so the trajectory never falls. It reads the
+`model_artifacts/viewcastlk_reconciled_latest_clean_20261001_v10`: four
+horizon-specific regressors trained from the 1 October 2026 dataset and
+reconciled so the trajectory never falls. It reads the
 channel's own recent record, rebuilt from the warehouse at request time by
 `app/channel_history.py`, and the title and planned slot from the form, via
 `app/pre_publication_features.py`. It passed its release gate on reserved
 channels; see the artifact's `evaluation/` directory.
 
-The release does not ship its exact training-ID list, which personalisation
-needs in order to keep training videos out of a creator's calibration.
-`training_video_ids.txt` is therefore a superset, every video in the source
-training table, and `training_video_ids.json` records how it was derived.
+The release ships the exact 70,015-video union used by its fitted components in
+`training_video_ids.txt`. Personalisation uses it to keep training videos out
+of a creator's calibration.
 
 `viewcastlk_monotonic_trajectory_experimental_v1` is kept beside it as the
 rollback: change `ACTIVE_ARTIFACT_VERSION` and redeploy. A creator's stored
 adjustments are tied to the model that produced them, so after any swap they
 apply again only once that creator's history has been re-synced.
 
-### V8 breakout comparison mode
+### Breakout scoring and comparison modes
 
-The API also ships `viewcastlk_viral_scenario_ensemble_20260915_v8`. The
-released v9 trajectory remains the default. Send `"modelEngine": "v8"` in a
-forecast request to compare against v8. That response uses v8 for its normal
-Day 7/14/21/30 trajectory and adds:
+The released v10 trajectory is paired with
+`viewcastlk_viral_scenario_ensemble_20261001_v10`, trained from the same source
+dataset. A v10 response contains:
 
 - `breakout.probability`, a calibrated pre-publication breakout probability;
 - `breakout.conditionalUpside`, the Day 7/14/21/30 view path conditional on a
   breakout occurring; and
-- `breakout.definition`, the channel-relative threshold used by v8.
+- `breakout.definition`, the channel-relative threshold used during training.
 
-The conditional upside is not a second equally likely point prediction. Omit
-`modelEngine`, or send `"v9"`, to use the released v9 model without breakout
-fields.
+The conditional upside is not a second equally likely point prediction. Send
+`"modelEngine": "v8"` or `"v9"` only for historical comparison; omit it or send
+`"v10"` for the released model.
 
 ## Setup & Running Locally
 

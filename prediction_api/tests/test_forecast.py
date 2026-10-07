@@ -4,7 +4,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-from app.artifact import ACTIVE_ARTIFACT_VERSION, V8_ARTIFACT_VERSION
+from app.artifact import (
+    ACTIVE_ARTIFACT_VERSION,
+    V8_ARTIFACT_VERSION,
+    V9_BREAKOUT_MODEL_VERSION,
+    V10_BREAKOUT_MODEL_VERSION,
+)
 from app.main import app
 import app.main as main_module
 from app.schemas import ChannelStatsResponse
@@ -73,7 +78,7 @@ def test_6_model_metadata_identifies_monotonic_trajectory(mock_fetch):
     data = response.json()
     model = data.get("model", {})
     assert model.get("artifactVersion") == ACTIVE_ARTIFACT_VERSION
-    assert model.get("modelVersion") == ACTIVE_ARTIFACT_VERSION
+    assert model.get("modelVersion") == V10_BREAKOUT_MODEL_VERSION
     assert model.get("dataSource") == "prediction_api"
     assert model.get("status") == "experimental"
 
@@ -208,6 +213,8 @@ def test_personalization_is_scoped_to_authenticated_user_and_current_model(mock_
     assert body["estimates"][0]["cumulativeViews"] == round(
         body["personalization"]["sharedEstimates"][0]["cumulativeViews"] * 1.25
     )
+    for normal, upside in zip(body["estimates"], body["breakout"]["conditionalUpside"]):
+        assert upside["cumulativeViews"] > normal["cumulativeViews"]
     get_adjustments.assert_awaited_once_with(
         user_id="test-authenticated-user",
         model_version=ACTIVE_ARTIFACT_VERSION,
@@ -337,6 +344,27 @@ def test_v8_engine_returns_breakout_probability_and_conditional_upside(mock_fetc
         21,
         30,
     ]
+    for normal, upside in zip(body["estimates"], body["breakout"]["conditionalUpside"]):
+        assert upside["cumulativeViews"] > normal["cumulativeViews"]
+
+
+@patch("app.main.fetch_channel_stats", return_value=MOCK_CHANNEL_STATS)
+@pytest.mark.parametrize(
+    ("engine", "expected_version"),
+    [("v9", V9_BREAKOUT_MODEL_VERSION), ("v10", V10_BREAKOUT_MODEL_VERSION)],
+)
+def test_newer_engines_pair_normal_forecast_with_breakout_scoring(
+    mock_fetch, engine, expected_version
+):
+    response = client.post(
+        "/forecast",
+        json={**VALID_FORECAST_PAYLOAD, "modelEngine": engine},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["model"]["modelVersion"] == expected_version
+    assert 0 <= body["breakout"]["probability"] <= 1
     for normal, upside in zip(body["estimates"], body["breakout"]["conditionalUpside"]):
         assert upside["cumulativeViews"] > normal["cumulativeViews"]
 

@@ -1,0 +1,7 @@
+population,method,rows,within_factor_two_pct,typical_error_multiple,spearman_ranking
+all,v10_day7_model,17328,44.69644506001847,2.209832360421874,0.8358483811798992
+all,channel_prior_day7_median,17328,42.3303324099723,2.380480243573623,0.7257310265079495
+channels_with_prior_history,v10_day7_model,17136,44.95214752567694,2.197394454063633,0.8345781524650623
+channels_with_prior_history,channel_prior_day7_median,17136,42.50700280112045,2.3681976074321676,0.7325096750044573
+channels_without_prior_history,v10_day7_model,192,21.875,3.981123937246198,0.7408472579874289
+channels_without_prior_history,channel_prior_day7_median,192,26.5625,8.471406502605555,

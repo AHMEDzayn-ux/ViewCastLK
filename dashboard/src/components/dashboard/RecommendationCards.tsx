@@ -39,8 +39,9 @@ export default function RecommendationCards({
           <h3 id="recommendations-title">What to review before publishing</h3>
         </div>
         <p>
-          Only guidance supported by model evaluation is returned. Historical
-          associations do not prove what caused previous performance.
+          This guidance is generated separately from the forecast using released
+          historical evidence rules. Associations do not prove what caused
+          previous performance.
         </p>
       </div>
 

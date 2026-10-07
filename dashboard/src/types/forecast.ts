@@ -169,6 +169,13 @@ export interface TitleGuidance {
   suggestions: string[];
 }
 
+export interface GuidanceMetadata {
+  artifactVersion: string;
+  source: "historical_eda";
+  isolatedFromForecast: true;
+  associationWarning: string;
+}
+
 export interface ModelMetadata {
   modelVersion: string;
   generatedAt: string;
@@ -189,6 +196,7 @@ export interface ForecastResponse {
   unavailableRecommendations: UnavailableRecommendation[];
   completeness: DataCompleteness;
   titleGuidance?: TitleGuidance;
+  guidance?: GuidanceMetadata | null;
   model: ModelMetadata;
 }
 

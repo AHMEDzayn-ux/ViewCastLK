@@ -74,12 +74,16 @@ export default function MethodologyPage() {
                 available.
               </li>
               <li>
-                This information is compared with historical performance
-                patterns.
+                The forecast model estimates the view trajectory and breakout
+                probability.
               </li>
               <li>
-                The result provides four cumulative forecasts and may include
-                neutral planning guidance with supporting evidence.
+                A separate idea-optimization service compares the submitted
+                timing, duration, and format with evaluated historical patterns.
+              </li>
+              <li>
+                Guidance is shown only when minimum sample, confidence, and
+                improvement rules pass. It never changes the model forecast.
               </li>
             </ol>
           </div>
@@ -93,8 +97,11 @@ export default function MethodologyPage() {
               You provide the details of the video you are planning, and
               relevant channel information is retrieved automatically. The
               title may be analysed to offer neutral planning guidance. The
-              forecasting service combines this information with historical
-              patterns to prepare the forecast.
+              forecasting service uses the planned inputs to prepare the
+              forecast. Separately, the idea optimizer checks the plan against
+              within-channel Day-7 comparisons from the published EDA. Title
+              language suggestions are not presented as measured performance
+              improvements.
             </p>
           </div>
         </section>

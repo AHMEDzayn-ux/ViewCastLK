@@ -39,6 +39,7 @@ from app.schemas import (
     ForecastPersonalization,
     ForecastRequest,
     ForecastResponse,
+    GuidanceMetadata,
     HealthResponse,
     ModelMetadata,
     TitleGuidance,
@@ -48,6 +49,11 @@ from app.schemas import (
     YouTubeDisconnectResponse,
 )
 from app.title_analysis import analyze_title_tone
+from app.idea_optimizer import (
+    RecommendationArtifactError,
+    load_recommendation_artifact,
+    optimize_idea,
+)
 from app.youtube import ChannelLookupException, fetch_channel_stats
 from app.creator_store import CreatorStore, CreatorStoreUnavailable
 from app.creator_insights import compute_creator_insights
@@ -519,24 +525,39 @@ async def create_forecast(
         ),
     )
 
-    unavailable_recs = [
-        UnavailableRecommendation(
-            type="timing",
-            reason="Recommendations are unavailable in the current trajectory model.",
-        ),
-        UnavailableRecommendation(
-            type="duration",
-            reason="Recommendations are unavailable in the current trajectory model.",
-        ),
-        UnavailableRecommendation(
-            type="format",
-            reason="Recommendations are unavailable in the current trajectory model.",
-        ),
-        UnavailableRecommendation(
-            type="title",
-            reason="Recommendations are unavailable in the current trajectory model.",
-        ),
-    ]
+    # Historical guidance is intentionally independent of both trajectory and
+    # breakout inference. It compares the submitted plan with a versioned EDA
+    # artifact and cannot alter any estimate above.
+    recommendation_issue: DataCompletenessIssue | None = None
+    guidance_metadata: GuidanceMetadata | None = None
+    try:
+        recommendations, unavailable_recs, guidance_version = optimize_idea(payload)
+        recommendation_artifact = load_recommendation_artifact()
+        guidance_metadata = GuidanceMetadata(
+            artifactVersion=guidance_version,
+            associationWarning=recommendation_artifact["policy"]["causalityWarning"],
+        )
+    except RecommendationArtifactError:
+        recommendations = []
+        unavailable_recs = [
+            UnavailableRecommendation(
+                type=kind,
+                reason="The released historical recommendation evidence is unavailable.",
+            )
+            for kind in ("timing", "duration", "format")
+        ]
+        recommendation_issue = DataCompletenessIssue(
+            source="historical_recommendations",
+            message="Historical idea-optimization evidence is temporarily unavailable.",
+        )
+
+    if title_guidance is None:
+        unavailable_recs.append(
+            UnavailableRecommendation(
+                type="title",
+                reason="Title-language guidance is temporarily unavailable.",
+            )
+        )
 
     issues: list[DataCompletenessIssue] = []
     if channel_stats.subscriberCount is None:
@@ -564,6 +585,8 @@ async def create_forecast(
                 message="Title analysis is temporarily unavailable.",
             )
         )
+    if recommendation_issue is not None:
+        issues.append(recommendation_issue)
 
     completeness = DataCompleteness(
         status="complete" if len(issues) == 0 else "degraded",
@@ -576,9 +599,10 @@ async def create_forecast(
         breakout=breakout,
         personalization=ForecastPersonalization(**personalization_payload),
         channelStats=channel_stats,
-        recommendations=[],
+        recommendations=recommendations,
         unavailableRecommendations=unavailable_recs,
         completeness=completeness,
         titleGuidance=title_guidance,
+        guidance=guidance_metadata,
         model=model_metadata,
     )

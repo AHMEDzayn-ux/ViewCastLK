@@ -47,6 +47,66 @@ def test_1_valid_forecast_returns_200(mock_fetch):
 
 
 @patch("app.main.fetch_channel_stats")
+def test_forecast_returns_separate_evidence_gated_idea_guidance(mock_fetch):
+    mock_fetch.return_value = MOCK_CHANNEL_STATS
+    payload = dict(VALID_FORECAST_PAYLOAD)
+    payload.update(plannedPublishDay="Tuesday", plannedPublishHour=9, isShort=False)
+
+    response = client.post("/forecast", json=payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    recommendations = {item["type"]: item for item in body["recommendations"]}
+    assert recommendations["timing"]["recommendedPublishingWindow"] == {
+        "day": "Saturday",
+        "startHour": 18,
+        "endHour": 21,
+        "timeZone": "Asia/Colombo",
+    }
+    assert recommendations["format"]["title"].endswith("Short")
+    assert body["guidance"] == {
+        "artifactVersion": "idea_optimization_20261001_v1",
+        "source": "historical_eda",
+        "isolatedFromForecast": True,
+        "associationWarning": (
+            "Historical associations do not prove that changing this choice will cause more views."
+        ),
+    }
+    assert "title" in {item["type"] for item in body["unavailableRecommendations"]}
+
+
+@patch("app.main.fetch_channel_stats")
+def test_guidance_result_cannot_change_model_outputs(mock_fetch):
+    mock_fetch.return_value = MOCK_CHANNEL_STATS
+    evidence_version = "idea_optimization_20261001_v1"
+    with patch(
+        "app.main.optimize_idea",
+        return_value=([], [], evidence_version),
+    ):
+        without_suggestion = client.post("/forecast", json=VALID_FORECAST_PAYLOAD).json()
+    with patch(
+        "app.main.optimize_idea",
+        return_value=(
+            [
+                {
+                    "id": "test-guidance",
+                    "type": "format",
+                    "title": "Test another format",
+                    "guidance": "Independent test guidance.",
+                    "evidence": [{"label": "Test", "detail": "Test evidence."}],
+                }
+            ],
+            [],
+            evidence_version,
+        ),
+    ):
+        with_suggestion = client.post("/forecast", json=VALID_FORECAST_PAYLOAD).json()
+
+    assert with_suggestion["estimates"] == without_suggestion["estimates"]
+    assert with_suggestion["breakout"] == without_suggestion["breakout"]
+
+
+@patch("app.main.fetch_channel_stats")
 def test_2_and_3_and_4_response_contains_four_exact_horizons(mock_fetch):
     mock_fetch.return_value = MOCK_CHANNEL_STATS
     response = client.post("/forecast", json=VALID_FORECAST_PAYLOAD)

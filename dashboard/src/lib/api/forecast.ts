@@ -173,6 +173,13 @@ function isForecastResponse(value: unknown): value is ForecastResponse {
     ...(candidate.unavailableRecommendations ?? []).map(
       (recommendation) => recommendation.type,
     ),
+    ...(candidate.titleGuidance &&
+    !(candidate.recommendations ?? []).some((item) => item.type === "title") &&
+    !(candidate.unavailableRecommendations ?? []).some(
+      (item) => item.type === "title",
+    )
+      ? (["title"] as const)
+      : []),
   ];
   const validRecommendationCoverage =
     representedRecommendationTypes.length === RECOMMENDATION_TYPES.length &&
@@ -182,6 +189,15 @@ function isForecastResponse(value: unknown): value is ForecastResponse {
       representedRecommendationTypes.includes(type),
     );
 
+  const validGuidanceMetadata =
+    candidate.guidance == null ||
+    (typeof candidate.guidance.artifactVersion === "string" &&
+      candidate.guidance.artifactVersion.length > 0 &&
+      candidate.guidance.source === "historical_eda" &&
+      candidate.guidance.isolatedFromForecast === true &&
+      typeof candidate.guidance.associationWarning === "string" &&
+      candidate.guidance.associationWarning.length > 0);
+
   return (
     typeof candidate.forecastId === "string" &&
     validEstimates &&
@@ -190,6 +206,7 @@ function isForecastResponse(value: unknown): value is ForecastResponse {
     validRecommendations &&
     validUnavailableRecommendations &&
     validRecommendationCoverage &&
+    validGuidanceMetadata &&
     (candidate.completeness?.status === "complete" ||
       candidate.completeness?.status === "degraded") &&
     Array.isArray(candidate.completeness.issues) &&

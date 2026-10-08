@@ -83,6 +83,7 @@ function makeRecommendations(request: ForecastRequest): {
       {
         id: "mock-timing",
         type: "timing",
+        status: "benchmark",
         title: "Recommended publishing window",
         guidance:
           "Historical publishing patterns can differ across time windows. Consider this window when the production evidence supports the same association.",
@@ -103,6 +104,7 @@ function makeRecommendations(request: ForecastRequest): {
       {
         id: "mock-duration",
         type: "duration",
+        status: "benchmark",
         title: "Review the planned duration",
         guidance:
           "Historically, duration can be associated with different viewing patterns. Compare the planned " +
@@ -123,6 +125,7 @@ function makeRecommendations(request: ForecastRequest): {
       {
         id: "mock-title",
         type: "title",
+        status: "benchmark",
         title: "Keep the title clear and specific",
         guidance:
           "Historically associated title patterns can support planning. Use accurate wording and avoid misleading or provocative framing.",

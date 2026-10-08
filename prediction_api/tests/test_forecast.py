@@ -64,6 +64,8 @@ def test_forecast_returns_separate_evidence_gated_idea_guidance(mock_fetch):
         "timeZone": "Asia/Colombo",
     }
     assert recommendations["format"]["title"].endswith("Short")
+    assert recommendations["format"]["status"] == "change"
+    assert recommendations["duration"]["status"] == "benchmark"
     assert body["guidance"] == {
         "artifactVersion": "idea_optimization_20261001_v1",
         "source": "historical_eda",

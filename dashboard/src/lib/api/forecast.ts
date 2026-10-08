@@ -138,6 +138,10 @@ function isForecastResponse(value: unknown): value is ForecastResponse {
       const validBase =
         RECOMMENDATION_TYPES.includes(recommendation.type) &&
         typeof recommendation.id === "string" &&
+        (recommendation.status === undefined ||
+          recommendation.status === "change" ||
+          recommendation.status === "aligned" ||
+          recommendation.status === "benchmark") &&
         typeof recommendation.title === "string" &&
         typeof recommendation.guidance === "string" &&
         validEvidence;

@@ -16,6 +16,18 @@ const TYPE_LABELS: Record<RecommendationType, string> = {
   title: "Title framing",
 };
 
+const STATUS_LABELS = {
+  change: "Change supported",
+  aligned: "Already aligned",
+  benchmark: "Benchmark to consider",
+} as const;
+
+const TIMING_ACTION_LABELS = {
+  change: "Suggested window",
+  aligned: "Current strong window",
+  benchmark: "Benchmark window",
+} as const;
+
 function formatHour(hour: number): string {
   return `${String(hour).padStart(2, "0")}:00`;
 }
@@ -47,19 +59,25 @@ export default function RecommendationCards({
 
       {recommendations.length > 0 && (
         <div className="recommendation-list">
-          {recommendations.map((recommendation, index) => (
-            <article className="recommendation-item" key={recommendation.id}>
+          {recommendations.map((recommendation, index) => {
+            const recommendationStatus = recommendation.status ?? "benchmark";
+            return <article className="recommendation-item" key={recommendation.id}>
               <div className="recommendation-item__number" aria-hidden="true">
                 {String(index + 1).padStart(2, "0")}
               </div>
               <div>
-                <p className="recommendation-item__type">
-                  {TYPE_LABELS[recommendation.type]}
-                </p>
+                <div className="recommendation-item__labels">
+                  <p className="recommendation-item__type">
+                    {TYPE_LABELS[recommendation.type]}
+                  </p>
+                  <span className={`recommendation-status recommendation-status--${recommendationStatus}`}>
+                    {STATUS_LABELS[recommendationStatus]}
+                  </span>
+                </div>
                 <h4>{recommendation.title}</h4>
                 {recommendation.type === "timing" && (
                   <p className="recommendation-item__action">
-                    <span>Recommended window</span>
+                    <span>{TIMING_ACTION_LABELS[recommendationStatus]}</span>
                     <strong>
                       {recommendation.recommendedPublishingWindow.day},{" "}
                       {formatHour(
@@ -86,8 +104,8 @@ export default function RecommendationCards({
                   </dl>
                 </details>
               </div>
-            </article>
-          ))}
+            </article>;
+          })}
         </div>
       )}
 
@@ -96,8 +114,8 @@ export default function RecommendationCards({
           <p className="section-kicker">Guidance availability</p>
           <h4>
             {recommendations.length === 0
-              ? "No evidence-backed recommendations are available"
-              : "Some guidance is not available for this forecast"}
+              ? "Some parts of the plan could not be evaluated"
+              : "Remaining data limitations"}
           </h4>
           <ul>
             {unavailableRecommendations.map((recommendation) => (

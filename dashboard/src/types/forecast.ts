@@ -119,8 +119,11 @@ export interface RecommendationEvidence {
   detail: string;
 }
 
+export type RecommendationStatus = "change" | "aligned" | "benchmark";
+
 interface RecommendationBase {
   id: string;
+  status?: RecommendationStatus;
   title: string;
   guidance: string;
   evidence: [RecommendationEvidence, ...RecommendationEvidence[]];

@@ -1203,6 +1203,40 @@ select.field-control {
   text-transform: uppercase;
 }
 
+.recommendation-item__labels {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.recommendation-status {
+  border: 1px solid #d9d5cd;
+  border-radius: 999px;
+  color: #5f5b54;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.18rem 0.48rem;
+  text-transform: uppercase;
+}
+
+.recommendation-status--change {
+  background: #fff0eb;
+  border-color: #efb39f;
+  color: #a33d1e;
+}
+
+.recommendation-status--aligned {
+  background: #edf7ef;
+  border-color: #acd2b4;
+  color: #2f6b3d;
+}
+
+.recommendation-status--benchmark {
+  background: #f5f3ee;
+}
+
 .recommendation-item .recommendation-item__action {
   display: flex;
   flex-wrap: wrap;

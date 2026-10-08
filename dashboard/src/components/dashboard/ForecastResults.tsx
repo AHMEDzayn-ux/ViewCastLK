@@ -95,8 +95,7 @@ export default function ForecastResults({
           <div><p className="section-kicker">Title review</p><h3 id={`${id}-title-guidance`}>Clear, accurate wording</h3><p>{response.titleGuidance.summary}</p></div>
           <ul>{response.titleGuidance.suggestions.map((suggestion) => <li key={suggestion}>{suggestion}</li>)}</ul>
         </section>}
-        {response.recommendations.length > 0 ? <RecommendationCards recommendations={response.recommendations} unavailableRecommendations={[]} /> : <div className="result-guidance-empty"><StudioIcon name="book" width="24" height="24" /><h3>No evidence-backed changes are suggested.</h3><p>The submitted plan did not have a clearly stronger alternative under the released evidence rules, or the relevant comparison was unavailable.</p></div>}
-        {response.unavailableRecommendations.length > 0 && <details className="result-detail-disclosure"><summary>Why some publishing guidance is unavailable</summary><RecommendationCards recommendations={[]} unavailableRecommendations={response.unavailableRecommendations} /></details>}
+        {(response.recommendations.length > 0 || response.unavailableRecommendations.length > 0) ? <RecommendationCards recommendations={response.recommendations} unavailableRecommendations={response.unavailableRecommendations} /> : <div className="result-guidance-empty"><StudioIcon name="book" width="24" height="24" /><h3>No historical plan review is available.</h3><p>The released evidence could not evaluate this submission.</p></div>}
       </section>
 
       <section className="result-tab-panel result-details-panel" role="tabpanel" id={`${id}-panel-details`} aria-labelledby={`${id}-tab-details`} tabIndex={0} hidden={activeTab !== "details"}>

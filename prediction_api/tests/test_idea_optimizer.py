@@ -55,7 +55,9 @@ def test_compares_submitted_timing_with_supported_eda_window():
     }
     assert "Tuesday" in timing["evidence"][2]["detail"]
     assert "09:00-12:00" in timing["evidence"][2]["detail"]
-    assert "duration" in unavailable_types(unavailable)
+    assert timing["status"] == "change"
+    assert by_type(recommendations)["duration"]["status"] == "benchmark"
+    assert "duration" not in unavailable_types(unavailable)
     assert version == "idea_optimization_20261001_v1"
 
 
@@ -89,7 +91,7 @@ def test_format_change_requires_significant_category_contrast():
     assert "-59.4%" in format_recommendation["evidence"][0]["detail"]
 
 
-def test_no_change_is_returned_when_intervals_do_not_show_clear_improvement():
+def test_every_supported_dimension_explains_aligned_or_inconclusive_evidence():
     recommendations, unavailable, _ = optimize_idea(
         request(
             category="Education",
@@ -99,9 +101,21 @@ def test_no_change_is_returned_when_intervals_do_not_show_clear_improvement():
         )
     )
 
-    assert "timing" not in by_type(recommendations)
-    assert "format" not in by_type(recommendations)
-    assert {item.type for item in unavailable}.issuperset({"timing", "format"})
+    review = by_type(recommendations)
+    assert review["timing"]["status"] == "aligned"
+    assert review["duration"]["status"] == "benchmark"
+    assert review["format"]["status"] == "benchmark"
+    assert unavailable == []
+
+
+def test_existing_strong_format_choice_is_reported_as_aligned():
+    recommendations, _, _ = optimize_idea(
+        request(category="Travel & Events", durationSeconds=45, isShort=True)
+    )
+
+    format_review = by_type(recommendations)["format"]
+    assert format_review["status"] == "aligned"
+    assert "keeping the current format" in format_review["guidance"]
 
 
 def test_missing_timing_and_short_duration_are_explained_not_invented():

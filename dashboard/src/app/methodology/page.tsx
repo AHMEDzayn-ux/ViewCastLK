@@ -82,8 +82,10 @@ export default function MethodologyPage() {
                 timing, duration, and format with evaluated historical patterns.
               </li>
               <li>
-                Guidance is shown only when minimum sample, confidence, and
-                improvement rules pass. It never changes the model forecast.
+                Each supported dimension is labelled as a change, an already
+                aligned choice, or an exploratory benchmark. Only the first
+                label requires the confidence and improvement rules to pass.
+                Guidance never changes the model forecast.
               </li>
             </ol>
           </div>

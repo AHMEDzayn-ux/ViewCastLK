@@ -26,13 +26,16 @@ dataset period, usable video count, channel count and release policy.
 ## Release rules
 
 A comparison must contain at least 300 videos from at least 20 channels. A
-suggested alternative must exceed the current option by at least five
-percentage points, and its 95% interval must sit above the current option's 95%
-interval. Format advice uses a direct Shorts-versus-standard-video contrast
-whose interval must exclude zero.
+suggested **change** must exceed the current option by at least five percentage
+points, and its 95% interval must sit above the current option's 95% interval.
+Format-change advice uses a direct Shorts-versus-standard-video contrast whose
+interval must exclude zero.
 
-When a rule does not pass, the API explains that no evidence-backed change is
-available instead of manufacturing a suggestion.
+Every supported timing, duration and format dimension is still reviewed. The
+API labels it as `change`, `aligned`, or `benchmark`. A benchmark exposes the
+strongest observed group as an optional test while explicitly stating that the
+data did not prove an improvement. Missing inputs or insufficient category
+data remain visible limitations instead of being hidden.
 
 ## API contract
 

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import AccuracyView from "@/components/dashboard/AccuracyView";
 
 export const metadata: Metadata = {
-  title: "Accuracy",
+  title: "Model Accuracy",
   description:
-    "Understand ViewCastLK evaluation metrics and baseline comparisons.",
+    "Explore ViewCastLK's measured performance on unseen videos and compare it with simple channel-history baselines.",
 };
 
 export default function AccuracyPage() {
@@ -12,10 +12,11 @@ export default function AccuracyPage() {
     <main className="page-shell information-page">
       <header className="page-intro page-intro--narrow">
         <p className="section-kicker">Model evaluation</p>
-        <h1>Accuracy, without placeholder numbers</h1>
+        <h1>Measured performance on unseen videos</h1>
         <p>
-          This page reports approved held-out evaluation results when they are
-          available and compares the model with a simple baseline.
+          Explore approved held-out results, understand each metric, and see
+          the additional predictive signal ViewCastLK provides over a simple
+          channel-history baseline.
         </p>
       </header>
       <AccuracyView />

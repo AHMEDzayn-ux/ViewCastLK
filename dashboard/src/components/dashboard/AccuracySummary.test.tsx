@@ -69,11 +69,19 @@ describe("AccuracySummary with measured results", () => {
   const html = renderToStaticMarkup(<AccuracySummary accuracy={accuracy} />);
 
   it("leads with the first measured figure against the creator's own baseline", () => {
+    expect(html).toContain("Evaluation at a glance");
+    expect(html).toContain("Strong ranking with measurable baseline gains");
     expect(html).toContain("Forecasts within a factor of two");
     expect(html).toContain("44.7%");
     expect(html).toContain("43.5%");
     expect(html).toContain("The channel&#x27;s usual views");
     expect(html).toContain("A higher value is better.");
+  });
+
+  it("summarizes the measured gains for tracked channels", () => {
+    expect(html).toContain("7,722 unseen");
+    expect(html).toContain("1.2 percentage points ahead of the baseline");
+    expect(html).toContain("4.8% lower typical error than the baseline");
   });
 
   it("shows the error as a multiple and says lower is better for it", () => {

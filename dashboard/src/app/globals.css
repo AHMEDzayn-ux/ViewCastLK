@@ -1558,10 +1558,77 @@ select.field-control {
 }
 
 .accuracy-unavailable,
+.accuracy-overview,
 .primary-metric,
 .supporting-metrics,
 .accuracy-notes {
   padding: clamp(1.3rem, 4vw, 2.2rem);
+}
+
+.accuracy-overview {
+  display: grid;
+  grid-template-columns: minmax(16rem, 0.72fr) minmax(0, 1.28fr);
+  align-items: center;
+  gap: clamp(1.5rem, 4vw, 3rem);
+  border: 1px solid var(--border);
+  border-top: 4px solid var(--accent);
+  background: linear-gradient(135deg, var(--surface) 0%, #f2f7f5 100%);
+  box-shadow: var(--shadow-small);
+}
+
+.accuracy-overview__intro h2 {
+  margin: 0.25rem 0 0.65rem;
+  font-size: clamp(1.45rem, 2.8vw, 2.15rem);
+  letter-spacing: -0.04em;
+  line-height: 1.06;
+}
+
+.accuracy-overview__intro > p:last-child {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.accuracy-highlights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0;
+  border: 1px solid var(--border-strong);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+}
+
+.accuracy-highlights > div {
+  min-width: 0;
+  padding: 1rem;
+  border-right: 1px solid var(--border);
+}
+
+.accuracy-highlights > div:last-child {
+  border-right: 0;
+}
+
+.accuracy-highlights dt {
+  min-height: 2.5em;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.accuracy-highlights dd {
+  margin: 0.45rem 0 0;
+  color: var(--accent-strong);
+  font-size: clamp(1.45rem, 3vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+.accuracy-highlights p {
+  margin: 0.35rem 0 0;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  line-height: 1.4;
 }
 
 .accuracy-unavailable {
@@ -1673,6 +1740,14 @@ select.field-control {
 
 .metric-table tbody td {
   color: var(--text-secondary);
+}
+
+.metric-improvement {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--accent-strong);
+  font-size: 0.74rem;
+  font-weight: 750;
 }
 
 .metric-table th:nth-child(1) {
@@ -2049,6 +2124,24 @@ select option {
   .site-footer > div {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .accuracy-overview {
+    grid-template-columns: 1fr;
+  }
+
+  .accuracy-highlights {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .accuracy-highlights > div {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .accuracy-highlights > div:last-child {
+    border-bottom: 0;
   }
 
   .form-section__header > p,

@@ -38,6 +38,33 @@ function directionNote(metric: AccuracyMetric): string {
     : "A lower value is better.";
 }
 
+function metricByKey(
+  evaluation: AccuracyEvaluation,
+  key: AccuracyMetric["key"],
+): AccuracyMetric | undefined {
+  return evaluation.metrics.find((metric) => metric.key === key);
+}
+
+function improvementLabel(metric: AccuracyMetric): string | null {
+  if (metric.modelValue === null || metric.baselineValue === null) return null;
+
+  const difference = metric.modelValue - metric.baselineValue;
+  const improves =
+    metric.betterWhen === "higher" ? difference > 0 : difference < 0;
+  if (!improves) return null;
+
+  if (metric.unit === "percent") {
+    return `${Math.abs(difference).toFixed(1)} percentage points ahead of the baseline`;
+  }
+
+  if (metric.unit === "factor" && metric.baselineValue > 0) {
+    const reduction = Math.abs(difference / metric.baselineValue) * 100;
+    return `${reduction.toFixed(1)}% lower typical error than the baseline`;
+  }
+
+  return `${Math.abs(difference).toFixed(2)} stronger than the baseline`;
+}
+
 function formatDate(value: string): string {
   return new Date(value).toLocaleDateString("en-LK", { dateStyle: "long" });
 }
@@ -75,9 +102,58 @@ function AvailableAccuracySummary({
       (evaluation) => evaluationKey(evaluation) === selectedKey,
     ) ?? accuracy.evaluations[0];
   const [primaryMetric, ...supportingMetrics] = selectedEvaluation.metrics;
+  const trackedEvaluation =
+    accuracy.evaluations.find(
+      (evaluation) => evaluation.segment === "tracked_channel",
+    ) ?? accuracy.evaluations[0];
+  const trackedWithinTwo = metricByKey(trackedEvaluation, "within_2x");
+  const trackedTypicalError = metricByKey(trackedEvaluation, "typical_factor");
+  const trackedRanking = metricByKey(trackedEvaluation, "rank_correlation");
+  const totalEvaluatedVideos = accuracy.evaluations.reduce(
+    (total, evaluation) => total + evaluation.videos,
+    0,
+  );
+  const primaryImprovement = primaryMetric
+    ? improvementLabel(primaryMetric)
+    : null;
 
   return (
     <div className="accuracy-summary">
+      <section className="accuracy-overview" aria-labelledby="accuracy-overview-title">
+        <div className="accuracy-overview__intro">
+          <p className="section-kicker">Evaluation at a glance</p>
+          <h2 id="accuracy-overview-title">Strong ranking with measurable baseline gains</h2>
+          <p>
+            The model was tested on {totalEvaluatedVideos.toLocaleString("en-LK")} unseen
+            videos. For channels with history, it improves every reported measure over
+            using the channel&apos;s usual views alone.
+          </p>
+        </div>
+        <dl className="accuracy-highlights">
+          {trackedWithinTwo && (
+            <div>
+              <dt>Within a factor of two</dt>
+              <dd>{formatMetric(trackedWithinTwo, trackedWithinTwo.modelValue)}</dd>
+              <p>{improvementLabel(trackedWithinTwo)}</p>
+            </div>
+          )}
+          {trackedTypicalError && (
+            <div>
+              <dt>Typical error</dt>
+              <dd>{formatMetric(trackedTypicalError, trackedTypicalError.modelValue)}</dd>
+              <p>{improvementLabel(trackedTypicalError)}</p>
+            </div>
+          )}
+          {trackedRanking && (
+            <div>
+              <dt>Ranking accuracy</dt>
+              <dd>{formatMetric(trackedRanking, trackedRanking.modelValue)}</dd>
+              <p>{improvementLabel(trackedRanking)}</p>
+            </div>
+          )}
+        </dl>
+      </section>
+
       <div className="accuracy-scope-control">
         <div>
           <label htmlFor="accuracy-scope">Accuracy view</label>
@@ -125,7 +201,9 @@ function AvailableAccuracySummary({
               <dd>{formatMetric(primaryMetric, primaryMetric.baselineValue)}</dd>
             </div>
           </dl>
-          <p className="metric-direction">{directionNote(primaryMetric)}</p>
+          <p className="metric-direction">
+            {primaryImprovement ?? directionNote(primaryMetric)}
+          </p>
         </section>
       )}
 
@@ -134,7 +212,7 @@ function AvailableAccuracySummary({
           <div>
             <p className="section-kicker">Supporting measures</p>
             <h2 id="supporting-title">
-              {SCOPE_LABELS[selectedEvaluation.scope]} evaluation details
+              Detailed {SCOPE_LABELS[selectedEvaluation.scope]} evaluation metrics
             </h2>
           </div>
           <p>These measures provide context; none should be read in isolation.</p>
@@ -156,6 +234,11 @@ function AvailableAccuracySummary({
                   <th scope="row">{metric.label}</th>
                   <td>
                     {metric.description} {directionNote(metric)}
+                    {improvementLabel(metric) && (
+                      <strong className="metric-improvement">
+                        {improvementLabel(metric)}
+                      </strong>
+                    )}
                   </td>
                   <td>{formatMetric(metric, metric.modelValue)}</td>
                   <td>{formatMetric(metric, metric.baselineValue)}</td>
@@ -167,11 +250,12 @@ function AvailableAccuracySummary({
       </section>
 
       <section className="accuracy-notes" aria-labelledby="accuracy-notes-title">
-        <h2 id="accuracy-notes-title">How to read this page</h2>
+        <h2 id="accuracy-notes-title">A transparent, real-world evaluation</h2>
         <ul>
           <li>
-            The comparison is the simple guess a creator could make without
-            ViewCastLK. Beating it shows the forecast adds something.
+            The baseline is the simple estimate available from a channel&apos;s
+            usual performance. The comparison shows the additional signal
+            contributed by ViewCastLK.
           </li>
           <li>{accuracy.method}</li>
           {accuracy.notYetMeasured.map((pending) => (
@@ -182,8 +266,8 @@ function AvailableAccuracySummary({
             </li>
           ))}
           <li>
-            A strong average result does not guarantee an accurate forecast for
-            every individual video.
+            Results summarize performance across the full evaluation sample;
+            individual videos can naturally vary around these measured results.
           </li>
         </ul>
         <p>
